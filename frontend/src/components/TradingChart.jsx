@@ -28,7 +28,8 @@ import {
   Target,
   ShieldAlert,
   GripHorizontal,
-  RotateCcw
+  RotateCcw,
+  ArrowRight
 } from 'lucide-react';
 
 const TIMEFRAMES = [
@@ -681,23 +682,18 @@ export default function TradingChart({
           } catch (markerErr) {
             console.warn('Marker rendering fallback:', markerErr);
           }
-
-          // Focus viewport around the latest execution marker
-          const lastMarker = validMarkers[validMarkers.length - 1];
-          const lastMarkerIndex = formattedCandles.findIndex((c) => c.time === lastMarker.time);
-          if (lastMarkerIndex !== -1) {
-            chart.timeScale().setVisibleLogicalRange({
-              from: Math.max(0, lastMarkerIndex - 60),
-              to: Math.min(formattedCandles.length - 1, lastMarkerIndex + 30),
-            });
-          } else {
-            chart.timeScale().fitContent();
-          }
-        } else {
-          chart.timeScale().fitContent();
         }
-      } else {
-        chart.timeScale().fitContent();
+      }
+
+      // Always anchor viewport on the latest/live bar first with clean breathing room
+      const totalBars = formattedCandles.length;
+      if (totalBars > 0) {
+        const defaultBarsVisible = Math.min(totalBars, 85);
+        chart.timeScale().setVisibleLogicalRange({
+          from: Math.max(0, totalBars - defaultBarsVisible),
+          to: totalBars + 6,
+        });
+        chart.timeScale().scrollToPosition(0, false);
       }
     }
 
@@ -930,6 +926,19 @@ export default function TradingChart({
     }
   };
 
+  // Anchor chart viewport to the latest/live bar (Binance / TradingView standard)
+  const handleScrollToLastBar = () => {
+    playRetroSound('blip');
+    if (!chartRef.current || candles.length === 0) return;
+    const totalBars = candles.length;
+    const defaultBarsVisible = Math.min(totalBars, 85);
+    chartRef.current.timeScale().setVisibleLogicalRange({
+      from: Math.max(0, totalBars - defaultBarsVisible),
+      to: totalBars + 6,
+    });
+    chartRef.current.timeScale().scrollToPosition(0, false);
+  };
+
   // Toggle Moving Averages
   const toggleMA = (key) => {
     playRetroSound('blip');
@@ -1074,6 +1083,16 @@ export default function TradingChart({
               MA111
             </button>
           </div>
+
+          {/* Last Bar / Live View */}
+          <button
+            onClick={handleScrollToLastBar}
+            className="px-2.5 py-1 bg-apple-blue/15 hover:bg-apple-blue/25 text-apple-cyan active:scale-[0.98] border border-apple-blue/30 rounded-xl text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5"
+            title="Anchor view on the latest/live bar"
+          >
+            <ArrowRight className="w-3 h-3" />
+            <span>Last Bar</span>
+          </button>
 
           {/* Fit View */}
           <button
@@ -1365,12 +1384,16 @@ export default function TradingChart({
                     <button
                       onClick={() => {
                         const latestIdx = tradesList.length - 1;
-                        handleJumpToTrade(tradesList[latestIdx], latestIdx);
+                        if (latestIdx >= 0) {
+                          handleJumpToTrade(tradesList[latestIdx], latestIdx);
+                        }
+                        handleScrollToLastBar();
                       }}
-                      className="py-1.5 px-3 bg-white/[0.06] hover:bg-white/[0.1] active:scale-[0.98] border border-white/[0.08] text-white text-xs font-medium rounded-xl transition-all cursor-pointer"
-                      title="Jump to latest position"
+                      className="py-1.5 px-3 bg-white/[0.06] hover:bg-white/[0.1] active:scale-[0.98] border border-white/[0.08] text-white text-xs font-medium rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                      title="Jump to latest bar & position"
                     >
-                      Latest
+                      <ArrowRight className="w-3 h-3 text-apple-cyan" />
+                      <span>Last Bar</span>
                     </button>
                   </div>
 

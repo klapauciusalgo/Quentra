@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { formatPrice, formatPercent, formatDateTime, playRetroSound } from '../utils/formatters';
 import strategiesData from '../data/strategiesData.json';
 import { 
@@ -13,7 +13,8 @@ import {
   Search, 
   FileText, 
   Sliders, 
-  ChevronRight 
+  ChevronRight,
+  ArrowUpDown
 } from 'lucide-react';
 
 export default function StrategyDetail({ 
@@ -25,6 +26,8 @@ export default function StrategyDetail({
   const [strategy, setStrategy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tradeFilter, setTradeFilter] = useState('ALL'); // ALL, WINS, LOSSES
+  const [yearFilter, setYearFilter] = useState('ALL'); // ALL, 2026, 2025, etc.
+  const [sortOrder, setSortOrder] = useState('DESC'); // DESC (Newest First), ASC (Oldest First)
   const [tradeSearch, setTradeSearch] = useState('');
   const [activeTab, setActiveTab] = useState('overview'); // overview, yearly, trades
 
@@ -64,8 +67,6 @@ export default function StrategyDetail({
       });
   }, [strategyId, isOpen]);
 
-  if (!isOpen) return null;
-
   const isLong = strategy?.type === 'LONG';
   const m = strategy?.metrics || {};
   const params = strategy?.parameters || {};
@@ -80,18 +81,43 @@ export default function StrategyDetail({
   const winTrades = m.win_trades ?? Math.round((winRate / 100) * totalTrades);
   const lossTrades = m.loss_trades ?? (totalTrades - winTrades);
 
-  // Filtered trades
-  const filteredTrades = trades.filter((t) => {
-    if (tradeFilter === 'WINS' && (t.net_return_pct || 0) <= 0) return false;
-    if (tradeFilter === 'LOSSES' && (t.net_return_pct || 0) > 0) return false;
-    if (tradeSearch.trim()) {
-      const q = tradeSearch.toLowerCase();
-      const reason = (t.exit_reason || '').toLowerCase();
-      const entryTime = (t.entry_time || '').toLowerCase();
-      if (!reason.includes(q) && !entryTime.includes(q)) return false;
-    }
-    return true;
-  });
+  // Available unique years in trades
+  const availableYears = useMemo(() => {
+    const setY = new Set();
+    trades.forEach((t) => {
+      const y = String(t.entry_time || '').substring(0, 4);
+      if (y && !isNaN(Number(y))) setY.add(y);
+    });
+    return Array.from(setY).sort((a, b) => Number(b) - Number(a));
+  }, [trades]);
+
+  // Filtered & sorted trades
+  const filteredTrades = useMemo(() => {
+    let result = trades.filter((t) => {
+      if (tradeFilter === 'WINS' && (t.net_return_pct || 0) <= 0) return false;
+      if (tradeFilter === 'LOSSES' && (t.net_return_pct || 0) > 0) return false;
+      if (yearFilter !== 'ALL') {
+        const y = String(t.entry_time || '').substring(0, 4);
+        if (y !== yearFilter) return false;
+      }
+      if (tradeSearch.trim()) {
+        const q = tradeSearch.toLowerCase();
+        const reason = (t.exit_reason || '').toLowerCase();
+        const entryTime = (t.entry_time || '').toLowerCase();
+        const tradeNo = String(t.trade_no || '');
+        if (!reason.includes(q) && !entryTime.includes(q) && !tradeNo.includes(q)) return false;
+      }
+      return true;
+    });
+
+    // Default to Newest First (DESC) so latest 2026 trades are prominently at the top
+    return result.sort((a, b) => {
+      const diff = (a.trade_no || 0) - (b.trade_no || 0);
+      return sortOrder === 'DESC' ? -diff : diff;
+    });
+  }, [trades, tradeFilter, yearFilter, tradeSearch, sortOrder]);
+
+  if (!isOpen) return null;
 
   return (
     <div 
@@ -313,7 +339,9 @@ export default function StrategyDetail({
                 <div className="space-y-4">
                   {/* Trade Search & Filter Bar */}
                   <div className="flex flex-wrap items-center justify-between gap-3 apple-glass-card rounded-2xl p-3.5">
-                    <div className="flex items-center gap-1.5">
+                    
+                    {/* W/L Filter */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-xs text-apple-dim mr-1">Filter:</span>
                       <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] p-0.5 rounded-xl">
                         {['ALL', 'WINS', 'LOSSES'].map((f) => (
@@ -330,22 +358,66 @@ export default function StrategyDetail({
                           </button>
                         ))}
                       </div>
+
+                      {/* Year Selector */}
+                      {availableYears.length > 0 && (
+                        <div className="flex items-center gap-1 ml-2">
+                          <span className="text-xs text-apple-dim">Year:</span>
+                          <select
+                            value={yearFilter}
+                            onChange={(e) => setYearFilter(e.target.value)}
+                            className="bg-black/[0.04] dark:bg-white/[0.05] border border-black/[0.08] dark:border-white/[0.08] rounded-xl text-xs px-2.5 py-1 text-apple-text focus:outline-none focus:ring-1 focus:ring-apple-blue font-mono"
+                          >
+                            <option value="ALL">All Years (2020-2026)</option>
+                            {availableYears.map((yr) => (
+                              <option key={yr} value={yr}>{yr}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="relative min-w-[220px]">
-                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-apple-dim" />
-                      <input
-                        type="text"
-                        placeholder="Search exit reason or date..."
-                        value={tradeSearch}
-                        onChange={(e) => setTradeSearch(e.target.value)}
-                        className="w-full bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-xl text-xs pl-8 pr-3 py-1.5 text-apple-text placeholder:text-apple-dim focus:outline-none focus:ring-2 focus:ring-apple-blue/50"
-                      />
+                    <div className="flex items-center gap-2.5 flex-1 min-w-[260px] justify-end">
+                      {/* Sort Order Toggle */}
+                      <button
+                        onClick={() => {
+                          playRetroSound('select');
+                          setSortOrder(sortOrder === 'DESC' ? 'ASC' : 'DESC');
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.04] text-xs font-medium text-apple-text hover:bg-black/[0.06] dark:hover:bg-white/[0.08] transition-all cursor-pointer shrink-0"
+                        title="Toggle newest first vs oldest first"
+                      >
+                        <ArrowUpDown className="w-3.5 h-3.5 text-apple-blue" />
+                        <span>{sortOrder === 'DESC' ? 'Newest First' : 'Oldest First'}</span>
+                      </button>
+
+                      {/* Search Bar */}
+                      <div className="relative min-w-[180px] max-w-[280px] w-full">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-apple-dim" />
+                        <input
+                          type="text"
+                          placeholder="Search reason, date, or #..."
+                          value={tradeSearch}
+                          onChange={(e) => setTradeSearch(e.target.value)}
+                          className="w-full bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-xl text-xs pl-8 pr-3 py-1.5 text-apple-text placeholder:text-apple-dim focus:outline-none focus:ring-2 focus:ring-apple-blue/50"
+                        />
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Summary Telemetry Line */}
+                  <div className="flex items-center justify-between text-xs text-apple-dim px-1 font-mono">
+                    <div>
+                      Showing <span className="text-apple-text font-semibold">{filteredTrades.length}</span> of <span className="text-apple-text font-semibold">{trades.length}</span> verified executions
+                    </div>
+                    <div>
+                      Dataset Horizon: <span className="text-apple-blue font-semibold">2020 - 2026 Ground Truth</span>
                     </div>
                   </div>
 
                   {/* Trades Table */}
-                  <div className="overflow-x-auto rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.01] dark:bg-white/[0.02] max-h-[420px]">
+                  <div className="overflow-x-auto rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.01] dark:bg-white/[0.02] max-h-[440px]">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead className="sticky top-0 bg-white dark:bg-[#15161F] text-apple-muted border-b border-black/[0.08] dark:border-white/[0.08] text-[11px] font-medium z-10">
                         <tr>
@@ -360,11 +432,11 @@ export default function StrategyDetail({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
-                        {filteredTrades.slice(0, 100).map((t) => {
+                        {filteredTrades.map((t) => {
                           const isWin = (t.net_return_pct || 0) > 0;
                           return (
                             <tr key={t.trade_no} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.04] transition-colors">
-                              <td className="p-3 font-mono text-apple-dim">#{t.trade_no}</td>
+                              <td className="p-3 font-mono text-apple-dim font-semibold">#{t.trade_no}</td>
                               <td className="p-3 text-center">
                                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                                   (t.side || strategy?.type) === 'LONG'
@@ -380,7 +452,7 @@ export default function StrategyDetail({
                               <td className="p-3 font-mono text-apple-muted text-[11px]">
                                 {t.exit_time && !String(t.exit_time).includes('RUNNING')
                                   ? String(t.exit_time).substring(0, 16).replace('T', ' ')
-                                  : 'Active'}
+                                  : <span className="text-apple-cyan font-semibold">Running</span>}
                               </td>
                               <td className="p-3 text-right font-mono tabular-nums text-apple-text">
                                 {formatPrice(t.entry_price)}

@@ -165,48 +165,74 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
         minVal = Math.min(minVal, p.algoReturnPct, p.btcReturnPct);
         maxVal = Math.max(maxVal, p.algoReturnPct, p.btcReturnPct);
       } else {
-        minVal = Math.min(minVal, p.alphaPct, 0);
-        maxVal = Math.max(maxVal, p.alphaPct, 0);
+        minVal = Math.min(minVal, p.alphaPct);
+        maxVal = Math.max(maxVal, p.alphaPct);
       }
     });
 
-    // Add 10% breathing room
+    // In Alpha mode, ensure 0 parity is always included within the vertical scale
+    if (metricMode === 'ALPHA') {
+      minVal = Math.min(minVal, 0);
+      maxVal = Math.max(maxVal, 0);
+    }
+
+    // Add 8% breathing room
     const range = maxVal - minVal || 1;
-    const yMin = Math.max(0, minVal - range * 0.05);
-    const yMax = maxVal + range * 0.1;
+    let yMin = minVal - range * 0.08;
+    let yMax = maxVal + range * 0.08;
+
+    // Only clamp to 0 in EQUITY mode (dollar capital cannot be negative)
+    if (metricMode === 'EQUITY') {
+      yMin = Math.max(0, yMin);
+    }
 
     const getX = (idx) => padding.left + (idx / (displayTimeline.length - 1 || 1)) * plotWidth;
     const getY = (val) => padding.top + plotHeight - ((val - yMin) / (yMax - yMin || 1)) * plotHeight;
 
+    // Calculate zero parity line
+    const zeroY = getY(0);
+    const hasZeroLine = zeroY >= padding.top && zeroY <= padding.top + plotHeight;
+    const zeroRatio = Math.max(0, Math.min(1, (zeroY - padding.top) / (plotHeight || 1)));
+
     const algoPoints = displayTimeline.map((p, idx) => {
       const val = metricMode === 'EQUITY' ? p.algoEquity : metricMode === 'RETURN' ? p.algoReturnPct : p.alphaPct;
-      return { x: getX(idx), y: getY(val), point: p };
+      return { x: getX(idx), y: getY(val), point: p, val };
     });
 
     const btcPoints = displayTimeline.map((p, idx) => {
       const val = metricMode === 'EQUITY' ? p.btcEquity : metricMode === 'RETURN' ? p.btcReturnPct : 0;
-      return { x: getX(idx), y: getY(val), point: p };
+      return { x: getX(idx), y: getY(val), point: p, val };
     });
 
     // Build SVG Path strings
     const algoPath = algoPoints.reduce((acc, pt, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)},${pt.y.toFixed(1)}`, '');
     const btcPath = btcPoints.reduce((acc, pt, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)},${pt.y.toFixed(1)}`, '');
 
-    const baselineY = getY(yMin);
-    const algoArea = `${algoPath} L ${algoPoints[algoPoints.length - 1].x.toFixed(1)},${baselineY} L ${algoPoints[0].x.toFixed(1)},${baselineY} Z`;
-    const btcArea = `${btcPath} L ${btcPoints[btcPoints.length - 1].x.toFixed(1)},${baselineY} L ${btcPoints[0].x.toFixed(1)},${baselineY} Z`;
+    // In Alpha mode with zero line, close area to zeroY parity; otherwise to bottom axis
+    const baselineY = (metricMode === 'ALPHA' && hasZeroLine) ? zeroY : getY(yMin);
+    const algoArea = `${algoPath} L ${algoPoints[algoPoints.length - 1].x.toFixed(1)},${baselineY.toFixed(1)} L ${algoPoints[0].x.toFixed(1)},${baselineY.toFixed(1)} Z`;
+    const btcArea = `${btcPath} L ${btcPoints[btcPoints.length - 1].x.toFixed(1)},${getY(yMin).toFixed(1)} L ${btcPoints[0].x.toFixed(1)},${getY(yMin).toFixed(1)} Z`;
 
-    // Horizontal Y Grid lines (4 ticks)
-    const yTicks = [0, 0.33, 0.66, 1].map((ratio) => {
+    // Horizontal Y Grid lines (5 balanced ticks)
+    const rawYTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
       const val = yMin + ratio * (yMax - yMin);
+      const isNearZero = Math.abs(val) < (yMax - yMin) * 0.03;
       return {
         y: getY(val),
         val,
+        isNearZero,
         label: metricMode === 'EQUITY' 
           ? `$${Math.round(val).toLocaleString()}` 
-          : `${val >= 0 ? '+' : ''}${Math.round(val).toLocaleString()}%`,
+          : isNearZero
+          ? '0%'
+          : val > 0
+          ? `+${Math.round(val).toLocaleString()}%`
+          : `-${Math.round(Math.abs(val)).toLocaleString()}%`,
       };
     });
+
+    // Suppress ticks that collide with the prominent 0% Parity badge
+    const yTicks = rawYTicks.filter((t) => !hasZeroLine || Math.abs(t.y - zeroY) >= 16);
 
     // Vertical X Grid lines (Years)
     const yearMarkers = [];
@@ -230,6 +256,9 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
       btcArea,
       yTicks,
       yearMarkers,
+      zeroY,
+      hasZeroLine,
+      zeroRatio,
       getX,
       getY,
       yMin,
@@ -476,18 +505,38 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
 
         {/* Legend */}
         <div className="flex flex-wrap items-center justify-between text-xs gap-3">
-          <div className="flex items-center gap-5">
-            <div className="flex items-center gap-2">
-              <span className="w-3.5 h-1 rounded-full bg-apple-blue" />
-              <span className="font-semibold text-apple-text">{strategy?.name || 'Algo Strategy'}</span>
-              <span className="text-[10px] text-apple-dim">(Systematic Execution)</span>
+          {metricMode === 'ALPHA' ? (
+            <div className="flex flex-wrap items-center gap-5">
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-1.5 rounded-full bg-apple-green shadow-[0_0_6px_rgba(48,209,88,0.6)]" />
+                <span className="font-semibold text-apple-green">Positive Alpha</span>
+                <span className="text-[10px] text-apple-dim">(Outperforming BTC Buy & Hold)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-1.5 rounded-full bg-apple-red shadow-[0_0_6px_rgba(255,69,58,0.6)]" />
+                <span className="font-semibold text-apple-red">Negative Alpha</span>
+                <span className="text-[10px] text-apple-dim">(Trailing BTC / Consolidation Lag)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-0.5 border-b border-dashed border-apple-muted" />
+                <span className="font-semibold text-apple-muted">0.0% Parity Line</span>
+                <span className="text-[10px] text-apple-dim">(Benchmark Baseline)</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3.5 h-1 rounded-full bg-apple-orange border-b border-dashed" />
-              <span className="font-semibold text-apple-orange">Bitcoin Buy & Hold</span>
-              <span className="text-[10px] text-apple-dim">(Passive Benchmark)</span>
+          ) : (
+            <div className="flex items-center gap-5">
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-1 rounded-full bg-apple-blue" />
+                <span className="font-semibold text-apple-text">{strategy?.name || 'Algo Strategy'}</span>
+                <span className="text-[10px] text-apple-dim">(Systematic Execution)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-1 rounded-full bg-apple-orange border-b border-dashed" />
+                <span className="font-semibold text-apple-orange">Bitcoin Buy & Hold</span>
+                <span className="text-[10px] text-apple-dim">(Passive Benchmark)</span>
+              </div>
             </div>
-          </div>
+          )}
           <div className="text-[11px] text-apple-dim">
             Hover cursor over chart to inspect granular dates & returns
           </div>
@@ -518,6 +567,38 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
                   <stop offset="0%" stopColor="#FF9F0A" stopOpacity="0.22" />
                   <stop offset="100%" stopColor="#FF9F0A" stopOpacity="0.0" />
                 </linearGradient>
+
+                {/* Alpha Area Gradient (Dual Color: Apple Green above zero, Apple Red below zero) */}
+                <linearGradient 
+                  id="alphaAreaGradient" 
+                  x1="0" 
+                  y1={padding.top} 
+                  x2="0" 
+                  y2={padding.top + plotHeight} 
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop offset="0%" stopColor="#30D158" stopOpacity="0.35" />
+                  <stop offset={`${Math.max(0, chartData.zeroRatio * 100 - 3).toFixed(1)}%`} stopColor="#30D158" stopOpacity="0.06" />
+                  <stop offset={`${(chartData.zeroRatio * 100).toFixed(1)}%`} stopColor="#30D158" stopOpacity="0.0" />
+                  <stop offset={`${(chartData.zeroRatio * 100).toFixed(1)}%`} stopColor="#FF453A" stopOpacity="0.0" />
+                  <stop offset={`${Math.min(100, chartData.zeroRatio * 100 + 3).toFixed(1)}%`} stopColor="#FF453A" stopOpacity="0.06" />
+                  <stop offset="100%" stopColor="#FF453A" stopOpacity="0.32" />
+                </linearGradient>
+
+                {/* Alpha Stroke Gradient (Apple Green above zero, Apple Red below zero) */}
+                <linearGradient 
+                  id="alphaStrokeGradient" 
+                  x1="0" 
+                  y1={padding.top} 
+                  x2="0" 
+                  y2={padding.top + plotHeight} 
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop offset="0%" stopColor="#30D158" />
+                  <stop offset={`${Math.max(0, chartData.zeroRatio * 100 - 1.5).toFixed(1)}%`} stopColor="#30D158" />
+                  <stop offset={`${Math.min(100, chartData.zeroRatio * 100 + 1.5).toFixed(1)}%`} stopColor="#FF453A" />
+                  <stop offset="100%" stopColor="#FF453A" />
+                </linearGradient>
               </defs>
 
               {/* Horizontal Grid lines */}
@@ -542,6 +623,54 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
                   </text>
                 </g>
               ))}
+
+              {/* Zero Reference Parity Line (Active when range crosses 0, especially in Alpha Spread) */}
+              {chartData.hasZeroLine && (
+                <g>
+                  <line
+                    x1={padding.left}
+                    y1={chartData.zeroY}
+                    x2={svgWidth - padding.right}
+                    y2={chartData.zeroY}
+                    stroke="currentColor"
+                    className="text-apple-muted/60 dark:text-white/30"
+                    strokeWidth="1.5"
+                    strokeDasharray="4,4"
+                  />
+                  <rect
+                    x={padding.left - 52}
+                    y={chartData.zeroY - 9}
+                    width="44"
+                    height="18"
+                    rx="5"
+                    className="fill-black/[0.08] dark:fill-white/[0.12]"
+                  />
+                  <text
+                    x={padding.left - 30}
+                    y={chartData.zeroY + 3.5}
+                    textAnchor="middle"
+                    className="text-[10px] fill-apple-text font-bold font-mono"
+                  >
+                    0.0%
+                  </text>
+                  <rect
+                    x={svgWidth - padding.right + 6}
+                    y={chartData.zeroY - 9}
+                    width="54"
+                    height="18"
+                    rx="5"
+                    className="fill-black/[0.08] dark:fill-white/[0.12]"
+                  />
+                  <text
+                    x={svgWidth - padding.right + 33}
+                    y={chartData.zeroY + 3.5}
+                    textAnchor="middle"
+                    className="text-[9px] fill-apple-muted dark:fill-apple-muted font-bold font-mono tracking-wider"
+                  >
+                    PARITY
+                  </text>
+                </g>
+              )}
 
               {/* Vertical Year Grid lines */}
               {chartData.yearMarkers.map((ym, i) => (
@@ -582,11 +711,14 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
               )}
 
               {/* Algo Strategy Area & Line */}
-              <path d={chartData.algoArea} fill="url(#algoGradient)" />
+              <path 
+                d={chartData.algoArea} 
+                fill={metricMode === 'ALPHA' ? 'url(#alphaAreaGradient)' : 'url(#algoGradient)'} 
+              />
               <path
                 d={chartData.algoPath}
                 fill="none"
-                stroke="#0071E3"
+                stroke={metricMode === 'ALPHA' ? 'url(#alphaStrokeGradient)' : '#0071E3'}
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -624,7 +756,11 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
                       cx={mousePos.x}
                       cy={mousePos.algoY}
                       r="5.5"
-                      className="fill-apple-blue stroke-white dark:stroke-[#0C0D12]"
+                      className={metricMode === 'ALPHA' 
+                        ? (hoveredPoint && hoveredPoint.alphaPct >= 0 
+                            ? 'fill-apple-green stroke-white dark:stroke-[#0C0D12]' 
+                            : 'fill-apple-red stroke-white dark:stroke-[#0C0D12]')
+                        : 'fill-apple-blue stroke-white dark:stroke-[#0C0D12]'}
                       strokeWidth="2.5"
                     />
                   )}
@@ -636,7 +772,7 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
           {/* Floating Hover Inspector HUD */}
           {hoveredPoint && (
             <div 
-              className="absolute pointer-events-none top-3 right-3 bg-white/95 dark:bg-[#13141C]/95 backdrop-blur-md border border-black/10 dark:border-white/15 rounded-2xl p-3.5 shadow-2xl space-y-2 text-xs min-w-[220px] transition-all duration-75"
+              className="absolute pointer-events-none top-3 right-3 bg-white/95 dark:bg-[#13141C]/95 backdrop-blur-md border border-black/10 dark:border-white/15 rounded-2xl p-3.5 shadow-2xl space-y-2 text-xs min-w-[240px] transition-all duration-75"
             >
               <div className="flex items-center justify-between border-b border-black/[0.08] dark:border-white/[0.08] pb-1.5">
                 <span className="font-semibold text-apple-text flex items-center gap-1.5">
@@ -651,36 +787,49 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
               <div className="space-y-1.5 font-mono">
                 {/* Algo value */}
                 <div className="flex items-center justify-between text-apple-blue">
-                  <span className="text-[11px] font-sans font-medium text-apple-text">Algo Strategy:</span>
-                  <span className="font-bold tabular-nums">
+                  <span className="text-[11px] font-sans font-medium text-apple-text">Algo {metricMode === 'EQUITY' ? 'Equity' : 'Return'}:</span>
+                  <span className={`font-bold tabular-nums ${hoveredPoint.algoReturnPct >= 0 ? 'text-apple-green' : 'text-apple-red'}`}>
                     {metricMode === 'EQUITY' 
                       ? `$${hoveredPoint.algoEquity.toLocaleString()}` 
-                      : `+${hoveredPoint.algoReturnPct}%`}
+                      : `${hoveredPoint.algoReturnPct >= 0 ? '+' : ''}${hoveredPoint.algoReturnPct}%`}
                   </span>
                 </div>
 
                 {/* BTC value */}
                 <div className="flex items-center justify-between text-apple-orange">
-                  <span className="text-[11px] font-sans font-medium text-apple-muted">BTC Benchmark:</span>
-                  <span className="font-medium tabular-nums">
+                  <span className="text-[11px] font-sans font-medium text-apple-muted">BTC {metricMode === 'EQUITY' ? 'Equity' : 'Return'}:</span>
+                  <span className={`font-medium tabular-nums ${hoveredPoint.btcReturnPct >= 0 ? 'text-apple-orange' : 'text-apple-dim'}`}>
                     {metricMode === 'EQUITY' 
                       ? `$${hoveredPoint.btcEquity.toLocaleString()}` 
-                      : `+${hoveredPoint.btcReturnPct}%`}
+                      : `${hoveredPoint.btcReturnPct >= 0 ? '+' : ''}${hoveredPoint.btcReturnPct}%`}
                   </span>
                 </div>
 
                 {/* Net Alpha */}
                 <div className="flex items-center justify-between pt-1 border-t border-black/[0.06] dark:border-white/[0.06]">
-                  <span className="text-[11px] font-sans font-semibold text-apple-green">Net Alpha Spread:</span>
+                  <span className={`text-[11px] font-sans font-semibold ${hoveredPoint.alphaPct >= 0 ? 'text-apple-green' : 'text-apple-red'}`}>
+                    {hoveredPoint.alphaPct >= 0 ? 'Net Alpha Spread:' : 'Alpha Drawdown / Lag:'}
+                  </span>
                   <span className={`font-bold tabular-nums ${hoveredPoint.alphaPct >= 0 ? 'text-apple-green' : 'text-apple-red'}`}>
                     {hoveredPoint.alphaPct >= 0 ? `+${hoveredPoint.alphaPct}%` : `${hoveredPoint.alphaPct}%`}
                   </span>
                 </div>
               </div>
 
-              <div className="text-[10px] text-apple-dim flex items-center justify-between pt-1 border-t border-black/[0.06] dark:border-white/[0.06]">
-                <span>Trades Executed: {hoveredPoint.tradesClosed}</span>
-                <span>Algo DD: -{hoveredPoint.algoDrawdownPct}%</span>
+              {/* Status Pill in Tooltip */}
+              <div className="pt-1 flex items-center justify-between border-t border-black/[0.06] dark:border-white/[0.06]">
+                <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                  hoveredPoint.alphaPct >= 0 
+                    ? 'bg-apple-green/15 text-apple-green border-apple-green/30' 
+                    : 'bg-apple-red/15 text-apple-red border-apple-red/30'
+                }`}>
+                  {hoveredPoint.alphaPct >= 0 
+                    ? `+${hoveredPoint.alphaPct}% vs Buy & Hold` 
+                    : `${hoveredPoint.alphaPct}% vs Buy & Hold`}
+                </span>
+                <span className="text-[10px] text-apple-dim font-mono">
+                  Trades: {hoveredPoint.tradesClosed}
+                </span>
               </div>
             </div>
           )}

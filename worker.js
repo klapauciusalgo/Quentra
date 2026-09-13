@@ -77,51 +77,97 @@ export default {
       }), { headers: CORS_HEADERS });
     }
 
-    // 4. Edge handler: /api/ticker
+    // 4. Edge handler: /api/ticker (Resilient live price multi-exchange aggregator)
     if (url.pathname === '/api/ticker') {
+      // 1. Bybit public spot ticker (Ultra-reliable from Cloudflare Anycast edge, never geo-blocked)
       try {
-        // Fetch from Binance public ticker (Cloudflare edge can reach Binance globally)
+        const bybitRes = await fetch('https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT');
+        if (bybitRes.ok) {
+          const b = await bybitRes.json();
+          const item = b?.result?.list?.[0];
+          if (item && item.lastPrice) {
+            const curPrice = parseFloat(item.lastPrice);
+            const prevPrice = parseFloat(item.prevPrice24h || item.lastPrice);
+            const changePct = prevPrice > 0 ? ((curPrice - prevPrice) / prevPrice) * 100 : 0;
+            return new Response(JSON.stringify({
+              symbol: 'BTCUSDT',
+              price: curPrice,
+              change_24h_pct: changePct,
+              high_24h: parseFloat(item.highPrice24h || curPrice),
+              low_24h: parseFloat(item.lowPrice24h || curPrice),
+              volume_24h: parseFloat(item.volume24h || 0),
+              status: 'LIVE',
+            }), { headers: CORS_HEADERS });
+          }
+        }
+      } catch (err) {}
+
+      // 2. OKX public spot ticker fallback
+      try {
+        const okxRes = await fetch('https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT');
+        if (okxRes.ok) {
+          const o = await okxRes.json();
+          const item = o?.data?.[0];
+          if (item && item.last) {
+            const curPrice = parseFloat(item.last);
+            const open24h = parseFloat(item.open24h || item.last);
+            const changePct = open24h > 0 ? ((curPrice - open24h) / open24h) * 100 : 0;
+            return new Response(JSON.stringify({
+              symbol: 'BTCUSDT',
+              price: curPrice,
+              change_24h_pct: changePct,
+              high_24h: parseFloat(item.high24h || curPrice),
+              low_24h: parseFloat(item.low24h || curPrice),
+              volume_24h: parseFloat(item.vol24h || 0),
+              status: 'LIVE',
+            }), { headers: CORS_HEADERS });
+          }
+        }
+      } catch (err) {}
+
+      // 3. Binance public ticker
+      try {
         const binanceRes = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT');
         if (binanceRes.ok) {
           const t = await binanceRes.json();
-          return new Response(JSON.stringify({
-            price: parseFloat(t.lastPrice),
-            change_24h_pct: parseFloat(t.priceChangePercent),
-            high_24h: parseFloat(t.highPrice),
-            low_24h: parseFloat(t.lowPrice),
-            volume_24h: parseFloat(t.volume),
-          }), { headers: CORS_HEADERS });
-        }
-      } catch (e) {
-        try {
-          // Fallback to Bybit public ticker
-          const bybitRes = await fetch('https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT');
-          if (bybitRes.ok) {
-            const b = await bybitRes.json();
-            const item = b?.result?.list?.[0];
-            if (item) {
-              const curPrice = parseFloat(item.lastPrice);
-              const prevPrice = parseFloat(item.prevPrice24h || item.lastPrice);
-              const changePct = ((curPrice - prevPrice) / prevPrice) * 100;
-              return new Response(JSON.stringify({
-                price: curPrice,
-                change_24h_pct: changePct,
-                high_24h: parseFloat(item.highPrice24h),
-                low_24h: parseFloat(item.lowPrice24h),
-                volume_24h: parseFloat(item.volume24h),
-              }), { headers: CORS_HEADERS });
-            }
+          if (t && t.lastPrice) {
+            return new Response(JSON.stringify({
+              symbol: 'BTCUSDT',
+              price: parseFloat(t.lastPrice),
+              change_24h_pct: parseFloat(t.priceChangePercent),
+              high_24h: parseFloat(t.highPrice),
+              low_24h: parseFloat(t.lowPrice),
+              volume_24h: parseFloat(t.volume),
+              status: 'LIVE',
+            }), { headers: CORS_HEADERS });
           }
-        } catch (err) {}
-      }
+        }
+      } catch (err) {}
+
+      // 4. Bybit latest 1m kline fallback (guarantees real-time close price if ticker endpoint is busy)
+      try {
+        const klineRes = await fetch('https://api.bybit.com/v5/market/kline?category=spot&symbol=BTCUSDT&interval=1&limit=1');
+        if (klineRes.ok) {
+          const k = await klineRes.json();
+          const bar = k?.result?.list?.[0];
+          if (bar && bar[4]) {
+            const curPrice = parseFloat(bar[4]);
+            return new Response(JSON.stringify({
+              symbol: 'BTCUSDT',
+              price: curPrice,
+              change_24h_pct: 0.0,
+              high_24h: parseFloat(bar[2] || curPrice),
+              low_24h: parseFloat(bar[3] || curPrice),
+              volume_24h: parseFloat(bar[5] || 0),
+              status: 'LIVE',
+            }), { headers: CORS_HEADERS });
+          }
+        }
+      } catch (err) {}
 
       return new Response(JSON.stringify({
-        price: 77150.0,
-        change_24h_pct: -0.45,
-        high_24h: 78500.0,
-        low_24h: 76200.0,
-        volume_24h: 21000.0,
-      }), { headers: CORS_HEADERS });
+        error: 'Live ticker unavailable',
+      }), { status: 503, headers: CORS_HEADERS });
     }
 
     // 5. Edge handler: /api/klines

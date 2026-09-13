@@ -77,6 +77,7 @@ export default function App() {
 
   const wsRef = useRef(null);
   const directBinanceWsRef = useRef(null);
+  const lastWsTickTimeRef = useRef(0);
 
   // 1. Fetch initial platform data with automatic fallbacks
   useEffect(() => {
@@ -182,20 +183,23 @@ export default function App() {
       })
       .catch(() => {});
 
-    // Periodic ticker sync (every 2.5s) to guarantee header and chart are permanently locked together
+    // Periodic ticker sync: only query edge /api/ticker as fallback if no live WebSocket tick in the last 4s
     const tickerPollInterval = setInterval(() => {
+      if (Date.now() - lastWsTickTimeRef.current < 4000) {
+        return; // WebSocket is actively streaming real-time ticks
+      }
       fetch(`${API_BASE}/api/ticker`)
         .then((r) => r.json())
         .then((data) => {
-          if (data && data.price) {
+          if (data && data.price && typeof data.price === 'number') {
             setTicker((prev) => {
-              if (prev.price !== data.price) return data;
+              if (prev.price !== data.price) return { ...prev, ...data };
               return prev;
             });
           }
         })
         .catch(() => {});
-    }, 2500);
+    }, 3000);
 
     return () => clearInterval(tickerPollInterval);
   }, []);
@@ -216,6 +220,7 @@ export default function App() {
           try {
             const msg = JSON.parse(event.data);
             if (msg.topic === 'tickers.BTCUSDT' && msg.data) {
+              lastWsTickTimeRef.current = Date.now();
               const d = msg.data;
               const curPrice = parseFloat(d.lastPrice);
               const prevPrice = parseFloat(d.prevPrice24h || d.lastPrice);
@@ -247,6 +252,7 @@ export default function App() {
           try {
             const data = JSON.parse(event.data);
             if (data.c) {
+              lastWsTickTimeRef.current = Date.now();
               const curPrice = parseFloat(data.c);
               const openPrice = parseFloat(data.o);
               const changePct = ((curPrice - openPrice) / openPrice) * 100;
@@ -297,9 +303,11 @@ export default function App() {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'TICKER') {
+            lastWsTickTimeRef.current = Date.now();
             setTicker(msg.data);
           } else if (msg.type === 'SNAPSHOT') {
             if (msg.ticker && msg.ticker.price) {
+              lastWsTickTimeRef.current = Date.now();
               setTicker(msg.ticker);
             }
             if (msg.binance_connected !== undefined) {
@@ -573,6 +581,19 @@ export default function App() {
     });
   };
 
+  // Synchronize top header label with chart's latest candle close if no live WS ticks have arrived recently
+  const handlePriceSyncFromChart = (chartPrice) => {
+    if (!chartPrice || typeof chartPrice !== 'number') return;
+    if (Date.now() - lastWsTickTimeRef.current > 4000) {
+      setTicker((prev) => {
+        if (!prev.price || Math.abs(prev.price - chartPrice) > 0.01) {
+          return { ...prev, price: chartPrice };
+        }
+        return prev;
+      });
+    }
+  };
+
   const activeStrategyObj = strategies.find((s) => s.id === selectedStrategyId) || strategies[0];
 
   return (
@@ -691,6 +712,7 @@ export default function App() {
               liveTicker={ticker}
               theme={theme}
               floor={floor}
+              onPriceSync={handlePriceSyncFromChart}
             />
           </section>
         )}

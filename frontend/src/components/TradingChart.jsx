@@ -69,6 +69,7 @@ export default function TradingChart({
   onTradeSelect = null,
   theme = 'light',
   floor = null,
+  onPriceSync = null,
 }) {
   const isDark = theme === 'dark';
   const chartContainerRef = useRef(null);
@@ -881,6 +882,16 @@ export default function TradingChart({
       // Safe catch
     }
   }, [liveTicker?.price]);
+
+  // Synchronize latest candle close price with platform header
+  useEffect(() => {
+    if (candles && candles.length > 0 && typeof onPriceSync === 'function') {
+      const lastCandle = candles[candles.length - 1];
+      if (lastCandle && lastCandle.close) {
+        onPriceSync(lastCandle.close);
+      }
+    }
+  }, [candles, onPriceSync]);
 
   // Jump chart to specific trade
   const handleJumpToTrade = (trade, index) => {

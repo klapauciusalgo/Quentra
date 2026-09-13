@@ -29,7 +29,8 @@ import {
   ShieldAlert,
   GripHorizontal,
   RotateCcw,
-  ArrowRight
+  ArrowRight,
+  ArrowUpDown
 } from 'lucide-react';
 
 const TIMEFRAMES = [
@@ -89,6 +90,7 @@ export default function TradingChart({
   const [showPriceLevels, setShowPriceLevels] = useState(true);
   const [focusedTradeIndex, setFocusedTradeIndex] = useState(0);
   const [tradeFilter, setTradeFilter] = useState('ALL'); // 'ALL' | 'WINS' | 'LOSSES'
+  const [signalSortOrder, setSignalSortOrder] = useState('DESC'); // 'DESC' (Newest First) | 'ASC' (Oldest First)
 
   // Draggable HUD State & Handlers
   const chartViewportRef = useRef(null);
@@ -214,16 +216,19 @@ export default function TradingChart({
     return map;
   }, [tradesList]);
 
-  // Filtered trades for navigation strip
+  // Filtered trades for navigation strip (Sorted DESC by default to match trade logs)
   const filteredTrades = useMemo(() => {
+    let list = tradesList;
     if (tradeFilter === 'WINS') {
-      return tradesList.filter((t) => (t.net_return_pct || 0) > 0);
+      list = tradesList.filter((t) => (t.net_return_pct || 0) > 0);
+    } else if (tradeFilter === 'LOSSES') {
+      list = tradesList.filter((t) => (t.net_return_pct || 0) <= 0);
     }
-    if (tradeFilter === 'LOSSES') {
-      return tradesList.filter((t) => (t.net_return_pct || 0) <= 0);
-    }
-    return tradesList;
-  }, [tradesList, tradeFilter]);
+    return [...list].sort((a, b) => {
+      const diff = (a.trade_no || 0) - (b.trade_no || 0);
+      return signalSortOrder === 'DESC' ? -diff : diff;
+    });
+  }, [tradesList, tradeFilter, signalSortOrder]);
 
   // Compute moving averages over candles array
   const calculateMAValues = (candleArr, period) => {
@@ -1458,8 +1463,8 @@ export default function TradingChart({
           {/* Timeline Bar Header */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/[0.08] dark:border-white/[0.08] pb-2.5">
             
-            {/* Filter Tabs */}
-            <div className="flex items-center gap-2">
+            {/* Filter Tabs & Sort Order */}
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-apple-dim flex items-center gap-1.5 font-medium">
                 <Sliders className="w-3.5 h-3.5 text-apple-cyan" />
                 Signals ({tradesList.length}):
@@ -1487,6 +1492,19 @@ export default function TradingChart({
                   </button>
                 ))}
               </div>
+
+              {/* Sort Order Toggle: DESC (Newest First) / ASC (Oldest First) */}
+              <button
+                onClick={() => {
+                  playRetroSound('blip');
+                  setSignalSortOrder((prev) => (prev === 'DESC' ? 'ASC' : 'DESC'));
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] active:scale-[0.98] border border-black/[0.08] dark:border-white/[0.08] rounded-xl text-apple-muted hover:text-apple-text cursor-pointer transition-all text-xs"
+                title={signalSortOrder === 'DESC' ? 'Currently Newest First (Click to toggle Oldest First)' : 'Currently Oldest First (Click to toggle Newest First)'}
+              >
+                <ArrowUpDown className="w-3 h-3 text-apple-cyan" />
+                <span className="font-medium text-[11px]">{signalSortOrder === 'DESC' ? 'Newest First' : 'Oldest First'}</span>
+              </button>
             </div>
 
             {/* Stepper Controls */}

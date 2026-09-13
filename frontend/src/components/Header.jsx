@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { formatPrice, formatPercent, playRetroSound, isAudioEnabled, toggleAudio } from '../utils/formatters';
 import { Volume2, VolumeX, Zap, Clock, Sun, Moon } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 
 export default function Header({ 
   ticker, 
@@ -8,7 +9,12 @@ export default function Header({
   floor, 
   theme = 'light',
   onToggleTheme,
-  onSimulateSignal 
+  onSimulateSignal,
+  activeSignals = [],
+  notifications = [],
+  onSelectStrategy,
+  onCloseSignal,
+  onClearNotifications
 }) {
   const [audioActive, setAudioActive] = useState(true);
   const [priceFlash, setPriceFlash] = useState(null);
@@ -123,6 +129,17 @@ export default function Header({
               {status?.binance_ws_connected ? 'Live' : 'Syncing'}
             </span>
           </div>
+
+          {/* Active Signal Notification Bell Menu */}
+          <NotificationBell
+            activeSignals={activeSignals}
+            notifications={notifications}
+            currentBtcPrice={ticker?.price || 77300}
+            onSelectStrategy={onSelectStrategy}
+            onSimulateSignal={onSimulateSignal}
+            onCloseSignal={onCloseSignal}
+            onClearNotifications={onClearNotifications}
+          />
 
           {/* Dispatch Simulated Signal Trigger */}
           <button

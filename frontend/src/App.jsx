@@ -49,6 +49,10 @@ export default function App() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [bannerAlert, setBannerAlert] = useState(null);
 
+  // Active Working Signals (BUY / SELL) & Notification Events
+  const [activeSignals, setActiveSignals] = useState([]);
+  const [signalNotifications, setSignalNotifications] = useState([]);
+
   // Theme Management (Light Mode is Default)
   const [theme, setTheme] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -148,6 +152,35 @@ export default function App() {
       .catch(() => {
         // Initialized with bundled strategiesData
       });
+
+    // Live Signals Telemetry
+    fetch(`${API_BASE}/api/signals/live`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && Array.isArray(data.strategies)) {
+          const inPos = data.strategies.filter((s) => s.position_status === 'IN_POSITION');
+          if (inPos.length > 0) {
+            setActiveSignals(
+              inPos.map((s) => ({
+                id: s.strategy_id,
+                strategy_id: s.strategy_id,
+                strategy_name: s.name,
+                timeframe: s.timeframe,
+                direction: s.direction,
+                action: s.direction === 'LONG' ? 'BUY' : 'SELL',
+                entry_price: s.entry_price || data.current_btc_price,
+                current_price: data.current_btc_price,
+                floating_pnl_pct: s.floating_pnl_pct || 0.0,
+                stop_loss: s.stop_loss,
+                take_profit: s.take_profit,
+                timestamp: new Date().toLocaleTimeString(),
+                status: 'IN_POSITION',
+              }))
+            );
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // 2. Establish WebSocket connection to backend or fallback to Binance Direct
@@ -258,8 +291,38 @@ export default function App() {
             setFloor(msg.floor);
           } else if (msg.type === 'NEW_SIGNAL') {
             playRetroSound('signal');
-            const direction = msg.ticket?.direction || 'SIGNAL';
-            const isLong = direction === 'LONG';
+            const direction = msg.ticket?.direction || 'LONG';
+            const action = direction === 'LONG' ? 'BUY' : 'SELL';
+            const sigId = msg.ticket?.strategy_id || `sig-${Date.now()}`;
+            const newSig = {
+              id: sigId,
+              strategy_id: msg.ticket?.strategy_id,
+              strategy_name: msg.ticket?.strategy_name || 'Autonomous Strategy',
+              timeframe: msg.ticket?.timeframe || '1h',
+              direction: direction,
+              action: action,
+              entry_price: msg.ticket?.entry_price || ticker.price,
+              current_price: ticker.price,
+              floating_pnl_pct: 0.0,
+              stop_loss: msg.ticket?.stop_loss,
+              take_profit: msg.ticket?.take_profit,
+              timestamp: new Date().toLocaleTimeString(),
+              status: 'IN_POSITION',
+            };
+            setActiveSignals((prev) => [newSig, ...prev.filter((s) => s.strategy_id !== newSig.strategy_id)]);
+            setSignalNotifications((prev) => [
+              {
+                id: `notif-${Date.now()}`,
+                type: 'NEW_SIGNAL',
+                title: `AUTONOMOUS ${action} SIGNAL`,
+                strategy: newSig.strategy_name,
+                direction: direction,
+                price: newSig.entry_price,
+                stop_loss: newSig.stop_loss,
+                timestamp: new Date().toLocaleTimeString(),
+              },
+              ...prev.slice(0, 19),
+            ]);
             setBannerAlert({
               title: `AUTONOMOUS ${direction} SIGNAL DISPATCHED!`,
               strategy: `${msg.ticket?.strategy_name} @ $${Number(msg.ticket?.entry_price || 0).toLocaleString()} (SL: $${Number(msg.ticket?.stop_loss || 0).toLocaleString()})`,
@@ -270,6 +333,22 @@ export default function App() {
             playRetroSound('alert');
             const pnl = msg.trade?.net_return_pct;
             const pnlStr = pnl !== undefined ? `${pnl > 0 ? '+' : ''}${pnl}%` : '';
+            if (msg.strategy_id) {
+              setActiveSignals((prev) => prev.filter((s) => s.strategy_id !== msg.strategy_id));
+            }
+            setSignalNotifications((prev) => [
+              {
+                id: `notif-${Date.now()}`,
+                type: 'SIGNAL_EXIT',
+                title: `POSITION CLOSED: ${msg.strategy_name || ''}`,
+                strategy: msg.strategy_name || '',
+                reason: msg.trade?.reason || 'Market Exit',
+                pnl: pnlStr,
+                price: msg.trade?.exit_price,
+                timestamp: new Date().toLocaleTimeString(),
+              },
+              ...prev.slice(0, 19),
+            ]);
             setBannerAlert({
               title: `AUTONOMOUS POSITION CLOSED: ${msg.strategy_name || ''}`,
               strategy: `Exit Reason: ${msg.trade?.reason || 'Market'} | PnL: ${pnlStr}`,
@@ -278,6 +357,25 @@ export default function App() {
             setTimeout(() => setBannerAlert(null), 7000);
           } else if (msg.type === 'BREAKEVEN_LOCKED') {
             playRetroSound('select');
+            setActiveSignals((prev) =>
+              prev.map((s) =>
+                s.strategy_id === msg.strategy_id
+                  ? { ...s, stop_loss: msg.new_stop_loss, be_active: true }
+                  : s
+              )
+            );
+            setSignalNotifications((prev) => [
+              {
+                id: `notif-${Date.now()}`,
+                type: 'BREAKEVEN_LOCKED',
+                title: `DYNAMIC BREAKEVEN ENGAGED`,
+                strategy: msg.strategy_name || '',
+                price: msg.price,
+                new_stop_loss: msg.new_stop_loss,
+                timestamp: new Date().toLocaleTimeString(),
+              },
+              ...prev.slice(0, 19),
+            ]);
             setBannerAlert({
               title: `DYNAMIC BREAKEVEN ENGAGED!`,
               strategy: `${msg.strategy_name}: Stop Loss advanced to $${Number(msg.new_stop_loss || 0).toLocaleString()} (+0.2% locked)`,
@@ -337,16 +435,118 @@ export default function App() {
   const handleSimulateSignal = () => {
     fetch(`${API_BASE}/api/floor/simulate-signal?strategy_id=${selectedStrategyId}`, { method: 'POST' })
       .then((r) => r.json())
+      .then((data) => {
+        const ticket = data.ticket;
+        if (ticket) {
+          const direction = ticket.direction || 'LONG';
+          const action = direction === 'LONG' ? 'BUY' : 'SELL';
+          const newSig = {
+            id: ticket.strategy_id || `sig-${Date.now()}`,
+            strategy_id: ticket.strategy_id,
+            strategy_name: ticket.strategy_name,
+            timeframe: ticket.timeframe || '1h',
+            direction: direction,
+            action: action,
+            entry_price: ticket.entry_price || ticker.price,
+            current_price: ticker.price,
+            floating_pnl_pct: 0.0,
+            stop_loss: ticket.stop_loss,
+            take_profit: ticket.take_profit,
+            timestamp: new Date().toLocaleTimeString(),
+            status: 'IN_POSITION',
+          };
+          setActiveSignals((prev) => [newSig, ...prev.filter((s) => s.strategy_id !== newSig.strategy_id)]);
+          setSignalNotifications((prev) => [
+            {
+              id: `notif-${Date.now()}`,
+              type: 'NEW_SIGNAL',
+              title: `AUTONOMOUS ${action} SIGNAL`,
+              strategy: newSig.strategy_name,
+              direction: direction,
+              price: newSig.entry_price,
+              stop_loss: newSig.stop_loss,
+              timestamp: new Date().toLocaleTimeString(),
+            },
+            ...prev.slice(0, 19),
+          ]);
+        }
+      })
       .catch(() => {
         // Local simulation fallback
         playRetroSound('signal');
+        const strat = strategies.find((s) => s.id === selectedStrategyId) || strategies[0];
+        const isLong = strat.type === 'LONG';
+        const action = isLong ? 'BUY' : 'SELL';
+        const newSig = {
+          id: strat.id,
+          strategy_id: strat.id,
+          strategy_name: strat.name,
+          timeframe: strat.timeframe,
+          direction: strat.type,
+          action: action,
+          entry_price: ticker.price,
+          current_price: ticker.price,
+          floating_pnl_pct: 0.0,
+          stop_loss: Math.round(ticker.price * (isLong ? 0.92 : 1.05)),
+          take_profit: Math.round(ticker.price * (isLong ? 1.75 : 0.88)),
+          timestamp: new Date().toLocaleTimeString(),
+          status: 'IN_POSITION',
+        };
+        setActiveSignals((prev) => [newSig, ...prev.filter((s) => s.strategy_id !== newSig.strategy_id)]);
+        setSignalNotifications((prev) => [
+          {
+            id: `notif-${Date.now()}`,
+            type: 'NEW_SIGNAL',
+            title: `AUTONOMOUS ${action} SIGNAL`,
+            strategy: strat.name,
+            direction: strat.type,
+            price: ticker.price,
+            timestamp: new Date().toLocaleTimeString(),
+          },
+          ...prev.slice(0, 19),
+        ]);
         setBannerAlert({
-          title: 'NEW LONG SIGNAL DISPATCHED',
-          strategy: 'Pippo 1H Enhanced',
-          price: ticker.price || 77300,
+          title: `AUTONOMOUS ${action} SIGNAL DISPATCHED!`,
+          strategy: `${strat.name} @ $${Number(ticker.price || 0).toLocaleString()}`,
+          price: ticker.price,
         });
         setTimeout(() => setBannerAlert(null), 6000);
       });
+  };
+
+  // Close active signal
+  const handleCloseSignal = (strategyId) => {
+    playRetroSound('alert');
+    setActiveSignals((prev) => {
+      const sig = prev.find((s) => s.strategy_id === strategyId);
+      if (sig) {
+        const isBuy = sig.action === 'BUY' || sig.direction === 'LONG';
+        const floating = isBuy
+          ? ((ticker.price - sig.entry_price) / sig.entry_price) * 100
+          : ((sig.entry_price - ticker.price) / sig.entry_price) * 100;
+        const pnlStr = `${floating >= 0 ? '+' : ''}${floating.toFixed(2)}%`;
+        setSignalNotifications((n) => [
+          {
+            id: `notif-${Date.now()}`,
+            type: 'SIGNAL_EXIT',
+            title: `POSITION CLOSED: ${sig.strategy_name}`,
+            strategy: sig.strategy_name,
+            reason: 'Manual Exit via Bell Menu',
+            pnl: pnlStr,
+            price: ticker.price,
+            timestamp: new Date().toLocaleTimeString(),
+          },
+          ...n.slice(0, 19),
+        ]);
+        setBannerAlert({
+          title: `POSITION CLOSED: ${sig.strategy_name}`,
+          strategy: `Return: ${pnlStr} @ $${Number(ticker.price).toLocaleString()}`,
+          price: ticker.price,
+        });
+        setTimeout(() => setBannerAlert(null), 5000);
+      }
+      return prev.filter((s) => s.strategy_id !== strategyId);
+    });
   };
 
   const activeStrategyObj = strategies.find((s) => s.id === selectedStrategyId) || strategies[0];
@@ -362,6 +562,11 @@ export default function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
         onSimulateSignal={handleSimulateSignal}
+        activeSignals={activeSignals}
+        notifications={signalNotifications}
+        onSelectStrategy={handleSelectStrategy}
+        onCloseSignal={handleCloseSignal}
+        onClearNotifications={() => setSignalNotifications([])}
       />
 
       {/* Real-time Signal Alert Dynamic Banner */}

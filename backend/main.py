@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-QuietAlgo Backend Server.
+Quentra Backend Server.
 FastAPI Application providing:
 - Binance WebSocket live streaming (ticker + klines)
 - Multi-timeframe BTCUSDT historical datasets (30m, 1h, 4h, 1D, 1W)
 - Strategy Catalog with full performance metrics, trade logs, and chart execution markers
-- Pixel Trading Floor interactive state engine
+- Trading Floor interactive state engine
 - Static files hosting for production React frontend build
 """
 
@@ -25,7 +25,7 @@ from binance_ws import binance_manager
 from pixel_floor import floor_engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger("quietalgo_server")
+logger = logging.getLogger("quentra_server")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -94,7 +94,7 @@ def load_data_into_memory():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    logger.info("Initializing QuietAlgo Backend Server...")
+    logger.info("Initializing Quentra Backend Server...")
     load_data_into_memory()
     
     # Start Binance WebSocket background tasks
@@ -109,7 +109,7 @@ async def lifespan(app: FastAPI):
     kline_task.cancel()
     await asyncio.gather(ticker_task, kline_task, return_exceptions=True)
 
-app = FastAPI(title="QuietAlgo API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Quentra API", version="1.0.0", lifespan=lifespan)
 
 # Enable CORS for frontend Vite development & production
 app.add_middleware(
@@ -128,7 +128,7 @@ app.add_middleware(
 async def get_status():
     return {
         "status": "ONLINE",
-        "service": "QuietAlgo Platform",
+        "service": "Quentra Platform",
         "binance_ws_connected": binance_manager.is_connected,
         "ticker_status": binance_manager.ticker_data.get("status"),
         "latest_btc_price": binance_manager.ticker_data.get("price"),

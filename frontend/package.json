@@ -1,7 +1,7 @@
 {
-  "name": "quietalgo-frontend",
+  "name": "quentra-frontend",
   "version": "1.0.0",
-  "description": "QuietAlgo - Pixel Trading Floor & Crypto Algo Trade Platform",
+  "description": "Quentra - Algorithmic Crypto Trading & Signal Platform",
   "type": "module",
   "scripts": {
     "dev": "vite",

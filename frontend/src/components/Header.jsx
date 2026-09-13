@@ -47,7 +47,7 @@ export default function Header({ ticker, status, floor, onSimulateSignal }) {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-pixel text-xs md:text-sm text-retro-text tracking-wider">
-                QUIET<span className="text-signal-cyan">ALGO</span>
+                QUEN<span className="text-signal-cyan">TRA</span>
               </h1>
               <span className="bg-signal-cyan/10 border border-signal-cyan/40 text-signal-cyan font-mono text-[10px] px-1.5 py-0.5 rounded-none font-bold">
                 v2.6 PRO

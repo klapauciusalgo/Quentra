@@ -12,6 +12,13 @@ from typing import Optional, List, Dict, Any
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("supabase_client")
 
+try:
+    import dotenv
+    dotenv.load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+    dotenv.load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
+except Exception:
+    pass
+
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 

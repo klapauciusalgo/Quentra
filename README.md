@@ -1,4 +1,4 @@
-# 🕹️ QuietAlgo — Pixel Trading Floor & Crypto Algo Trade Platform
+# 🕹️ Quentra — Algorithmic Crypto Trade Platform & Pixel Trading Floor
 
 Platform trading kuantitatif dan visualisasi sinyal Bitcoin (**BTCUSDT**) yang menggabungkan estetika **Pixel-Art 16-Bit Isometric Trading Floor** (sesuai spesifikasi [`Design.md`](file:///home/ubuntu/QuietAlgo/Design.md)) dengan arsitektur algoritma trading Smart Money Concepts (SMC), Multi-Timeframe (MTF) momentum, dan tren makro siklus Bitcoin dari data historis Binance 2020–2026.
 
@@ -117,7 +117,7 @@ Aplikasi frontend akan aktif di `http://localhost:5173` dengan proxy otomatis ke
 
 | Endpoint | Tipe | Keterangan |
 |---|---|---|
-| `/` | `GET` | Antarmuka web frontend QuietAlgo |
+| `/` | `GET` | Antarmuka web frontend Quentra |
 | `/api/status` | `GET` | Status sistem, status Binance WS, harga BTC terkini |
 | `/api/ticker` | `GET` | Data ticker BTCUSDT (harga, high 24h, low 24h, volume, % change) |
 | `/api/klines?timeframe=30m\|1h\|4h\|1d\|1w&limit=1000` | `GET` | Candlestick OHLCV dengan Moving Averages (MA8, 25, 50, 55, 111) |

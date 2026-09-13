@@ -83,7 +83,7 @@ export default function App() {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('Connected to QuietAlgo WebSocket');
+        console.log('Connected to Quentra WebSocket');
         setStatus((prev) => ({ ...prev, binance_ws_connected: true }));
       };
 
@@ -116,13 +116,13 @@ export default function App() {
       };
 
       ws.onclose = () => {
-        console.warn('QuietAlgo WebSocket disconnected. Retrying in 3s...');
+        console.warn('Quentra WebSocket disconnected. Retrying in 3s...');
         setStatus((prev) => ({ ...prev, binance_ws_connected: false }));
         reconnectTimeout = setTimeout(connect, 3000);
       };
 
       ws.onerror = (err) => {
-        console.error('QuietAlgo WebSocket error:', err);
+        console.error('Quentra WebSocket error:', err);
         ws.close();
       };
     }
@@ -244,7 +244,7 @@ export default function App() {
         <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 bg-signal-bull animate-pulse"></span>
-            <span className="font-pixel text-[10px] text-retro-text">QUIETALGO PLATFORM</span>
+            <span className="font-pixel text-[10px] text-retro-text">QUENTRA PLATFORM</span>
             <span className="text-retro-dim">// Algorithmic Trading Intelligence</span>
           </div>
           <div className="flex items-center gap-4 text-[11px] text-retro-dim">

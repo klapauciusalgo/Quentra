@@ -4,7 +4,7 @@
 
 A crypto signal platform presented as a pixel-art isometric trading floor. Instead of raw charts and tables, the user watches a small "office" of pixel-art AI agents at work — each one responsible for a stage of signal generation. The visual metaphor: signals aren't just numbers, they're the output of a visible, staffed process.
 
-This reuses the visual language of the **Quietfloor** concept (pixel-art isometric office, AI agent roster) but repurposed for signal generation and delivery rather than trade execution.
+This establishes the visual language of the **Quentra** concept (pixel-art isometric office, AI agent roster) repurposed for signal generation, backtested quantitative strategies, and real-time delivery.
 
 ## 2. Visual Style
 
@@ -34,7 +34,7 @@ Rule of thumb: the room itself stays desaturated and dark; color is reserved for
 
 ## 4. Agent Roster
 
-Each agent is a pixel-art character at a desk, representing one stage of the signal pipeline. Reused from the Quietfloor roster, mapped to signal-generation roles:
+Each agent is a pixel-art character at a desk, representing one stage of the signal pipeline. Defined in the Quentra roster, mapped to signal-generation roles:
 
 | Agent | Desk visual | Function |
 |---|---|---|
@@ -79,6 +79,6 @@ Each generated signal is shown as a retro "terminal ticket," styled like a pixel
 
 ## 9. Open Questions / Next Steps
 
-- Confirm platform name (Quietfloor reused, or a distinct name for the signal-only product).
+- Platform name finalized as **Quentra** (Algorithmic Crypto Trade Platform & Pixel Trading Floor).
 - Decide whether this is web-only or also a compact widget/embed view (room may need a simplified "1 desk visible" mode for small screens).
 - Define signal delivery channels (in-app board only, or also Telegram/Discord push using the same pixel-art card style).

@@ -13,6 +13,13 @@ from supabase import create_client, Client
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("seed_supabase")
 
+try:
+    import dotenv
+    dotenv.load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+    dotenv.load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
+except Exception:
+    pass
+
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
@@ -65,16 +72,20 @@ def seed():
             logger.info(f"  Uploading {len(trades)} trades for {strat['id']}...")
             trades_to_insert = []
             for tr in trades:
+                raw_exit = str(tr.get("exit_time") or "")
+                is_running = "RUNNING" in raw_exit or "ACTIVE" in raw_exit or tr.get("status") == "RUNNING"
+                exit_time_val = None if (is_running or not tr.get("exit_time")) else tr.get("exit_time")
+
                 trades_to_insert.append({
                     "strategy_id": strat["id"],
                     "trade_no": int(tr.get("trade_no", 1)),
                     "side": tr.get("side", strat["type"]),
                     "entry_time": tr.get("entry_time"),
-                    "exit_time": tr.get("exit_time") if not str(tr.get("exit_time")).startswith("ACTIVE") else None,
+                    "exit_time": exit_time_val,
                     "entry_price": float(tr.get("entry_price", 0)),
-                    "exit_price": float(tr.get("exit_price")) if tr.get("exit_price") else None,
+                    "exit_price": float(tr.get("exit_price")) if (tr.get("exit_price") and not is_running) else None,
                     "net_return_pct": float(tr.get("net_return_pct", 0)),
-                    "status": tr.get("status", "CLOSED"),
+                    "status": "RUNNING" if is_running else tr.get("status", "CLOSED"),
                     "exit_reason": tr.get("exit_reason", "")
                 })
 

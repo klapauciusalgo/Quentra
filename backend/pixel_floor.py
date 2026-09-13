@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pixel Trading Floor State Engine for QuietAlgo.
+Pixel Trading Floor State Engine for Quentra.
 Implements the 16-bit isometric trading floor concept from Design.md:
 - 4 Core Agents (Researcher, Quant, Trader, Informan) + Risk Officer
 - Central floor screen ticker
@@ -164,7 +164,7 @@ class PixelFloorEngine:
         updated_ticket["session"] = session
 
         return {
-            "room_name": "Quietfloor Pixel Trading Floor",
+            "room_name": "Quentra Trading Floor",
             "session": session,
             "market_regime": {
                 "status": regime_status,

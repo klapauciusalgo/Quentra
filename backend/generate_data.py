@@ -2,7 +2,7 @@
 """
 Generate verified strategy catalogs, exact performance metrics,
 trade logs, chart execution markers, and multi-timeframe candlestick data
-from /home/ubuntu/BTC-analysis for the QuietAlgo platform.
+from /home/ubuntu/BTC-analysis for the Quentra platform.
 All copy and metrics formatted in professional financial English.
 """
 

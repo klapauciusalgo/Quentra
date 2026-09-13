@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Binance WebSocket Client for QuietAlgo.
+Binance WebSocket Client for Quentra.
 Connects to Binance public WebSocket streams (btcusdt@ticker and btcusdt@kline_30m).
 Maintains live price, 24h statistics, latest candle updates, and broadcasts to connected frontend clients.
 """

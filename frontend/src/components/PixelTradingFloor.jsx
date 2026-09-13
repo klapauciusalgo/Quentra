@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { playRetroSound } from '../utils/formatters';
+import { playRetroSound, formatPrice, formatPercent } from '../utils/formatters';
 import SignalTicket from './SignalTicket';
-import { Terminal, Shield, Activity, Cpu, Compass, MessageSquare, Info } from 'lucide-react';
+import { Shield, Activity, Cpu, Compass, Radio, ChevronRight, Zap, Info, Layers } from 'lucide-react';
 
 export default function PixelTradingFloor({ floor, onSelectAgent, onSelectStrategy, currentBtcPrice }) {
   const [hoveredAgent, setHoveredAgent] = useState(null);
@@ -13,327 +13,296 @@ export default function PixelTradingFloor({ floor, onSelectAgent, onSelectStrate
     if (onSelectAgent) onSelectAgent(agentId);
   };
 
+  const agents = [
+    {
+      id: 'trader',
+      name: 'Trader Desk',
+      role: 'Signal Dispatcher & Execution',
+      icon: <Activity className="w-5 h-5 text-apple-cyan" />,
+      accentColor: 'border-apple-cyan/30 text-apple-cyan',
+      tag: 'Lead Execution',
+      headline: 'Flagship Signal Dispatch Primed',
+      metricLabel: 'Target Model',
+      metricValue: 'Pippo 1H Enhanced',
+      secondaryLabel: 'Take Profit',
+      secondaryValue: '+75.0% Runner',
+      bubble: 'Pippo 1H Enhanced setup primed. Limit orders standing by for breakout close.'
+    },
+    {
+      id: 'quant',
+      name: 'Quant Engine',
+      role: 'SMC & Algorithmic Indicators',
+      icon: <Cpu className="w-5 h-5 text-apple-green" />,
+      accentColor: 'border-apple-green/30 text-apple-green',
+      tag: 'Algorithmic Model',
+      headline: '16-Bar Internal Breakout Bullish',
+      metricLabel: 'RSI14 Momentum',
+      metricValue: '56.4 (Bull Territory)',
+      secondaryLabel: '48H Support Floor',
+      secondaryValue: '$74,800',
+      bubble: '1H internal structure broke bullish. 48-hour structural floor intact.'
+    },
+    {
+      id: 'researcher',
+      name: 'Researcher Desk',
+      role: 'Macro & On-Chain Intelligence',
+      icon: <Compass className="w-5 h-5 text-apple-blue" />,
+      accentColor: 'border-apple-blue/30 text-apple-blue',
+      tag: 'On-Chain Scout',
+      headline: 'Long-Term Accumulation Steady',
+      metricLabel: 'Circulating Supply',
+      metricValue: '74% Long-Term Holders',
+      secondaryLabel: 'Derivatives Funding',
+      secondaryValue: 'Neutral (-0.002%)',
+      bubble: 'Global liquidity index +2.4%. On-chain UTXO accumulation steady.'
+    },
+    {
+      id: 'informan',
+      name: 'Informan Station',
+      role: 'Macro Stance & Cycle Regime',
+      icon: <Radio className="w-5 h-5 text-apple-orange" />,
+      accentColor: 'border-apple-orange/30 text-apple-orange',
+      tag: 'Regime Monitor',
+      headline: `Weekly MA55 Anchor $${Number(floor?.market_regime?.weekly_ma55 || 82654).toLocaleString()}`,
+      metricLabel: 'Macro Discount',
+      metricValue: `${floor?.market_regime?.distance_pct || -6.5}% to MA55`,
+      secondaryLabel: 'Market Session',
+      secondaryValue: floor?.session?.code || 'LDN / NY',
+      bubble: `Weekly MA55 at $${Number(floor?.market_regime?.weekly_ma55 || 82654).toLocaleString()}. Macro accumulation floor validated.`
+    },
+    {
+      id: 'risk_officer',
+      name: 'Risk Officer',
+      role: 'Capital Preservation & Volatility Guard',
+      icon: <Shield className="w-5 h-5 text-apple-purple" />,
+      accentColor: 'border-apple-purple/30 text-apple-purple',
+      tag: 'Liquidation Guard',
+      headline: 'Liquidation Buffer: -96% Safe Distance',
+      metricLabel: 'Max Leverage',
+      metricValue: '1.0x Spot Safe',
+      secondaryLabel: 'Cash Buffer',
+      secondaryValue: '80% Free Capital',
+      bubble: 'Liquidation buffer verified -96% from market. Drawdown stop locked.'
+    }
+  ];
+
   return (
-    <div className="relative bg-floor-dark border-2 border-floor-border p-4 md:p-6 overflow-hidden">
+    <div className="apple-glass rounded-3xl border border-white/[0.08] p-5 sm:p-7 space-y-6 shadow-[0_12px_40px_rgba(0,0,0,0.45)]">
       
-      {/* Top Floor Header & Status Strip */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 border-b border-floor-border pb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 bg-signal-cyan animate-pulse"></div>
-          <span className="font-pixel text-xs text-signal-cyan tracking-wider">
-            PIXEL TRADING FLOOR
-          </span>
-          <span className="text-retro-dim font-mono text-xs hidden sm:inline">
-            // 16-BIT AUTONOMOUS SIGNAL DESK
-          </span>
+      {/* Top Command Center Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-5 border-b border-white/[0.08]">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-apple-cyan/10 border border-apple-cyan/20 flex items-center justify-center">
+            <Layers className="w-5 h-5 text-apple-cyan" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-semibold text-white tracking-tight">
+                Autonomous Agent Desk
+              </h2>
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-apple-green/10 border border-apple-green/20 text-apple-green flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-apple-green animate-pulse" />
+                5 Models Active
+              </span>
+            </div>
+            <p className="text-xs text-apple-muted">
+              Multi-agent quantitative execution and real-time market regime oversight
+            </p>
+          </div>
         </div>
 
-        {/* Market Regime Stance */}
-        <div className="flex items-center gap-3 text-xs font-mono">
-          <div className="bg-floor-wall border border-floor-border px-2.5 py-1 flex items-center gap-2">
-            <span className="text-retro-muted">MACRO REGIME:</span>
-            <span className={`font-bold ${floor?.market_regime?.distance_pct >= 0 ? 'text-signal-bull' : 'text-signal-warn'}`}>
-              WEEKLY MA55 (${Number(floor?.market_regime?.weekly_ma55 || 82654).toLocaleString()})
+        {/* Global Macro Telemetry Pills */}
+        <div className="flex flex-wrap items-center gap-2.5 text-xs">
+          <div className="flex items-center gap-2 bg-black/40 border border-white/[0.08] rounded-full px-3.5 py-1.5">
+            <span className="text-apple-dim">Weekly MA55:</span>
+            <span className={`font-mono font-medium ${floor?.market_regime?.distance_pct >= 0 ? 'text-apple-green' : 'text-apple-orange'}`}>
+              ${Number(floor?.market_regime?.weekly_ma55 || 82654).toLocaleString()}
             </span>
-            <span className="text-retro-dim">
+            <span className="text-apple-muted tabular-nums">
               ({floor?.market_regime?.distance_pct >= 0 ? '+' : ''}{floor?.market_regime?.distance_pct || -6.5}%)
             </span>
           </div>
+
+          <div className="flex items-center gap-2 bg-black/40 border border-white/[0.08] rounded-full px-3.5 py-1.5 text-zinc-300">
+            <span className="text-apple-dim">Active Session:</span>
+            <span className="font-medium text-white">{floor?.session?.name || 'Asia Session (Tokyo / HK)'}</span>
+          </div>
         </div>
       </div>
 
-      {/* Isometric 2.5D Trading Floor Viewport */}
-      <div className="relative w-full min-h-[440px] md:min-h-[500px] bg-[#161822] border-2 border-floor-wall overflow-hidden flex items-center justify-center p-4">
+      {/* Main Grid: 5 Agent Bento Cards + Central Signal Ticket */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         
-        {/* Ambient Isometric Grid Floor Background */}
-        <div 
-          className="absolute inset-0 opacity-25 pointer-events-none"
-          style={{
-            backgroundImage: `
-              linear-gradient(30deg, #2D344B 12%, transparent 12.5%, transparent 87%, #2D344B 87.5%, #2D344B),
-              linear-gradient(150deg, #2D344B 12%, transparent 12.5%, transparent 87%, #2D344B 87.5%, #2D344B),
-              linear-gradient(30deg, #2D344B 12%, transparent 12.5%, transparent 87%, #2D344B 87.5%, #2D344B),
-              linear-gradient(150deg, #2D344B 12%, transparent 12.5%, transparent 87%, #2D344B 87.5%, #2D344B),
-              linear-gradient(60deg, #2D344B77 25%, transparent 25.5%, transparent 75%, #2D344B77 75%, #2D344B77),
-              linear-gradient(60deg, #2D344B77 25%, transparent 25.5%, transparent 75%, #2D344B77 75%, #2D344B77)
-            `,
-            backgroundSize: '40px 70px',
-            backgroundPosition: '0 0, 0 0, 20px 35px, 20px 35px, 0 0, 20px 35px'
-          }}
-        />
+        {/* Left Column: Macro & Quant Agents (2 cards) */}
+        <div className="space-y-4">
+          {agents.slice(2, 4).map((agent) => {
+            const isActive = activeAgentId === agent.id;
+            return (
+              <div
+                key={agent.id}
+                onClick={() => handleAgentClick(agent.id)}
+                className={`p-4 rounded-2xl border transition-all cursor-pointer group ${
+                  isActive
+                    ? 'bg-white/[0.06] border-white/30 shadow-[0_4px_20px_rgba(0,0,0,0.5)] scale-[1.01]'
+                    : 'bg-black/30 border-white/[0.06] hover:bg-white/[0.04] hover:border-white/15'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center">
+                      {agent.icon}
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-white group-hover:text-apple-cyan transition-colors">
+                        {agent.name}
+                      </div>
+                      <div className="text-[10px] text-apple-dim">
+                        {agent.role}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-medium px-2 py-0.5 rounded-full border border-white/10 bg-white/[0.03] text-apple-muted">
+                    {agent.tag}
+                  </span>
+                </div>
 
-        {/* Back Wall Windows & Skyline */}
-        <div className="absolute top-0 left-0 right-0 h-20 bg-floor-wall border-b-2 border-floor-border flex justify-around items-end pb-1 px-8 opacity-90">
-          <div className="w-24 h-12 bg-[#0d1017] border border-floor-borderLight flex flex-col justify-end p-1">
-            <div className="h-4 bg-signal-cyan/20 w-3 self-start mb-1"></div>
-            <div className="text-[8px] font-pixel text-signal-cyan/60">TOKYO</div>
-          </div>
-          <div className="w-32 h-14 bg-[#0d1017] border border-floor-borderLight flex flex-col justify-end p-1">
-            <div className="flex gap-1 mb-1">
-              <div className="h-6 bg-signal-bull/30 w-3"></div>
-              <div className="h-8 bg-signal-warn/20 w-4"></div>
-            </div>
-            <div className="text-[8px] font-pixel text-signal-warn/60">LONDON</div>
-          </div>
-          <div className="w-28 h-12 bg-[#0d1017] border border-floor-borderLight flex flex-col justify-end p-1">
-            <div className="h-5 bg-signal-purple/30 w-3 mb-1"></div>
-            <div className="text-[8px] font-pixel text-signal-purple/60">NEW YORK</div>
-          </div>
+                <div className="bg-black/30 rounded-xl p-2.5 border border-white/[0.04] mb-3 text-[11px] text-zinc-300 italic leading-relaxed">
+                  "{agent.bubble}"
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[10px] border-t border-white/[0.04] pt-2">
+                  <div>
+                    <span className="text-apple-dim block">{agent.metricLabel}</span>
+                    <span className="font-mono font-medium text-zinc-200">{agent.metricValue}</span>
+                  </div>
+                  <div>
+                    <span className="text-apple-dim block">{agent.secondaryLabel}</span>
+                    <span className="font-mono font-medium text-zinc-200">{agent.secondaryValue}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        {/* Floor Scene Container */}
-        <div className="relative z-10 w-full max-w-[1000px] h-[450px]">
-
-          {/* =========================================================
-              1. INFORMAN DESK (Back Wall Center, Elevated Outlook)
-             ========================================================= */}
-          <div 
-            onClick={() => handleAgentClick('informan')}
-            onMouseEnter={() => setHoveredAgent('informan')}
-            onMouseLeave={() => setHoveredAgent(null)}
-            className={`absolute top-6 left-1/2 -translate-x-1/2 cursor-pointer transition-all duration-300 group ${
-              activeAgentId === 'informan' ? 'scale-105 z-30' : 'hover:scale-102 z-20'
-            }`}
-            style={{ width: '220px' }}
-          >
-            {/* Speech Bubble */}
-            <div className="relative mb-1 text-center">
-              <div className="inline-block bg-floor-darker border border-signal-warn text-signal-warn font-mono text-[10px] px-2 py-0.5 shadow-pixel-amber">
-                Weekly MA55 Stance: Bearish Discount
-              </div>
-              <div className="w-1.5 h-1.5 bg-signal-warn rotate-45 mx-auto -mt-0.5"></div>
-            </div>
-
-            {/* Pixel Desk Unit */}
-            <div className={`p-2 bg-floor-desk border-2 ${
-              activeAgentId === 'informan' ? 'border-signal-cyan shadow-pixel-cyan' : 'border-floor-deskBorder'
-            }`}>
-              {/* Agent Sprite & Board */}
-              <div className="flex items-center justify-between gap-2">
-                {/* Informan Pixel Character */}
-                <div className="w-8 h-8 bg-[#D4A373] border-2 border-[#8C5E32] flex flex-col items-center justify-center pixelated relative">
-                  <div className="w-4 h-2 bg-[#2D344B]"></div>
-                  <div className="w-6 h-3 bg-[#E76F51] mt-0.5"></div>
-                </div>
-                {/* Outlook Wall Board */}
-                <div className="flex-1 bg-floor-darker border border-floor-border p-1 text-[9px] font-mono text-signal-warn text-right">
-                  <div>REGIME: MACRO</div>
-                  <div className="text-[8px] text-retro-muted">W-MA55 $82.6k</div>
-                </div>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[9px] font-pixel text-retro-text pt-1 border-t border-floor-deskBorder">
-                <span className="text-signal-warn">INFORMAN</span>
-                <span className="text-[8px] text-retro-muted">MACRO</span>
-              </div>
-            </div>
-          </div>
-
-          {/* =========================================================
-              2. RESEARCHER DESK (Mid-Room Left)
-             ========================================================= */}
-          <div 
-            onClick={() => handleAgentClick('researcher')}
-            onMouseEnter={() => setHoveredAgent('researcher')}
-            onMouseLeave={() => setHoveredAgent(null)}
-            className={`absolute top-28 left-4 md:left-12 cursor-pointer transition-all duration-300 group ${
-              activeAgentId === 'researcher' ? 'scale-105 z-30' : 'hover:scale-102 z-20'
-            }`}
-            style={{ width: '200px' }}
-          >
-            {/* Speech Bubble */}
-            <div className="relative mb-1">
-              <div className="inline-block bg-floor-darker border border-signal-cyan text-signal-cyan font-mono text-[10px] px-2 py-0.5 shadow-pixel-cyan">
-                On-Chain: Long-term Accumulation
-              </div>
-              <div className="w-1.5 h-1.5 bg-signal-cyan rotate-45 ml-6 -mt-0.5"></div>
-            </div>
-
-            {/* Desk Visual */}
-            <div className={`p-2 bg-floor-desk border-2 ${
-              activeAgentId === 'researcher' ? 'border-signal-cyan shadow-pixel-cyan' : 'border-floor-deskBorder'
-            }`}>
-              <div className="flex items-center gap-2">
-                {/* Researcher Sprite */}
-                <div className="w-8 h-8 bg-[#E9C46A] border-2 border-[#B08947] flex flex-col items-center justify-center pixelated relative">
-                  <div className="w-4 h-2 bg-[#264653]"></div>
-                  <div className="w-5 h-3 bg-[#2A9D8F] mt-0.5"></div>
-                </div>
-                {/* Papers & Magnifying Glass */}
-                <div className="flex-1 bg-floor-darker border border-floor-border p-1 text-[9px] font-mono text-signal-cyan">
-                  <div>DATA: UTXO +2.4%</div>
-                  <div className="text-[8px] text-retro-muted">DERIV: NEUTRAL</div>
-                </div>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[9px] font-pixel text-retro-text pt-1 border-t border-floor-deskBorder">
-                <span className="text-signal-cyan">RESEARCHER</span>
-                <span className="text-[8px] text-retro-muted">ON-CHAIN</span>
-              </div>
-            </div>
-          </div>
-
-          {/* =========================================================
-              3. QUANT DESK (Mid-Room Right)
-             ========================================================= */}
-          <div 
-            onClick={() => handleAgentClick('quant')}
-            onMouseEnter={() => setHoveredAgent('quant')}
-            onMouseLeave={() => setHoveredAgent(null)}
-            className={`absolute top-28 right-4 md:right-12 cursor-pointer transition-all duration-300 group ${
-              activeAgentId === 'quant' ? 'scale-105 z-30' : 'hover:scale-102 z-20'
-            }`}
-            style={{ width: '210px' }}
-          >
-            {/* Speech Bubble */}
-            <div className="relative mb-1 text-right">
-              <div className="inline-block bg-floor-darker border border-signal-bull text-signal-bull font-mono text-[10px] px-2 py-0.5 shadow-pixel-green">
-                SMC 16-bar Breakout Bullish
-              </div>
-              <div className="w-1.5 h-1.5 bg-signal-bull rotate-45 ml-auto mr-6 -mt-0.5"></div>
-            </div>
-
-            {/* Desk Visual */}
-            <div className={`p-2 bg-floor-desk border-2 ${
-              activeAgentId === 'quant' ? 'border-signal-cyan shadow-pixel-cyan' : 'border-floor-deskBorder'
-            }`}>
-              <div className="flex items-center gap-2">
-                {/* Multi-monitors */}
-                <div className="flex-1 bg-floor-darker border border-floor-border p-1 text-[9px] font-mono text-signal-bull">
-                  <div>RSI14: 56.4 (BULL)</div>
-                  <div className="text-[8px] text-retro-muted">48H FLOOR: $74.8K</div>
-                </div>
-                {/* Quant Sprite */}
-                <div className="w-8 h-8 bg-[#F4A261] border-2 border-[#E76F51] flex flex-col items-center justify-center pixelated relative">
-                  <div className="w-4 h-2 bg-[#2D344B]"></div>
-                  <div className="w-5 h-3 bg-[#39FF88] mt-0.5"></div>
-                </div>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[9px] font-pixel text-retro-text pt-1 border-t border-floor-deskBorder">
-                <span className="text-signal-bull">QUANT</span>
-                <span className="text-[8px] text-retro-muted">SMC / RSI</span>
-              </div>
-            </div>
-          </div>
-
-          {/* =========================================================
-              4. RISK OFFICER DESK (Far Left Guard)
-             ========================================================= */}
-          <div 
-            onClick={() => handleAgentClick('risk_officer')}
-            onMouseEnter={() => setHoveredAgent('risk_officer')}
-            onMouseLeave={() => setHoveredAgent(null)}
-            className={`absolute bottom-6 left-4 md:left-8 cursor-pointer transition-all duration-300 group hidden sm:block ${
-              activeAgentId === 'risk_officer' ? 'scale-105 z-30' : 'hover:scale-102 z-20'
-            }`}
-            style={{ width: '190px' }}
-          >
-            {/* Speech Bubble */}
-            <div className="relative mb-1">
-              <div className="inline-block bg-floor-darker border border-signal-purple text-signal-purple font-mono text-[10px] px-2 py-0.5">
-                Liquidation Buffer: -96% Safe
-              </div>
-              <div className="w-1.5 h-1.5 bg-signal-purple rotate-45 ml-6 -mt-0.5"></div>
-            </div>
-
-            {/* Desk Visual */}
-            <div className={`p-2 bg-floor-desk border-2 ${
-              activeAgentId === 'risk_officer' ? 'border-signal-cyan shadow-pixel-cyan' : 'border-floor-deskBorder'
-            }`}>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-[#A855F7]/30 border-2 border-signal-purple flex flex-col items-center justify-center pixelated">
-                  <Shield className="w-4 h-4 text-signal-purple" />
-                </div>
-                <div className="flex-1 bg-floor-darker border border-floor-border p-1 text-[9px] font-mono text-signal-purple">
-                  <div>LEVERAGE: 1.0X</div>
-                  <div className="text-[8px] text-retro-muted">FREE CASH: 80%</div>
-                </div>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[9px] font-pixel text-retro-text pt-1 border-t border-floor-deskBorder">
-                <span className="text-signal-purple">RISK OFFICER</span>
-                <span className="text-[8px] text-retro-muted">GUARD</span>
-              </div>
-            </div>
-          </div>
-
-          {/* =========================================================
-              5. TRADER DESK (Front-and-Center Standing Station)
-             ========================================================= */}
-          <div 
+        {/* Center Column: Flagship Execution Desk & Active Signal Ticket */}
+        <div className="space-y-4 flex flex-col justify-between">
+          {/* Trader Desk Lead Card */}
+          <div
             onClick={() => handleAgentClick('trader')}
-            onMouseEnter={() => setHoveredAgent('trader')}
-            onMouseLeave={() => setHoveredAgent(null)}
-            className={`absolute bottom-4 left-1/2 -translate-x-1/2 cursor-pointer transition-all duration-300 group ${
-              activeAgentId === 'trader' ? 'scale-105 z-30' : 'hover:scale-102 z-20'
+            className={`p-4 rounded-2xl border transition-all cursor-pointer group ${
+              activeAgentId === 'trader'
+                ? 'bg-apple-cyan/[0.08] border-apple-cyan/40 shadow-[0_4px_24px_rgba(100,210,255,0.15)] scale-[1.01]'
+                : 'bg-black/30 border-white/[0.06] hover:bg-white/[0.04] hover:border-white/15'
             }`}
-            style={{ width: '260px' }}
           >
-            {/* Speech Bubble */}
-            <div className="relative mb-1 text-center">
-              <div className="inline-block bg-floor-darker border-2 border-signal-cyan text-signal-cyan font-mono text-[11px] px-3 py-1 shadow-pixel-cyan font-bold">
-                FLAGSHIP SIGNAL DISPATCH ACTIVE
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-apple-cyan/15 border border-apple-cyan/30 flex items-center justify-center">
+                  <Activity className="w-5 h-5 text-apple-cyan" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-white flex items-center gap-1.5">
+                    Trader Desk
+                    <span className="w-1.5 h-1.5 rounded-full bg-apple-cyan animate-pulse" />
+                  </div>
+                  <div className="text-[10px] text-apple-muted">
+                    Execution Desk & Signal Dispatcher
+                  </div>
+                </div>
               </div>
-              <div className="w-2 h-2 bg-signal-cyan rotate-45 mx-auto -mt-1"></div>
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-apple-cyan/30 bg-apple-cyan/10 text-apple-cyan">
+                Lead Model
+              </span>
             </div>
 
-            {/* Standing Workstation */}
-            <div className={`p-2.5 bg-floor-desk border-2 ${
-              activeAgentId === 'trader' ? 'border-signal-cyan shadow-pixel-cyan' : 'border-floor-deskBorder'
-            }`}>
-              <div className="flex items-center justify-between gap-3">
-                {/* Standing Trader Sprite */}
-                <div className="w-10 h-10 bg-[#E76F51] border-2 border-[#F4A261] flex flex-col items-center justify-center pixelated relative shadow-pixel-cyan">
-                  <div className="w-5 h-2 bg-[#2D344B]"></div>
-                  <div className="w-7 h-4 bg-[#4FE0FF] mt-0.5"></div>
-                  {/* Headset indicator */}
-                  <div className="absolute -top-1 w-6 h-1 bg-signal-cyan"></div>
-                </div>
+            <div className="bg-black/40 rounded-xl p-3 border border-white/[0.06] mb-3 text-xs text-zinc-200 font-medium leading-relaxed">
+              "Pippo 1H Enhanced setup primed. Limit orders standing by for breakout close."
+            </div>
 
-                {/* Ticker Tape */}
-                <div className="flex-1 bg-floor-darker border border-signal-cyan/60 p-1.5 font-mono text-[10px]">
-                  <div className="text-signal-bull font-bold flex items-center justify-between">
-                    <span>CALL: LONG BTC</span>
-                    <span className="text-[9px] text-signal-cyan">TP +75%</span>
-                  </div>
-                  <div className="text-[9px] text-retro-muted truncate">
-                    Pippo 1H Enhanced Engine
-                  </div>
-                </div>
+            <div className="grid grid-cols-2 gap-2 text-xs border-t border-white/[0.06] pt-2.5">
+              <div>
+                <span className="text-apple-dim text-[10px] block">Execution Target</span>
+                <span className="font-semibold text-white">Pippo 1H Enhanced</span>
               </div>
-
-              <div className="mt-2 flex items-center justify-between text-[10px] font-pixel text-retro-text pt-1.5 border-t border-floor-deskBorder">
-                <span className="text-signal-cyan flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-signal-cyan animate-pulse"></span>
-                  HEAD TRADER
-                </span>
-                <span className="text-[8px] text-signal-bull bg-signal-bull/10 border border-signal-bull/30 px-1">
-                  READY
-                </span>
+              <div className="text-right">
+                <span className="text-apple-dim text-[10px] block">Profit Target</span>
+                <span className="font-semibold text-apple-green">+75.0% Runner</span>
               </div>
             </div>
           </div>
 
-          {/* Central Floor Signal Ticket Display (Arcade Terminal Ticket) */}
-          <div className="hidden lg:block absolute top-28 left-1/2 -translate-x-1/2 z-20 w-[240px]">
-            <SignalTicket 
-              ticket={signalTicket}
-              compact={true}
-              onSelectStrategy={onSelectStrategy}
-            />
-          </div>
+          {/* Integrated Live Signal Ticket */}
+          <SignalTicket
+            ticket={signalTicket}
+            onSelectStrategy={onSelectStrategy}
+          />
+        </div>
 
+        {/* Right Column: Quant Engine & Risk Officer (2 cards) */}
+        <div className="space-y-4">
+          {[agents[1], agents[4]].map((agent) => {
+            const isActive = activeAgentId === agent.id;
+            return (
+              <div
+                key={agent.id}
+                onClick={() => handleAgentClick(agent.id)}
+                className={`p-4 rounded-2xl border transition-all cursor-pointer group ${
+                  isActive
+                    ? 'bg-white/[0.06] border-white/30 shadow-[0_4px_20px_rgba(0,0,0,0.5)] scale-[1.01]'
+                    : 'bg-black/30 border-white/[0.06] hover:bg-white/[0.04] hover:border-white/15'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center">
+                      {agent.icon}
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-white group-hover:text-apple-cyan transition-colors">
+                        {agent.name}
+                      </div>
+                      <div className="text-[10px] text-apple-dim">
+                        {agent.role}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-medium px-2 py-0.5 rounded-full border border-white/10 bg-white/[0.03] text-apple-muted">
+                    {agent.tag}
+                  </span>
+                </div>
+
+                <div className="bg-black/30 rounded-xl p-2.5 border border-white/[0.04] mb-3 text-[11px] text-zinc-300 italic leading-relaxed">
+                  "{agent.bubble}"
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[10px] border-t border-white/[0.04] pt-2">
+                  <div>
+                    <span className="text-apple-dim block">{agent.metricLabel}</span>
+                    <span className="font-mono font-medium text-zinc-200">{agent.metricValue}</span>
+                  </div>
+                  <div>
+                    <span className="text-apple-dim block">{agent.secondaryLabel}</span>
+                    <span className="font-mono font-medium text-zinc-200">{agent.secondaryValue}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
       </div>
 
-      {/* Floor Interaction Hint Strip */}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-retro-muted bg-floor-darker border border-floor-border px-3 py-2">
+      {/* Bottom Hint Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-apple-muted bg-black/30 rounded-xl p-3 border border-white/[0.04]">
         <div className="flex items-center gap-2">
-          <Info className="w-3.5 h-3.5 text-signal-cyan" />
-          <span>Klik salah satu meja agent (Researcher, Quant, Trader, Informan, Risk) untuk membuka catatan analisis mendalam.</span>
+          <Info className="w-4 h-4 text-apple-cyan shrink-0" />
+          <span>Select any agent desk to inspect live quantitative reasoning, on-chain metrics, and risk limits.</span>
         </div>
         <div className="flex items-center gap-2 text-[11px]">
-          <span className="text-retro-dim">Active Desk:</span>
-          <span className="font-bold text-signal-cyan uppercase font-pixel text-[10px]">
-            {activeAgentId}
+          <span className="text-apple-dim">Selected Desk:</span>
+          <span className="font-semibold text-apple-cyan capitalize">
+            {activeAgentId.replace('_', ' ')}
           </span>
         </div>
       </div>

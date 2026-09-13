@@ -73,6 +73,14 @@ export default function StrategyDetail({
   const trades = strategy?.trades || [];
   const yearly = strategy?.yearly_stats || [];
 
+  const totalReturn = m.total_return_pct ?? strategy?.total_return_pct ?? 0;
+  const winRate = m.win_rate_pct ?? strategy?.win_rate_pct ?? 0;
+  const profitFactor = m.profit_factor ?? strategy?.profit_factor ?? 1.0;
+  const maxDrawdown = m.max_drawdown_pct ?? strategy?.max_drawdown_pct ?? 0;
+  const totalTrades = m.total_trades ?? strategy?.trades_count ?? trades.length;
+  const winTrades = m.win_trades ?? Math.round((winRate / 100) * totalTrades);
+  const lossTrades = m.loss_trades ?? (totalTrades - winTrades);
+
   // Filtered trades
   const filteredTrades = trades.filter((t) => {
     if (tradeFilter === 'WINS' && (t.net_return_pct || 0) <= 0) return false;
@@ -193,16 +201,16 @@ export default function StrategyDetail({
                     <div className="apple-glass-card rounded-2xl p-4">
                       <div className="text-[11px] text-apple-dim uppercase tracking-wider">Total Net Return</div>
                       <div className="text-xl md:text-2xl font-bold text-apple-green font-mono tabular-nums mt-1">
-                        +{Number(m.total_return_pct || 0).toLocaleString()}%
+                        +{Number(totalReturn).toLocaleString()}%
                       </div>
                     </div>
 
                     <div className="apple-glass-card rounded-2xl p-4">
                       <div className="text-[11px] text-apple-dim uppercase tracking-wider">Win Rate</div>
                       <div className="text-xl md:text-2xl font-bold text-white font-mono tabular-nums mt-1">
-                        {m.win_rate_pct || 0}%
+                        {winRate}%
                         <span className="text-xs text-apple-muted font-normal ml-1.5">
-                          ({m.win_trades || 0}W / {m.loss_trades || 0}L)
+                          ({winTrades}W / {lossTrades}L)
                         </span>
                       </div>
                     </div>
@@ -210,14 +218,14 @@ export default function StrategyDetail({
                     <div className="apple-glass-card rounded-2xl p-4">
                       <div className="text-[11px] text-apple-dim uppercase tracking-wider">Profit Factor</div>
                       <div className="text-xl md:text-2xl font-bold text-apple-cyan font-mono tabular-nums mt-1">
-                        {m.profit_factor || 0}x
+                        {profitFactor}x
                       </div>
                     </div>
 
                     <div className="apple-glass-card rounded-2xl p-4">
                       <div className="text-[11px] text-apple-dim uppercase tracking-wider">Max Drawdown</div>
                       <div className="text-xl md:text-2xl font-bold text-apple-red font-mono tabular-nums mt-1">
-                        {m.max_drawdown_pct || 0}%
+                        {maxDrawdown}%
                       </div>
                     </div>
                   </div>

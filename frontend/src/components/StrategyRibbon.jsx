@@ -35,8 +35,8 @@ export function StrategySelectorBar({
   return (
     <div className="apple-glass rounded-3xl p-4 sm:p-5 space-y-3.5">
       {/* Top Telemetry Strip: Market Macro Regime & Session */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-3">
-        <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-white/[0.08] pb-2.5">
+        <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-apple-blue shadow-[0_0_8px_rgba(10,132,255,0.6)]" />
           <span className="font-semibold text-xs tracking-wider uppercase text-zinc-200">
             Algo Strategy Runtime
@@ -46,17 +46,17 @@ export function StrategySelectorBar({
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 text-xs">
+        <div className="flex items-center gap-2 text-xs overflow-x-auto no-scrollbar max-w-full">
           {/* Market Session Pill */}
-          <div className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.08] rounded-full px-3 py-1 text-apple-muted">
+          <div className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.08] rounded-full px-2.5 py-1 text-apple-muted whitespace-nowrap shrink-0">
             <Clock className="w-3.5 h-3.5 text-apple-orange" />
-            <span>Session: {session.name || 'Asia / Global'}</span>
+            <span className="truncate max-w-[170px] sm:max-w-none">Session: {session.name || 'Asia / Global'}</span>
           </div>
 
           {/* Macro Regime Pill */}
-          <div className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.08] rounded-full px-3 py-1">
+          <div className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.08] rounded-full px-2.5 py-1 whitespace-nowrap shrink-0">
             <Compass className="w-3.5 h-3.5 text-apple-purple" />
-            <span className="text-apple-dim">Weekly MA55:</span>
+            <span className="text-apple-dim hidden sm:inline">Weekly MA55:</span>
             <span className="text-white font-medium tabular-nums">
               ${Number(regime.weekly_ma55 || 82654).toLocaleString()}
             </span>
@@ -68,14 +68,14 @@ export function StrategySelectorBar({
       </div>
 
       {/* Strategy Switcher Pills Row + Active Quick Metrics */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-2 flex-1">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="space-y-1.5 flex-1 min-w-0">
           {/* Long Strategies */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-semibold text-apple-muted uppercase tracking-wider w-12 shrink-0">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+            <span className="text-[10px] font-semibold text-apple-muted uppercase tracking-wider w-10 shrink-0">
               Long
             </span>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
               {longStrategies.map((s) => {
                 const isSelected = s.id === selectedStrategyId;
                 return (
@@ -85,13 +85,13 @@ export function StrategySelectorBar({
                       playRetroSound('select');
                       onSelectStrategy(s.id);
                     }}
-                    className={`px-2.5 py-1 text-xs rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-2.5 py-1 text-xs rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
                       isSelected
                         ? 'bg-apple-green/15 text-white border-apple-green/40 shadow-sm font-medium'
                         : 'bg-white/[0.03] text-apple-muted border-white/[0.06] hover:bg-white/[0.07] hover:text-white'
                     }`}
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-apple-green shadow-[0_0_6px_rgba(48,209,88,0.8)]' : 'bg-apple-dim'}`} />
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? 'bg-apple-green shadow-[0_0_6px_rgba(48,209,88,0.8)]' : 'bg-apple-dim'}`} />
                     <span>{s.short_name || s.name}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${
                       isSelected ? 'bg-apple-green/20 text-apple-green font-medium' : 'bg-white/[0.05] text-apple-dim'
@@ -105,11 +105,11 @@ export function StrategySelectorBar({
           </div>
 
           {/* Short Strategies */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-semibold text-apple-muted uppercase tracking-wider w-12 shrink-0">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+            <span className="text-[10px] font-semibold text-apple-muted uppercase tracking-wider w-10 shrink-0">
               Short
             </span>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
               {shortStrategies.map((s) => {
                 const isSelected = s.id === selectedStrategyId;
                 return (
@@ -119,13 +119,13 @@ export function StrategySelectorBar({
                       playRetroSound('select');
                       onSelectStrategy(s.id);
                     }}
-                    className={`px-2.5 py-1 text-xs rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-2.5 py-1 text-xs rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
                       isSelected
                         ? 'bg-apple-red/15 text-white border-apple-red/40 shadow-sm font-medium'
                         : 'bg-white/[0.03] text-apple-muted border-white/[0.06] hover:bg-white/[0.07] hover:text-white'
                     }`}
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-apple-red shadow-[0_0_6px_rgba(255,69,58,0.8)]' : 'bg-apple-dim'}`} />
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? 'bg-apple-red shadow-[0_0_6px_rgba(255,69,58,0.8)]' : 'bg-apple-dim'}`} />
                     <span>{s.short_name || s.name}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${
                       isSelected ? 'bg-apple-red/20 text-apple-red font-medium' : 'bg-white/[0.05] text-apple-dim'

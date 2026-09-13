@@ -70,15 +70,26 @@ def load_data_into_memory():
     else:
         logger.warning("klines_cache.json not found! Run generate_data.py first.")
 
-    # 3. Load strategy catalog
-    strat_path = os.path.join(DATA_DIR, "strategies.json")
-    if os.path.exists(strat_path):
-        with open(strat_path, "r") as f:
-            STRATEGIES_CATALOG = json.load(f)
-        STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
-        logger.info(f"Loaded {len(STRATEGIES_CATALOG)} strategies: {[s['id'] for s in STRATEGIES_CATALOG]}")
-    else:
-        logger.warning("strategies.json not found! Run generate_data.py first.")
+    # 3. Load strategy catalog (check Supabase first, fallback to JSON cache)
+    try:
+        from supabase_client import fetch_strategies_from_db
+        sb_strategies = fetch_strategies_from_db()
+        if sb_strategies and len(sb_strategies) > 0:
+            STRATEGIES_CATALOG = sb_strategies
+            STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
+            logger.info(f"Loaded {len(STRATEGIES_CATALOG)} strategies from Supabase database!")
+        else:
+            raise ValueError("No strategies in Supabase or Supabase not connected")
+    except Exception as e:
+        logger.info(f"Using local strategies.json cache: {e}")
+        strat_path = os.path.join(DATA_DIR, "strategies.json")
+        if os.path.exists(strat_path):
+            with open(strat_path, "r") as f:
+                STRATEGIES_CATALOG = json.load(f)
+            STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
+            logger.info(f"Loaded {len(STRATEGIES_CATALOG)} strategies from local cache")
+        else:
+            logger.warning("strategies.json not found! Run generate_data.py first.")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -273,7 +284,31 @@ async def simulate_signal(strategy_id: Optional[str] = Query(default=None)):
         "ticket": ticket,
         "floor": floor_state
     })
+    # Record to Supabase audit log if connected
+    try:
+        from supabase_client import record_live_signal
+        record_live_signal({
+            "strategy_id": strat["id"],
+            "symbol": "BTCUSDT",
+            "type": strat["type"],
+            "price": price,
+            "confidence": ticket.get("confidence", 95),
+            "ticket": ticket
+        })
+    except Exception as e:
+        logger.debug(f"Supabase signal audit skipped: {e}")
+
     return {"message": "Signal triggered successfully", "ticket": ticket}
+
+@app.get("/api/db-status")
+async def get_db_status():
+    from supabase_client import get_supabase
+    sb = get_supabase()
+    return {
+        "database": "Supabase (PostgreSQL)" if sb else "Local JSON Fallback",
+        "supabase_connected": sb is not None,
+        "strategies_loaded": len(STRATEGIES_CATALOG)
+    }
 
 # -----------------------------------------------------------------------------
 # WebSocket Endpoint

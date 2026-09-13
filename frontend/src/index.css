@@ -2,10 +2,98 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Apple Signature Light Mode Palette (Default) */
+  --apple-dark: #000000;
+  --apple-canvas: #F5F5F7;
+  --apple-surface: #FFFFFF;
+  --apple-card: #FFFFFF;
+  --apple-elevated: #F2F2F7;
+  --apple-hover: #EAEAEE;
+  --apple-border: rgba(0, 0, 0, 0.08);
+  --apple-border-light: rgba(0, 0, 0, 0.05);
+  --apple-border-hover: rgba(0, 0, 0, 0.16);
+  --apple-green: #28A745;
+  --apple-red: #E53935;
+  --apple-blue: #0071E3;
+  --apple-cyan: #0288D1;
+  --apple-orange: #F57C00;
+  --apple-purple: #8E44AD;
+  --apple-text: #1D1D1F;
+  --apple-muted: #6E6E73;
+  --apple-dim: #8E8E93;
+
+  /* Frosted Glass & Shadow Tokens for Light Mode */
+  --apple-glass-bg: rgba(255, 255, 255, 0.85);
+  --apple-glass-card-bg: rgba(255, 255, 255, 0.95);
+  --apple-glass-card-hover: #FFFFFF;
+  --apple-glass-border: rgba(0, 0, 0, 0.08);
+  --apple-glass-border-hover: rgba(0, 0, 0, 0.15);
+  --apple-glass-inner-bevel: inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+  --apple-shadow-main: 0 4px 24px -1px rgba(0, 0, 0, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+  --apple-shadow-card: 0 2px 10px rgba(0, 0, 0, 0.04);
+
+  /* Segmented Controls */
+  --apple-segmented-bg: rgba(0, 0, 0, 0.06);
+  --apple-segmented-border: rgba(0, 0, 0, 0.04);
+  --apple-segmented-text: #6E6E73;
+  --apple-segmented-active-bg: #FFFFFF;
+  --apple-segmented-active-text: #1D1D1F;
+  --apple-segmented-active-shadow: 0 1px 4px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.06);
+
+  /* Scrollbar */
+  --apple-scrollbar-thumb: rgba(0, 0, 0, 0.16);
+  --apple-scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
+}
+
+.dark {
+  /* Apple Pro Dark Mode Palette */
+  --apple-dark: #000000;
+  --apple-canvas: #07080A;
+  --apple-surface: #0F1015;
+  --apple-card: #16171F;
+  --apple-elevated: #1E202B;
+  --apple-hover: #252836;
+  --apple-border: rgba(255, 255, 255, 0.08);
+  --apple-border-light: rgba(255, 255, 255, 0.15);
+  --apple-border-hover: rgba(255, 255, 255, 0.22);
+  --apple-green: #30D158;
+  --apple-red: #FF453A;
+  --apple-blue: #0A84FF;
+  --apple-cyan: #64D2FF;
+  --apple-orange: #FF9F0A;
+  --apple-purple: #BF5AF2;
+  --apple-text: #F5F5F7;
+  --apple-muted: #86868B;
+  --apple-dim: #636366;
+
+  /* Frosted Glass & Shadow Tokens for Dark Mode */
+  --apple-glass-bg: rgba(15, 16, 21, 0.72);
+  --apple-glass-card-bg: rgba(22, 23, 31, 0.65);
+  --apple-glass-card-hover: rgba(26, 28, 38, 0.75);
+  --apple-glass-border: rgba(255, 255, 255, 0.08);
+  --apple-glass-border-hover: rgba(255, 255, 255, 0.16);
+  --apple-glass-inner-bevel: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  --apple-shadow-main: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --apple-shadow-card: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+
+  /* Segmented Controls */
+  --apple-segmented-bg: rgba(255, 255, 255, 0.06);
+  --apple-segmented-border: rgba(255, 255, 255, 0.05);
+  --apple-segmented-text: #86868B;
+  --apple-segmented-active-bg: rgba(255, 255, 255, 0.14);
+  --apple-segmented-active-text: #FFFFFF;
+  --apple-segmented-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+
+  /* Scrollbar */
+  --apple-scrollbar-thumb: rgba(255, 255, 255, 0.14);
+  --apple-scrollbar-thumb-hover: rgba(255, 255, 255, 0.28);
+}
+
 @layer base {
   body {
-    background-color: #07080A;
-    color: #F5F5F7;
+    background-color: var(--apple-canvas);
+    color: var(--apple-text);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Geist", "Inter", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -14,41 +102,43 @@
 
   /* Universal Keyboard Accessibility Focus Ring */
   :focus-visible {
-    outline: 2px solid #0A84FF;
+    outline: 2px solid var(--apple-blue);
     outline-offset: 2px;
   }
 }
 
 /* Apple Pro Refined Glass Panels */
 .apple-glass {
-  background: rgba(15, 16, 21, 0.72);
+  background: var(--apple-glass-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  border: 1px solid var(--apple-glass-border);
+  box-shadow: var(--apple-glass-inner-bevel), var(--apple-shadow-main);
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .apple-glass-card {
-  background: rgba(22, 23, 31, 0.65);
+  background: var(--apple-glass-card-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--apple-glass-border);
+  box-shadow: var(--apple-shadow-card);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .apple-glass-card:hover {
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(26, 28, 38, 0.75);
+  border-color: var(--apple-glass-border-hover);
+  background: var(--apple-glass-card-hover);
 }
 
 /* Apple Segmented Control Container */
 .apple-segmented-container {
   display: inline-flex;
   padding: 3px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--apple-segmented-bg);
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--apple-segmented-border);
+  transition: background-color 0.2s ease;
 }
 
 .apple-segmented-item {
@@ -56,18 +146,18 @@
   font-size: 12px;
   font-weight: 500;
   border-radius: 9px;
-  color: #86868B;
+  color: var(--apple-segmented-text);
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .apple-segmented-item:hover {
-  color: #F5F5F7;
+  color: var(--apple-text);
 }
 
 .apple-segmented-item.active {
-  background: rgba(255, 255, 255, 0.14);
-  color: #FFFFFF;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  background: var(--apple-segmented-active-bg);
+  color: var(--apple-segmented-active-text);
+  box-shadow: var(--apple-segmented-active-shadow);
 }
 
 /* Apple Pro Custom Scrollbar */
@@ -81,10 +171,10 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--apple-scrollbar-thumb);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: var(--apple-scrollbar-thumb-hover);
 }

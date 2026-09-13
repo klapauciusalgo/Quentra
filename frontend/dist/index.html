@@ -1,18 +1,29 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2307080A'/><rect x='6' y='6' width='8' height='20' rx='2' fill='%2330D158'/><rect x='18' y='10' width='8' height='16' rx='2' fill='%230A84FF'/></svg>" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230071E3'/><rect x='6' y='6' width='8' height='20' rx='2' fill='%2328A745'/><rect x='18' y='10' width='8' height='16' rx='2' fill='%23FFFFFF'/></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quentra: Quantitative Crypto Algo Trading Platform</title>
+    <!-- Instant theme initialization to prevent flash: default is light mode -->
+    <script>
+      (function() {
+        var theme = localStorage.getItem('quentra_theme') || 'light';
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      })();
+    </script>
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/assets/index-nMm-a1R7.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index--7oNjEjW.css">
+    <script type="module" crossorigin src="/assets/index-CSvPmcMl.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DAgzlWwl.css">
   </head>
-  <body class="bg-apple-canvas text-apple-text antialiased selection:bg-apple-blue selection:text-white">
+  <body class="bg-apple-canvas text-apple-text antialiased selection:bg-apple-blue selection:text-white transition-colors duration-200">
     <div id="root"></div>
   </body>
 </html>

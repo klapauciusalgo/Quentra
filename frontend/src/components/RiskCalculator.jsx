@@ -51,13 +51,13 @@ export default function RiskCalculator({ currentBtcPrice = 77300 }) {
   return (
     <div className="apple-glass rounded-3xl p-5 md:p-7 space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.08] dark:border-white/[0.08] pb-4">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-apple-blue/15 border border-apple-blue/30 flex items-center justify-center">
             <ShieldCheck className="w-5 h-5 text-apple-cyan" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white tracking-tight">
+            <h3 className="text-lg font-semibold text-apple-text tracking-tight">
               Leverage & Liquidation Safety Architecture
             </h3>
             <p className="text-xs text-apple-muted mt-0.5">
@@ -84,7 +84,7 @@ export default function RiskCalculator({ currentBtcPrice = 77300 }) {
               type="number"
               value={initialCapital}
               onChange={(e) => setInitialCapital(Math.max(10, Number(e.target.value)))}
-              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl text-sm pl-9 pr-4 py-2.5 text-white font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-apple-blue/50"
+              className="w-full bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-xl text-sm pl-9 pr-4 py-2.5 text-apple-text font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-apple-blue/50"
             />
           </div>
 
@@ -96,7 +96,7 @@ export default function RiskCalculator({ currentBtcPrice = 77300 }) {
                   playRetroSound('blip');
                   setInitialCapital(amt);
                 }}
-                className="px-3 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] border border-white/[0.06] text-xs font-mono tabular-nums text-apple-muted hover:text-white transition-all cursor-pointer"
+                className="px-3 py-1 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] active:scale-[0.98] border border-black/[0.06] dark:border-white/[0.06] text-xs font-mono tabular-nums text-apple-muted hover:text-apple-text transition-all cursor-pointer"
               >
                 ${amt}
               </button>
@@ -121,8 +121,8 @@ export default function RiskCalculator({ currentBtcPrice = 77300 }) {
                   }}
                   className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
                     isSelected
-                      ? 'bg-apple-blue/15 border-apple-blue/40 text-white shadow-sm'
-                      : 'bg-white/[0.02] border-white/[0.06] text-apple-muted hover:bg-white/[0.05] hover:text-white'
+                      ? 'bg-apple-blue/15 border-apple-blue/40 text-apple-blue dark:text-white shadow-sm'
+                      : 'bg-black/[0.02] dark:bg-white/[0.02] border-black/[0.06] dark:border-white/[0.06] text-apple-muted hover:bg-black/[0.04] dark:hover:bg-white/[0.05] hover:text-apple-text'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -131,7 +131,7 @@ export default function RiskCalculator({ currentBtcPrice = 77300 }) {
                     }`}>
                       {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
                     </div>
-                    <span className="text-xs font-medium text-white">{t.name}</span>
+                    <span className="text-xs font-medium text-apple-text">{t.name}</span>
                   </div>
                   <span className="text-xs font-mono text-apple-dim">{t.effectiveLeverage}</span>
                 </button>
@@ -177,7 +177,7 @@ export default function RiskCalculator({ currentBtcPrice = 77300 }) {
 
       {/* Mathematical Architecture Footnote */}
       <div className="apple-glass-card rounded-xl p-4 text-xs text-apple-muted border-l-2 border-l-apple-blue">
-        <span className="text-white font-medium mr-1">Risk Logic:</span>
+        <span className="text-apple-text font-medium mr-1">Risk Logic:</span>
         {currentTier.note}
       </div>
 

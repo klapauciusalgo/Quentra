@@ -11,10 +11,10 @@ import {
   Check, 
   Eye, 
   Table, 
-  LayoutGrid,
-  Filter,
-  Search,
-  ChevronRight
+  LayoutGrid, 
+  Filter, 
+  Search, 
+  ChevronRight 
 } from 'lucide-react';
 
 export default function AlgoExplorer({ 
@@ -65,11 +65,11 @@ export default function AlgoExplorer({
     <div className="apple-glass rounded-3xl p-5 md:p-7 space-y-6">
       
       {/* Header & Title */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.08] pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-black/[0.08] dark:border-white/[0.08] pb-4">
         <div>
           <div className="flex items-center gap-2.5">
             <span className="w-2 h-2 rounded-full bg-apple-green shadow-[0_0_8px_rgba(48,209,88,0.6)]" />
-            <h2 className="font-semibold text-lg md:text-xl text-white tracking-tight">
+            <h2 className="font-semibold text-lg md:text-xl text-apple-text tracking-tight">
               Algorithm Strategy Directory
             </h2>
             <span className="bg-apple-blue/15 border border-apple-blue/30 text-apple-cyan text-[11px] font-medium px-2.5 py-0.5 rounded-full">
@@ -82,14 +82,14 @@ export default function AlgoExplorer({
         </div>
 
         {/* View Mode Segmented Control */}
-        <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] p-1 rounded-xl">
+        <div className="flex items-center gap-1 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] p-1 rounded-xl">
           <button
             onClick={() => {
               playRetroSound('blip');
               setViewMode('cards');
             }}
             className={`px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer ${
-              viewMode === 'cards' ? 'bg-white/15 text-white shadow-sm font-semibold' : 'text-apple-muted hover:text-white'
+              viewMode === 'cards' ? 'bg-white dark:bg-white/15 text-apple-text shadow-sm font-semibold' : 'text-apple-muted hover:text-apple-text'
             }`}
           >
             <LayoutGrid className="w-3.5 h-3.5" />
@@ -101,7 +101,7 @@ export default function AlgoExplorer({
               setViewMode('table');
             }}
             className={`px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer ${
-              viewMode === 'table' ? 'bg-white/15 text-white shadow-sm font-semibold' : 'text-apple-muted hover:text-white'
+              viewMode === 'table' ? 'bg-white dark:bg-white/15 text-apple-text shadow-sm font-semibold' : 'text-apple-muted hover:text-apple-text'
             }`}
           >
             <Table className="w-3.5 h-3.5" />
@@ -118,7 +118,7 @@ export default function AlgoExplorer({
           {/* Direction Filter */}
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-apple-dim font-medium mr-1">Type:</span>
-            <div className="flex items-center bg-white/[0.04] border border-white/[0.08] p-0.5 rounded-xl">
+            <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] p-0.5 rounded-xl">
               {['ALL', 'LONG', 'SHORT'].map((type) => (
                 <button
                   key={type}
@@ -128,8 +128,8 @@ export default function AlgoExplorer({
                   }}
                   className={`text-xs px-3 py-1 rounded-lg transition-all font-medium cursor-pointer ${
                     directionFilter === type
-                      ? 'bg-white/15 text-white font-semibold shadow-sm'
-                      : 'text-apple-muted hover:text-white'
+                      ? 'bg-white dark:bg-white/15 text-apple-text font-semibold shadow-sm'
+                      : 'text-apple-muted hover:text-apple-text'
                   }`}
                 >
                   {type === 'ALL' ? 'All' : type === 'LONG' ? 'Long' : 'Short'}
@@ -141,7 +141,7 @@ export default function AlgoExplorer({
           {/* Timeframe Filter */}
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-apple-dim font-medium mr-1">Timeframe:</span>
-            <div className="flex items-center bg-white/[0.04] border border-white/[0.08] p-0.5 rounded-xl">
+            <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] p-0.5 rounded-xl">
               {['ALL', '30m', '1h', '4h', '1w'].map((tf) => (
                 <button
                   key={tf}
@@ -151,8 +151,8 @@ export default function AlgoExplorer({
                   }}
                   className={`text-xs px-2.5 py-1 rounded-lg uppercase transition-all font-medium cursor-pointer ${
                     timeframeFilter.toLowerCase() === tf.toLowerCase()
-                      ? 'bg-white/15 text-white font-semibold shadow-sm'
-                      : 'text-apple-muted hover:text-white'
+                      ? 'bg-white dark:bg-white/15 text-apple-text font-semibold shadow-sm'
+                      : 'text-apple-muted hover:text-apple-text'
                   }`}
                 >
                   {tf}
@@ -169,14 +169,14 @@ export default function AlgoExplorer({
               placeholder="Search by name, archetype, or logic..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl text-xs pl-9 pr-3.5 py-2 text-white placeholder:text-apple-dim focus:outline-none focus:ring-2 focus:ring-apple-blue/50 transition-all"
+              className="w-full bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-xl text-xs pl-9 pr-3.5 py-2 text-apple-text placeholder:text-apple-dim focus:outline-none focus:ring-2 focus:ring-apple-blue/50 transition-all"
             />
           </div>
 
         </div>
 
         {/* Row 2: Archetype Quick Filters & Sorting */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/[0.06] dark:border-white/[0.06] pt-3">
           {/* Quick Style Filters */}
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-apple-dim font-medium mr-1">Profile:</span>
@@ -195,7 +195,7 @@ export default function AlgoExplorer({
                 className={`text-xs px-3 py-1 rounded-full border transition-all cursor-pointer ${
                   archetypeFilter === pref.id
                     ? 'bg-apple-orange/15 text-apple-orange border-apple-orange/40 font-medium'
-                    : 'bg-white/[0.02] border-white/[0.06] text-apple-muted hover:text-white hover:bg-white/[0.06]'
+                    : 'bg-black/[0.02] dark:bg-white/[0.02] border-black/[0.06] dark:border-white/[0.06] text-apple-muted hover:text-apple-text hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
                 }`}
               >
                 {pref.label}
@@ -212,13 +212,13 @@ export default function AlgoExplorer({
                 playRetroSound('blip');
                 setSortBy(e.target.value);
               }}
-              className="bg-white/[0.05] border border-white/[0.08] text-white rounded-xl text-xs px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-apple-blue/50 cursor-pointer"
+              className="bg-black/[0.04] dark:bg-white/[0.05] border border-black/[0.08] dark:border-white/[0.08] text-apple-text rounded-xl text-xs px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-apple-blue/50 cursor-pointer"
             >
-              <option value="return" className="bg-zinc-900 text-white">Total Return (Highest)</option>
-              <option value="winrate" className="bg-zinc-900 text-white">Win Rate (Highest)</option>
-              <option value="pf" className="bg-zinc-900 text-white">Profit Factor (Highest)</option>
-              <option value="dd" className="bg-zinc-900 text-white">Max Drawdown (Lowest)</option>
-              <option value="trades" className="bg-zinc-900 text-white">Trade Count (Most)</option>
+              <option value="return" className="bg-white dark:bg-zinc-900 text-apple-text">Total Return (Highest)</option>
+              <option value="winrate" className="bg-white dark:bg-zinc-900 text-apple-text">Win Rate (Highest)</option>
+              <option value="pf" className="bg-white dark:bg-zinc-900 text-apple-text">Profit Factor (Highest)</option>
+              <option value="dd" className="bg-white dark:bg-zinc-900 text-apple-text">Max Drawdown (Lowest)</option>
+              <option value="trades" className="bg-white dark:bg-zinc-900 text-apple-text">Trade Count (Most)</option>
             </select>
           </div>
         </div>
@@ -238,8 +238,8 @@ export default function AlgoExplorer({
                 key={algo.id}
                 className={`apple-glass-card rounded-2xl p-5 flex flex-col justify-between transition-all duration-200 group ${
                   isSelected
-                    ? 'ring-2 ring-apple-blue/60 bg-[#161724]/90 border-white/20'
-                    : 'hover:border-white/20'
+                    ? 'ring-2 ring-apple-blue/60 bg-apple-blue/[0.04] dark:bg-[#161724]/90 border-apple-blue/30 dark:border-white/20'
+                    : 'hover:border-black/20 dark:hover:border-white/20'
                 }`}
               >
                 {/* Card Top: Badges & Title */}
@@ -256,7 +256,7 @@ export default function AlgoExplorer({
                         {isLong ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
                         <span>{algo.type}</span>
                       </span>
-                      <span className="text-xs px-2 py-0.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-apple-muted uppercase font-medium">
+                      <span className="text-xs px-2 py-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.05] border border-black/[0.08] dark:border-white/[0.08] text-apple-muted uppercase font-medium">
                         {algo.timeframe}
                       </span>
                     </div>
@@ -268,7 +268,7 @@ export default function AlgoExplorer({
                     )}
                   </div>
 
-                  <h3 className="text-base font-semibold text-white tracking-tight mb-1 group-hover:text-apple-cyan transition-colors">
+                  <h3 className="text-base font-semibold text-apple-text tracking-tight mb-1 group-hover:text-apple-cyan transition-colors">
                     {algo.name}
                   </h3>
 
@@ -277,7 +277,7 @@ export default function AlgoExplorer({
                   </div>
 
                   {/* 4 Core Metrics Grid */}
-                  <div className="grid grid-cols-2 gap-2.5 bg-white/[0.02] border border-white/[0.06] rounded-xl p-3 mb-3">
+                  <div className="grid grid-cols-2 gap-2.5 bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.06] dark:border-white/[0.06] rounded-xl p-3 mb-3">
                     <div>
                       <div className="text-[10px] text-apple-dim uppercase tracking-wider">Total Return</div>
                       <div className="font-semibold text-sm text-apple-green font-mono tabular-nums mt-0.5">
@@ -287,7 +287,7 @@ export default function AlgoExplorer({
 
                     <div>
                       <div className="text-[10px] text-apple-dim uppercase tracking-wider">Win Rate</div>
-                      <div className="font-semibold text-sm text-white font-mono tabular-nums mt-0.5">
+                      <div className="font-semibold text-sm text-apple-text font-mono tabular-nums mt-0.5">
                         {m.win_rate_pct || 0}%
                         <span className="text-[10px] text-apple-muted font-normal ml-1">
                           ({m.total_trades || 0}T)
@@ -317,7 +317,7 @@ export default function AlgoExplorer({
                 </div>
 
                 {/* Card Actions */}
-                <div className="border-t border-white/[0.06] pt-3 flex items-center gap-2">
+                <div className="border-t border-black/[0.06] dark:border-white/[0.06] pt-3 flex items-center gap-2">
                   <button
                     onClick={() => {
                       playRetroSound('select');
@@ -326,7 +326,7 @@ export default function AlgoExplorer({
                     className={`flex-1 py-2 text-xs font-medium rounded-xl border transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[38px] ${
                       isSelected
                         ? 'bg-apple-blue text-white border-apple-blue shadow-sm font-semibold'
-                        : 'bg-white/[0.05] hover:bg-white/[0.1] border-white/[0.08] text-white'
+                        : 'bg-black/[0.04] dark:bg-white/[0.05] hover:bg-black/[0.07] dark:hover:bg-white/[0.1] border-black/[0.08] dark:border-white/[0.08] text-apple-text'
                     }`}
                   >
                     {isSelected ? (
@@ -347,7 +347,7 @@ export default function AlgoExplorer({
                       playRetroSound('blip');
                       if (onOpenDetail) onOpenDetail(algo.id);
                     }}
-                    className="px-3 py-2 bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] text-white text-xs font-medium rounded-xl transition-colors cursor-pointer min-h-[38px] flex items-center gap-1"
+                    className="px-3 py-2 bg-black/[0.03] dark:bg-white/[0.03] hover:bg-black/[0.06] dark:hover:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.08] text-apple-text text-xs font-medium rounded-xl transition-colors cursor-pointer min-h-[38px] flex items-center gap-1"
                     title="View full parameters & trade history"
                   >
                     <span>Details</span>
@@ -363,10 +363,10 @@ export default function AlgoExplorer({
 
       {/* View Mode: Comparison Matrix Table */}
       {viewMode === 'table' && (
-        <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-white/[0.02]">
+        <div className="overflow-x-auto rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.01] dark:bg-white/[0.02]">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-white/[0.04] text-apple-muted border-b border-white/[0.08] text-[11px] font-medium">
+              <tr className="bg-black/[0.03] dark:bg-white/[0.04] text-apple-muted border-b border-black/[0.08] dark:border-white/[0.08] text-[11px] font-medium">
                 <th className="p-3.5">Strategy</th>
                 <th className="p-3.5 text-center">Type</th>
                 <th className="p-3.5 text-center">Timeframe</th>
@@ -378,7 +378,7 @@ export default function AlgoExplorer({
                 <th className="p-3.5 text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/[0.04]">
+            <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
               {filteredStrategies.map((algo) => {
                 const isSelected = selectedStrategyId === algo.id;
                 const isLong = algo.type === 'LONG';
@@ -387,12 +387,12 @@ export default function AlgoExplorer({
                 return (
                   <tr
                     key={algo.id}
-                    className={`hover:bg-white/[0.04] transition-colors ${
+                    className={`hover:bg-black/[0.02] dark:hover:bg-white/[0.04] transition-colors ${
                       isSelected ? 'bg-apple-blue/10 border-l-2 border-l-apple-blue' : ''
                     }`}
                   >
                     <td className="p-3.5">
-                      <div className="font-semibold text-white">{algo.name}</div>
+                      <div className="font-semibold text-apple-text">{algo.name}</div>
                       <div className="text-[11px] text-apple-muted">{algo.archetype}</div>
                     </td>
                     <td className="p-3.5 text-center">
@@ -406,13 +406,13 @@ export default function AlgoExplorer({
                         {algo.type}
                       </span>
                     </td>
-                    <td className="p-3.5 text-center uppercase font-medium text-white">
+                    <td className="p-3.5 text-center uppercase font-medium text-apple-text">
                       {algo.timeframe}
                     </td>
                     <td className="p-3.5 text-right font-semibold font-mono tabular-nums text-apple-green">
                       +{Number(m.total_return_pct || 0).toLocaleString()}%
                     </td>
-                    <td className="p-3.5 text-right text-white font-mono tabular-nums">
+                    <td className="p-3.5 text-right text-apple-text font-mono tabular-nums">
                       {m.win_rate_pct || 0}%
                     </td>
                     <td className="p-3.5 text-right text-apple-cyan font-semibold font-mono tabular-nums">
@@ -431,14 +431,14 @@ export default function AlgoExplorer({
                           className={`px-3 py-1 text-xs font-medium rounded-lg border transition-all cursor-pointer ${
                             isSelected
                               ? 'bg-apple-blue text-white border-apple-blue font-semibold'
-                              : 'bg-white/[0.04] border-white/[0.08] text-white hover:bg-white/[0.1]'
+                              : 'bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.08] dark:border-white/[0.08] text-apple-text hover:bg-black/[0.07] dark:hover:bg-white/[0.1]'
                           }`}
                         >
                           {isSelected ? 'Active' : 'Plot'}
                         </button>
                         <button
                           onClick={() => onOpenDetail && onOpenDetail(algo.id)}
-                          className="px-3 py-1 text-xs font-medium bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.06] text-apple-muted hover:text-white rounded-lg transition-colors cursor-pointer"
+                          className="px-3 py-1 text-xs font-medium bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.05] dark:hover:bg-white/[0.06] border border-black/[0.06] dark:border-white/[0.06] text-apple-muted hover:text-apple-text rounded-lg transition-colors cursor-pointer"
                         >
                           Details
                         </button>

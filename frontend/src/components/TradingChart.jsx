@@ -65,8 +65,10 @@ export default function TradingChart({
   onTimeframeChange, 
   activeStrategy = null,
   liveTicker = null,
-  onTradeSelect = null
+  onTradeSelect = null,
+  theme = 'light',
 }) {
+  const isDark = theme === 'dark';
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const candleSeriesRef = useRef(null);
@@ -503,39 +505,39 @@ export default function TradingChart({
       width: initialWidth,
       height: 520,
       layout: {
-        background: { type: ColorType.Solid, color: '#07080A' },
-        textColor: '#86868B',
+        background: { type: ColorType.Solid, color: isDark ? '#07080A' : '#FFFFFF' },
+        textColor: isDark ? '#86868B' : '#6E6E73',
         fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist", monospace',
         fontSize: 11,
       },
       grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.04)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.04)' },
+        vertLines: { color: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.05)' },
+        horzLines: { color: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.05)' },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: {
-          color: '#0A84FF',
+          color: isDark ? '#0A84FF' : '#0071E3',
           width: 1,
           style: 3,
-          labelBackgroundColor: '#16171F',
+          labelBackgroundColor: isDark ? '#16171F' : '#EAEAEE',
         },
         horzLine: {
-          color: '#0A84FF',
+          color: isDark ? '#0A84FF' : '#0071E3',
           width: 1,
           style: 3,
-          labelBackgroundColor: '#16171F',
+          labelBackgroundColor: isDark ? '#16171F' : '#EAEAEE',
         },
       },
       rightPriceScale: {
-        borderColor: 'rgba(255, 255, 255, 0.08)',
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
         scaleMargins: {
           top: 0.08,
           bottom: 0.2,
         },
       },
       timeScale: {
-        borderColor: 'rgba(255, 255, 255, 0.08)',
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 12,
@@ -547,18 +549,18 @@ export default function TradingChart({
 
     // 1. Candlestick Series
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#30D158',
-      downColor: '#FF453A',
-      borderUpColor: '#30D158',
-      borderDownColor: '#FF453A',
-      wickUpColor: '#30D158',
-      wickDownColor: '#FF453A',
+      upColor: isDark ? '#30D158' : '#28A745',
+      downColor: isDark ? '#FF453A' : '#E53935',
+      borderUpColor: isDark ? '#30D158' : '#28A745',
+      borderDownColor: isDark ? '#FF453A' : '#E53935',
+      wickUpColor: isDark ? '#30D158' : '#28A745',
+      wickDownColor: isDark ? '#FF453A' : '#E53935',
     });
     candleSeriesRef.current = candleSeries;
 
     // 2. Volume Histogram Series
     const volumeSeries = chart.addSeries(HistogramSeries, {
-      color: 'rgba(10, 132, 255, 0.3)',
+      color: isDark ? 'rgba(10, 132, 255, 0.3)' : 'rgba(0, 113, 227, 0.3)',
       priceFormat: { type: 'volume' },
       priceScaleId: '', // overlay
     });
@@ -572,35 +574,35 @@ export default function TradingChart({
 
     // 3. Moving Average Series
     const ma25Series = chart.addSeries(LineSeries, {
-      color: '#64D2FF',
+      color: isDark ? '#64D2FF' : '#0071E3',
       lineWidth: 1,
       title: 'MA25',
       priceLineVisible: false,
     });
 
     const ma50Series = chart.addSeries(LineSeries, {
-      color: '#0A84FF',
+      color: isDark ? '#0A84FF' : '#0288D1',
       lineWidth: 1.5,
       title: 'MA50',
       priceLineVisible: false,
     });
 
     const ma55Series = chart.addSeries(LineSeries, {
-      color: '#BF5AF2',
+      color: isDark ? '#BF5AF2' : '#8E44AD',
       lineWidth: 2,
       title: 'MA55 (Macro)',
       priceLineVisible: false,
     });
 
     const ma111Series = chart.addSeries(LineSeries, {
-      color: '#FF9F0A',
+      color: isDark ? '#FF9F0A' : '#F57C00',
       lineWidth: 1.5,
       title: 'MA111',
       priceLineVisible: false,
     });
 
     const ma8Series = chart.addSeries(LineSeries, {
-      color: '#FFC145',
+      color: isDark ? '#FFC145' : '#D97706',
       lineWidth: 1,
       title: 'MA8',
       priceLineVisible: false,
@@ -636,7 +638,9 @@ export default function TradingChart({
         formattedVolumes.push({
           time: c.time,
           value: c.volume,
-          color: c.close >= c.open ? 'rgba(57, 255, 136, 0.25)' : 'rgba(255, 75, 92, 0.25)',
+          color: c.close >= c.open
+            ? (isDark ? 'rgba(48, 209, 88, 0.25)' : 'rgba(40, 167, 69, 0.3)')
+            : (isDark ? 'rgba(255, 69, 58, 0.25)' : 'rgba(229, 57, 53, 0.3)'),
         });
 
         if (c.ma8) ma8Data.push({ time: c.time, value: c.ma8 });
@@ -780,7 +784,7 @@ export default function TradingChart({
         priceLinesRef.current = [];
       }
     };
-  }, [candles]);
+  }, [candles, theme]);
 
   // Reset focused trade index when active strategy changes
   useEffect(() => {
@@ -956,18 +960,18 @@ export default function TradingChart({
     <div className="apple-glass rounded-3xl p-4 sm:p-6 space-y-4">
       
       {/* 1. Chart Controls Header: Symbol, Timeframes, Signal Controls, Indicators */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.08] dark:border-white/[0.08] pb-3.5">
         
         {/* Left: Symbol & Timeframe Switcher */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm text-white tracking-tight">BTC/USDT</span>
+            <span className="font-semibold text-sm text-apple-text tracking-tight">BTC/USDT</span>
             <span className="text-[10px] font-medium tracking-wide uppercase px-2 py-0.5 rounded-full bg-apple-blue/15 text-apple-cyan border border-apple-blue/30">
               Binance
             </span>
           </div>
 
-          <div className="flex items-center bg-white/[0.04] border border-white/[0.08] p-1 rounded-xl">
+          <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] p-1 rounded-xl">
             {TIMEFRAMES.map((tf) => (
               <button
                 key={tf.id}
@@ -977,8 +981,8 @@ export default function TradingChart({
                 }}
                 className={`text-xs px-2.5 py-1 rounded-lg transition-all font-medium cursor-pointer ${
                   timeframe === tf.id
-                    ? 'bg-white/15 text-white shadow-sm font-semibold'
-                    : 'text-apple-muted hover:text-white hover:bg-white/[0.05]'
+                    ? 'bg-white dark:bg-white/15 text-apple-text shadow-sm font-semibold'
+                    : 'text-apple-muted hover:text-apple-text hover:bg-black/[0.04] dark:hover:bg-white/[0.05]'
                 }`}
               >
                 {tf.label}
@@ -992,7 +996,7 @@ export default function TradingChart({
           
           {/* Signal Label Style Switcher */}
           {activeStrategy && showMarkers && (
-            <div className="flex items-center bg-white/[0.04] border border-white/[0.08] p-1 rounded-xl">
+            <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] p-1 rounded-xl">
               <span className="text-[11px] text-apple-dim px-2 hidden md:inline">Labels:</span>
               {[
                 { id: 'compact', label: 'Compact' },
@@ -1007,8 +1011,8 @@ export default function TradingChart({
                   }}
                   className={`px-2 py-0.5 text-xs rounded-lg transition-all cursor-pointer ${
                     markerLabelMode === style.id
-                      ? 'bg-white/15 text-white font-medium shadow-sm'
-                      : 'text-apple-muted hover:text-white'
+                      ? 'bg-white dark:bg-white/15 text-apple-text font-medium shadow-sm'
+                      : 'text-apple-muted hover:text-apple-text'
                   }`}
                   title={`Marker Label Display: ${style.label}`}
                 >
@@ -1024,8 +1028,8 @@ export default function TradingChart({
               onClick={() => setIsHudVisible(!isHudVisible)}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs transition-all cursor-pointer ${
                 isHudVisible
-                  ? 'bg-apple-blue/15 text-white border-apple-blue/40 shadow-sm font-medium'
-                  : 'bg-white/[0.03] text-apple-muted border-white/[0.06] hover:bg-white/[0.07] hover:text-white'
+                  ? 'bg-apple-blue/15 text-apple-blue dark:text-white border-apple-blue/40 shadow-sm font-medium'
+                  : 'bg-black/[0.03] dark:bg-white/[0.03] text-apple-muted border-black/[0.06] dark:border-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.07] hover:text-apple-text'
               }`}
               title="Toggle On-Chart Signal Inspector HUD"
             >
@@ -1040,8 +1044,8 @@ export default function TradingChart({
               onClick={() => setShowPriceLevels(!showPriceLevels)}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs transition-all cursor-pointer ${
                 showPriceLevels
-                  ? 'bg-apple-blue/15 text-white border-apple-blue/40 shadow-sm font-medium'
-                  : 'bg-white/[0.03] text-apple-muted border-white/[0.06] hover:bg-white/[0.07] hover:text-white'
+                  ? 'bg-apple-blue/15 text-apple-blue dark:text-white border-apple-blue/40 shadow-sm font-medium'
+                  : 'bg-black/[0.03] dark:bg-white/[0.03] text-apple-muted border-black/[0.06] dark:border-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.07] hover:text-apple-text'
               }`}
               title="Toggle Dynamic Entry / SL / TP Price Lines"
             >
@@ -1055,8 +1059,8 @@ export default function TradingChart({
             onClick={() => setShowMarkers(!showMarkers)}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-xl border text-xs transition-all cursor-pointer ${
               showMarkers
-                ? 'bg-white/15 text-white border-white/20 font-medium shadow-sm'
-                : 'bg-white/[0.03] text-apple-muted border-white/[0.06] hover:bg-white/[0.07] hover:text-white'
+                ? 'bg-white dark:bg-white/15 text-apple-text border-black/10 dark:border-white/20 font-medium shadow-sm'
+                : 'bg-black/[0.03] dark:bg-white/[0.03] text-apple-muted border-black/[0.06] dark:border-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.07] hover:text-apple-text'
             }`}
           >
             <CheckCircle2 className={`w-3.5 h-3.5 ${showMarkers ? 'text-apple-green' : 'text-apple-dim'}`} />
@@ -1064,11 +1068,11 @@ export default function TradingChart({
           </button>
 
           {/* Indicators Toggle Pill */}
-          <div className="flex items-center gap-1 pl-1 border-l border-white/10">
+          <div className="flex items-center gap-1 pl-1 border-l border-black/10 dark:border-white/10">
             <button
               onClick={() => toggleMA('ma55')}
               className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-all cursor-pointer ${
-                visibleMAs.ma55 ? 'bg-apple-purple/15 text-apple-purple border-apple-purple/30' : 'bg-white/[0.03] border-white/[0.06] text-apple-dim'
+                visibleMAs.ma55 ? 'bg-apple-purple/15 text-apple-purple border-apple-purple/30' : 'bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06] text-apple-dim'
               }`}
               title="Weekly MA55 Macro Regime Anchor"
             >
@@ -1077,7 +1081,7 @@ export default function TradingChart({
             <button
               onClick={() => toggleMA('ma111')}
               className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-all cursor-pointer ${
-                visibleMAs.ma111 ? 'bg-apple-orange/15 text-apple-orange border-apple-orange/30' : 'bg-white/[0.03] border-white/[0.06] text-apple-dim'
+                visibleMAs.ma111 ? 'bg-apple-orange/15 text-apple-orange border-apple-orange/30' : 'bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06] text-apple-dim'
               }`}
             >
               MA111
@@ -1100,7 +1104,7 @@ export default function TradingChart({
               playRetroSound('blip');
               if (chartRef.current) chartRef.current.timeScale().fitContent();
             }}
-            className="px-2.5 py-1 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] border border-white/[0.08] rounded-xl text-apple-muted hover:text-white text-xs transition-all cursor-pointer"
+            className="px-2.5 py-1 bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] active:scale-[0.98] border border-black/[0.08] dark:border-white/[0.08] rounded-xl text-apple-muted hover:text-apple-text text-xs transition-all cursor-pointer"
             title="Fit all candles in viewport"
           >
             Fit View
@@ -1125,7 +1129,7 @@ export default function TradingChart({
           <div className="flex items-center gap-4">
             <div>
               <span className="text-apple-dim">O:</span>{' '}
-              <span className="text-white tabular-nums">{formatPrice(hoveredData.open)}</span>
+              <span className="text-apple-text tabular-nums">{formatPrice(hoveredData.open)}</span>
             </div>
             <div>
               <span className="text-apple-dim">H:</span>{' '}
@@ -1144,7 +1148,7 @@ export default function TradingChart({
             {hoveredData.volume && (
               <div>
                 <span className="text-apple-dim">VOL:</span>{' '}
-                <span className="text-white tabular-nums">{Number(hoveredData.volume).toFixed(2)} BTC</span>
+                <span className="text-apple-text tabular-nums">{Number(hoveredData.volume).toFixed(2)} BTC</span>
               </div>
             )}
             {hoveredData.ma55 && visibleMAs.ma55 && (
@@ -1224,19 +1228,19 @@ export default function TradingChart({
                 : 'transition-all duration-150'
             }`}
           >
-            <div className="bg-[#0D0E14]/90 backdrop-blur-2xl border border-white/[0.12] rounded-2xl shadow-2xl p-3.5 text-xs text-apple-text select-none transition-colors">
+            <div className="bg-white/95 dark:bg-[#0D0E14]/90 backdrop-blur-2xl border border-black/10 dark:border-white/[0.12] rounded-2xl shadow-2xl p-3.5 text-xs text-apple-text select-none transition-colors">
               
               {/* HUD Header Bar (Draggable Handle) */}
               <div
                 onPointerDown={handleHudPointerDown}
                 onDoubleClick={() => setHudPos({ x: null, y: null })}
-                className="flex items-center justify-between border-b border-white/[0.08] pb-2.5 mb-2.5 cursor-grab active:cursor-grabbing group/header"
+                className="flex items-center justify-between border-b border-black/[0.08] dark:border-white/[0.08] pb-2.5 mb-2.5 cursor-grab active:cursor-grabbing group/header"
                 title="Click and drag to move • Double-click to reset position"
               >
                 <div className="flex items-center gap-2 pointer-events-none">
                   <GripHorizontal className="w-3.5 h-3.5 text-apple-dim group-hover/header:text-apple-cyan transition-colors" />
                   <span className="w-2 h-2 rounded-full bg-apple-cyan" />
-                  <span className="font-semibold text-xs text-white tracking-tight">
+                  <span className="font-semibold text-xs text-apple-text tracking-tight">
                     Signal Inspector
                   </span>
                 </div>
@@ -1249,7 +1253,7 @@ export default function TradingChart({
                   {hudPos.x !== null && (
                     <button
                       onClick={() => setHudPos({ x: null, y: null })}
-                      className="p-1 hover:bg-white/[0.08] text-apple-muted hover:text-white rounded-lg border border-white/[0.06] transition-colors"
+                      className="p-1 hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-apple-muted hover:text-apple-text rounded-lg border border-black/[0.06] dark:border-white/[0.06] transition-colors"
                       title="Reset position to default top-right"
                     >
                       <RotateCcw className="w-3 h-3" />
@@ -1264,7 +1268,7 @@ export default function TradingChart({
                       handleJumpToTrade(tradesList[nextIdx], nextIdx);
                     }}
                     disabled={focusedTradeIndex === 0}
-                    className="p-1 hover:bg-white/[0.08] disabled:opacity-25 text-apple-muted hover:text-white rounded-lg border border-white/[0.06] transition-colors"
+                    className="p-1 hover:bg-black/[0.05] dark:hover:bg-white/[0.08] disabled:opacity-25 text-apple-muted hover:text-apple-text rounded-lg border border-black/[0.06] dark:border-white/[0.06] transition-colors"
                     title="Previous Signal"
                   >
                     <ChevronLeft className="w-3.5 h-3.5" />
@@ -1283,7 +1287,7 @@ export default function TradingChart({
                       handleJumpToTrade(tradesList[nextIdx], nextIdx);
                     }}
                     disabled={focusedTradeIndex === tradesList.length - 1}
-                    className="p-1 hover:bg-white/[0.08] disabled:opacity-25 text-apple-muted hover:text-white rounded-lg border border-white/[0.06] transition-colors"
+                    className="p-1 hover:bg-black/[0.05] dark:hover:bg-white/[0.08] disabled:opacity-25 text-apple-muted hover:text-apple-text rounded-lg border border-black/[0.06] dark:border-white/[0.06] transition-colors"
                     title="Next Signal"
                   >
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -1292,7 +1296,7 @@ export default function TradingChart({
                   {/* Collapse / Expand Toggle */}
                   <button
                     onClick={() => setIsHudExpanded(!isHudExpanded)}
-                    className="p-1 hover:bg-white/[0.08] text-apple-muted hover:text-white rounded-lg border border-white/[0.06] ml-0.5 transition-colors"
+                    className="p-1 hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-apple-muted hover:text-apple-text rounded-lg border border-black/[0.06] dark:border-white/[0.06] ml-0.5 transition-colors"
                     title={isHudExpanded ? 'Minimize HUD' : 'Expand HUD'}
                   >
                     {isHudExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
@@ -1316,7 +1320,7 @@ export default function TradingChart({
                       </span>
                       <span className={`text-[11px] px-2 py-0.5 rounded-full border ${
                         activeTrade.status === 'CLOSED'
-                          ? 'border-white/[0.08] bg-white/[0.04] text-apple-muted'
+                          ? 'border-black/[0.08] dark:border-white/[0.08] bg-black/[0.04] dark:bg-white/[0.04] text-apple-muted'
                           : 'border-apple-blue/40 bg-apple-blue/15 text-apple-cyan font-medium'
                       }`}>
                         {activeTrade.status || 'CLOSED'}
@@ -1331,10 +1335,10 @@ export default function TradingChart({
                   </div>
 
                   {/* Execution Metrics Grid */}
-                  <div className="grid grid-cols-2 gap-2 text-xs bg-white/[0.03] border border-white/[0.06] rounded-xl p-2.5">
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.06] dark:border-white/[0.06] rounded-xl p-2.5">
                     <div>
                       <div className="text-[10px] text-apple-dim uppercase tracking-wider">Entry Price</div>
-                      <div className="font-semibold text-white mt-0.5 font-mono tabular-nums">
+                      <div className="font-semibold text-apple-text mt-0.5 font-mono tabular-nums">
                         {formatPrice(activeTrade.entry_price)}
                       </div>
                       <div className="text-[10px] text-apple-muted truncate">
@@ -1346,7 +1350,7 @@ export default function TradingChart({
                       <div className="text-[10px] text-apple-dim uppercase tracking-wider">
                         {activeTrade.status === 'CLOSED' ? 'Exit Price' : 'Current Mark'}
                       </div>
-                      <div className="font-semibold text-white mt-0.5 font-mono tabular-nums">
+                      <div className="font-semibold text-apple-text mt-0.5 font-mono tabular-nums">
                         {formatPrice(activeTrade.exit_price || liveTicker?.price)}
                       </div>
                       <div className="text-[10px] text-apple-muted truncate">
@@ -1356,10 +1360,10 @@ export default function TradingChart({
                       </div>
                     </div>
 
-                    <div className="col-span-2 pt-2 border-t border-white/[0.06] flex items-center justify-between text-xs">
+                    <div className="col-span-2 pt-2 border-t border-black/[0.06] dark:border-white/[0.06] flex items-center justify-between text-xs">
                       <div>
                         <span className="text-[10px] text-apple-dim uppercase mr-1.5">Duration:</span>
-                        <span className="text-white font-medium">
+                        <span className="text-apple-text font-medium">
                           {formatDuration(activeTrade.entry_time, activeTrade.exit_time)}
                         </span>
                       </div>
@@ -1389,7 +1393,7 @@ export default function TradingChart({
                         }
                         handleScrollToLastBar();
                       }}
-                      className="py-1.5 px-3 bg-white/[0.06] hover:bg-white/[0.1] active:scale-[0.98] border border-white/[0.08] text-white text-xs font-medium rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                      className="py-1.5 px-3 bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.1] active:scale-[0.98] border border-black/[0.08] dark:border-white/[0.08] text-apple-text text-xs font-medium rounded-xl transition-all cursor-pointer flex items-center gap-1"
                       title="Jump to latest bar & position"
                     >
                       <ArrowRight className="w-3 h-3 text-apple-cyan" />
@@ -1408,7 +1412,7 @@ export default function TradingChart({
                   }`}>
                     #{activeTrade.trade_no}
                   </span>
-                  <span className="font-semibold text-white font-mono tabular-nums">
+                  <span className="font-semibold text-apple-text font-mono tabular-nums">
                     {formatPrice(activeTrade.entry_price)}
                   </span>
                   <span className={`font-semibold font-mono tabular-nums ${
@@ -1430,7 +1434,7 @@ export default function TradingChart({
         <div className="apple-glass-card rounded-2xl p-3 sm:p-4 space-y-3 text-xs">
           
           {/* Timeline Bar Header */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] pb-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/[0.08] dark:border-white/[0.08] pb-2.5">
             
             {/* Filter Tabs */}
             <div className="flex items-center gap-2">
@@ -1439,7 +1443,7 @@ export default function TradingChart({
                 Signals ({tradesList.length}):
               </span>
               
-              <div className="flex items-center bg-white/[0.04] border border-white/[0.08] p-0.5 rounded-xl">
+              <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] p-0.5 rounded-xl">
                 {[
                   { id: 'ALL', label: `All (${tradesList.length})` },
                   { id: 'WINS', label: `Wins (${tradesList.filter((t) => (t.net_return_pct || 0) > 0).length})` },
@@ -1453,8 +1457,8 @@ export default function TradingChart({
                     }}
                     className={`px-2.5 py-1 text-xs rounded-lg transition-all cursor-pointer ${
                       tradeFilter === f.id
-                        ? 'bg-white/15 text-white font-medium shadow-sm'
-                        : 'text-apple-muted hover:text-white'
+                        ? 'bg-white dark:bg-white/15 text-apple-text font-medium shadow-sm'
+                        : 'text-apple-muted hover:text-apple-text'
                     }`}
                   >
                     {f.label}
@@ -1472,7 +1476,7 @@ export default function TradingChart({
                   handleJumpToTrade(tradesList[nextIdx], nextIdx);
                 }}
                 disabled={focusedTradeIndex === 0}
-                className="px-2.5 py-1 bg-white/[0.04] hover:bg-white/[0.08] disabled:opacity-30 border border-white/[0.08] rounded-xl text-apple-muted hover:text-white flex items-center gap-1 cursor-pointer transition-all"
+                className="px-2.5 py-1 bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] disabled:opacity-30 border border-black/[0.08] dark:border-white/[0.08] rounded-xl text-apple-muted hover:text-apple-text flex items-center gap-1 cursor-pointer transition-all"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
                 <span>Prev</span>
@@ -1489,7 +1493,7 @@ export default function TradingChart({
                   handleJumpToTrade(tradesList[nextIdx], nextIdx);
                 }}
                 disabled={focusedTradeIndex === tradesList.length - 1}
-                className="px-2.5 py-1 bg-white/[0.04] hover:bg-white/[0.08] disabled:opacity-30 border border-white/[0.08] rounded-xl text-apple-muted hover:text-white flex items-center gap-1 cursor-pointer transition-all"
+                className="px-2.5 py-1 bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] disabled:opacity-30 border border-black/[0.08] dark:border-white/[0.08] rounded-xl text-apple-muted hover:text-apple-text flex items-center gap-1 cursor-pointer transition-all"
               >
                 <span>Next</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -1513,7 +1517,7 @@ export default function TradingChart({
                   onClick={() => handleJumpToTrade(tr, actualIdx)}
                   className={`px-3 py-1.5 rounded-xl border text-xs whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
                     isCurrent
-                      ? 'bg-white/15 text-white border-white/30 shadow-md font-semibold ring-1 ring-apple-blue/50 scale-[1.03] z-10'
+                      ? 'bg-black/10 dark:bg-white/15 text-apple-text border-black/20 dark:border-white/30 shadow-md font-semibold ring-1 ring-apple-blue/50 scale-[1.03] z-10'
                       : isWin
                       ? 'bg-apple-green/5 text-apple-green border-apple-green/20 hover:border-apple-green/50 hover:bg-apple-green/10'
                       : 'bg-apple-red/5 text-apple-red border-apple-red/20 hover:border-apple-red/50 hover:bg-apple-red/10'

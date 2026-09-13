@@ -11,9 +11,9 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   Search, 
-  FileText,
-  Sliders,
-  ChevronRight
+  FileText, 
+  Sliders, 
+  ChevronRight 
 } from 'lucide-react';
 
 export default function StrategyDetail({ 
@@ -28,7 +28,7 @@ export default function StrategyDetail({
   const [tradeSearch, setTradeSearch] = useState('');
   const [activeTab, setActiveTab] = useState('overview'); // overview, yearly, trades
 
-  // Keyboard accessibility: ESC key closes modal (R-32)
+  // Keyboard accessibility: ESC key closes modal
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e) => {
@@ -60,7 +60,6 @@ export default function StrategyDetail({
         setLoading(false);
       })
       .catch(() => {
-        // Kept localStrat from strategiesData
         setLoading(false);
       });
   }, [strategyId, isOpen]);
@@ -96,15 +95,15 @@ export default function StrategyDetail({
 
   return (
     <div 
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-2xl flex items-center justify-center p-3 md:p-6 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-black/40 dark:bg-black/80 backdrop-blur-2xl flex items-center justify-center p-3 md:p-6 overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative w-full max-w-5xl rounded-3xl border border-white/[0.12] bg-[#0C0D12] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-5xl rounded-3xl border border-black/10 dark:border-white/[0.12] bg-white dark:bg-[#0C0D12] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-white/[0.08] p-5 bg-[#101117]/80">
+        <div className="flex items-center justify-between border-b border-black/[0.08] dark:border-white/[0.08] p-5 bg-black/[0.02] dark:bg-[#101117]/80">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${
               isLong 
@@ -115,7 +114,7 @@ export default function StrategyDetail({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base md:text-lg font-semibold text-white tracking-tight">
+                <h2 className="text-base md:text-lg font-semibold text-apple-text tracking-tight">
                   {strategy?.name || 'Strategy Detail'}
                 </h2>
                 <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
@@ -127,7 +126,7 @@ export default function StrategyDetail({
                 }`}>
                   {strategy?.id === 'pure-macro-weekly-ma55' ? 'Macro Dual (Long / Short)' : strategy?.type}
                 </span>
-                <span className="text-xs font-medium px-2 py-0.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-apple-muted uppercase">
+                <span className="text-xs font-medium px-2 py-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.05] border border-black/[0.08] dark:border-white/[0.08] text-apple-muted uppercase">
                   {strategy?.timeframe}
                 </span>
               </div>
@@ -153,7 +152,7 @@ export default function StrategyDetail({
                 playRetroSound('blip');
                 onClose();
               }}
-              className="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/[0.12] active:scale-[0.96] border border-white/10 flex items-center justify-center text-apple-muted hover:text-white transition-all cursor-pointer"
+              className="w-8 h-8 rounded-full bg-black/[0.04] dark:bg-white/[0.05] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] active:scale-[0.96] border border-black/10 dark:border-white/10 flex items-center justify-center text-apple-muted hover:text-apple-text transition-all cursor-pointer"
               aria-label="Close modal"
             >
               <X className="w-4 h-4" />
@@ -162,7 +161,7 @@ export default function StrategyDetail({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center border-b border-white/[0.08] bg-[#0E0F14] px-5 pt-3 gap-2">
+        <div className="flex items-center border-b border-black/[0.08] dark:border-white/[0.08] bg-black/[0.01] dark:bg-[#0E0F14] px-5 pt-3 gap-2">
           {[
             { id: 'overview', label: 'Overview & Logic' },
             { id: 'yearly', label: 'Year-by-Year (YoY)' },
@@ -176,8 +175,8 @@ export default function StrategyDetail({
               }}
               className={`pb-3 px-3.5 border-b-2 text-xs font-medium transition-all cursor-pointer ${
                 activeTab === tab.id
-                  ? 'border-apple-blue text-white font-semibold'
-                  : 'border-transparent text-apple-muted hover:text-white'
+                  ? 'border-apple-blue text-apple-blue dark:text-white font-semibold'
+                  : 'border-transparent text-apple-muted hover:text-apple-text'
               }`}
             >
               {tab.label}
@@ -207,7 +206,7 @@ export default function StrategyDetail({
 
                     <div className="apple-glass-card rounded-2xl p-4">
                       <div className="text-[11px] text-apple-dim uppercase tracking-wider">Win Rate</div>
-                      <div className="text-xl md:text-2xl font-bold text-white font-mono tabular-nums mt-1">
+                      <div className="text-xl md:text-2xl font-bold text-apple-text font-mono tabular-nums mt-1">
                         {winRate}%
                         <span className="text-xs text-apple-muted font-normal ml-1.5">
                           ({winTrades}W / {lossTrades}L)
@@ -236,11 +235,11 @@ export default function StrategyDetail({
                       <FileText className="w-4 h-4" />
                       <span>Strategy Logic & Thesis</span>
                     </div>
-                    <p className="text-xs md:text-sm text-zinc-200 leading-relaxed">
+                    <p className="text-xs md:text-sm text-apple-text leading-relaxed">
                       {strategy.logic_summary}
                     </p>
                     <div className="text-xs text-apple-muted leading-relaxed pt-1">
-                      <span className="text-white font-medium">Recommended Profile:</span> {strategy.recommended_for}
+                      <span className="text-apple-text font-medium">Recommended Profile:</span> {strategy.recommended_for}
                     </div>
                   </div>
 
@@ -253,11 +252,11 @@ export default function StrategyDetail({
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                       {Object.entries(params).map(([key, val]) => (
-                        <div key={key} className="flex items-center justify-between border-b border-white/[0.04] pb-2">
+                        <div key={key} className="flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.04] pb-2">
                           <span className="text-apple-dim uppercase text-[11px]">
                             {key.replace(/_/g, ' ')}
                           </span>
-                          <span className="text-white font-semibold font-mono tabular-nums text-right max-w-[260px] truncate">
+                          <span className="text-apple-text font-semibold font-mono tabular-nums text-right max-w-[260px] truncate">
                             {String(val)}
                           </span>
                         </div>
@@ -274,10 +273,10 @@ export default function StrategyDetail({
                     Historical year-over-year performance (2020-2026) demonstrating algorithmic consistency across market regimes (bull cycles, bear drawdowns, and structural consolidation).
                   </p>
 
-                  <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-white/[0.02]">
+                  <div className="overflow-x-auto rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.01] dark:bg-white/[0.02]">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
-                        <tr className="bg-white/[0.04] text-apple-muted border-b border-white/[0.08] text-[11px] font-medium">
+                        <tr className="bg-black/[0.03] dark:bg-white/[0.04] text-apple-muted border-b border-black/[0.08] dark:border-white/[0.08] text-[11px] font-medium">
                           <th className="p-3.5">Year</th>
                           <th className="p-3.5 text-right">Return</th>
                           <th className="p-3.5 text-right">Win Rate</th>
@@ -286,16 +285,16 @@ export default function StrategyDetail({
                           <th className="p-3.5 text-right">W / L Ratio</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/[0.04]">
+                      <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
                         {yearly.map((y) => (
-                          <tr key={y.year} className="hover:bg-white/[0.04] transition-colors">
-                            <td className="p-3.5 font-semibold text-white font-mono">{y.year}</td>
+                          <tr key={y.year} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.04] transition-colors">
+                            <td className="p-3.5 font-semibold text-apple-text font-mono">{y.year}</td>
                             <td className={`p-3.5 text-right font-semibold font-mono tabular-nums ${
                               (y.total_return_pct || 0) >= 0 ? 'text-apple-green' : 'text-apple-red'
                             }`}>
                               {formatPercent(y.total_return_pct || 0)}
                             </td>
-                            <td className="p-3.5 text-right text-white font-mono tabular-nums">{y.win_rate || 0}%</td>
+                            <td className="p-3.5 text-right text-apple-text font-mono tabular-nums">{y.win_rate || 0}%</td>
                             <td className="p-3.5 text-right text-apple-cyan font-semibold font-mono tabular-nums">{y.profit_factor || 0}x</td>
                             <td className="p-3.5 text-right text-apple-muted font-mono tabular-nums">{y.trades || 0}</td>
                             <td className="p-3.5 text-right text-apple-dim font-mono tabular-nums">
@@ -316,15 +315,15 @@ export default function StrategyDetail({
                   <div className="flex flex-wrap items-center justify-between gap-3 apple-glass-card rounded-2xl p-3.5">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-apple-dim mr-1">Filter:</span>
-                      <div className="flex items-center bg-white/[0.04] border border-white/[0.08] p-0.5 rounded-xl">
+                      <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] p-0.5 rounded-xl">
                         {['ALL', 'WINS', 'LOSSES'].map((f) => (
                           <button
                             key={f}
                             onClick={() => setTradeFilter(f)}
                             className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                               tradeFilter === f
-                                ? 'bg-white/15 text-white shadow-sm font-semibold'
-                                : 'text-apple-muted hover:text-white'
+                                ? 'bg-white dark:bg-white/15 text-apple-text shadow-sm font-semibold'
+                                : 'text-apple-muted hover:text-apple-text'
                             }`}
                           >
                             {f === 'ALL' ? 'All' : f === 'WINS' ? 'Wins' : 'Losses'}
@@ -340,15 +339,15 @@ export default function StrategyDetail({
                         placeholder="Search exit reason or date..."
                         value={tradeSearch}
                         onChange={(e) => setTradeSearch(e.target.value)}
-                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl text-xs pl-8 pr-3 py-1.5 text-white placeholder:text-apple-dim focus:outline-none focus:ring-2 focus:ring-apple-blue/50"
+                        className="w-full bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-xl text-xs pl-8 pr-3 py-1.5 text-apple-text placeholder:text-apple-dim focus:outline-none focus:ring-2 focus:ring-apple-blue/50"
                       />
                     </div>
                   </div>
 
                   {/* Trades Table */}
-                  <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-white/[0.02] max-h-[420px]">
+                  <div className="overflow-x-auto rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.01] dark:bg-white/[0.02] max-h-[420px]">
                     <table className="w-full text-left text-xs border-collapse">
-                      <thead className="sticky top-0 bg-[#15161F] text-apple-muted border-b border-white/[0.08] text-[11px] font-medium z-10">
+                      <thead className="sticky top-0 bg-white dark:bg-[#15161F] text-apple-muted border-b border-black/[0.08] dark:border-white/[0.08] text-[11px] font-medium z-10">
                         <tr>
                           <th className="p-3">#</th>
                           <th className="p-3 text-center">Side</th>
@@ -360,11 +359,11 @@ export default function StrategyDetail({
                           <th className="p-3">Exit Reason</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/[0.04]">
+                      <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
                         {filteredTrades.slice(0, 100).map((t) => {
                           const isWin = (t.net_return_pct || 0) > 0;
                           return (
-                            <tr key={t.trade_no} className="hover:bg-white/[0.04] transition-colors">
+                            <tr key={t.trade_no} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.04] transition-colors">
                               <td className="p-3 font-mono text-apple-dim">#{t.trade_no}</td>
                               <td className="p-3 text-center">
                                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
@@ -383,10 +382,10 @@ export default function StrategyDetail({
                                   ? String(t.exit_time).substring(0, 16).replace('T', ' ')
                                   : 'Active'}
                               </td>
-                              <td className="p-3 text-right font-mono tabular-nums text-white">
+                              <td className="p-3 text-right font-mono tabular-nums text-apple-text">
                                 {formatPrice(t.entry_price)}
                               </td>
-                              <td className="p-3 text-right font-mono tabular-nums text-white">
+                              <td className="p-3 text-right font-mono tabular-nums text-apple-text">
                                 {t.exit_price ? formatPrice(t.exit_price) : '-'}
                               </td>
                               <td className={`p-3 text-right font-mono font-semibold tabular-nums ${

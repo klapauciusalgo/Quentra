@@ -49,6 +49,28 @@ export default function App() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [bannerAlert, setBannerAlert] = useState(null);
 
+  // Theme Management (Light Mode is Default)
+  const [theme, setTheme] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('quentra_theme') || 'light';
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('quentra_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    playRetroSound('blip');
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
   const wsRef = useRef(null);
   const directBinanceWsRef = useRef(null);
 
@@ -302,13 +324,15 @@ export default function App() {
   const activeStrategyObj = strategies.find((s) => s.id === selectedStrategyId) || strategies[0];
 
   return (
-    <div className="min-h-screen bg-[#07080A] text-apple-text flex flex-col font-sans selection:bg-apple-blue selection:text-white">
+    <div className="min-h-screen bg-apple-canvas text-apple-text flex flex-col font-sans selection:bg-apple-blue selection:text-white transition-colors duration-200">
       
       {/* Top Navigation Bar */}
       <Header
         ticker={ticker}
         status={status}
         floor={floor}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onSimulateSignal={handleSimulateSignal}
       />
 
@@ -408,6 +432,7 @@ export default function App() {
               onTimeframeChange={(tf) => setTimeframe(tf)}
               activeStrategy={activeStrategyObj}
               liveTicker={ticker}
+              theme={theme}
             />
           </section>
         )}
@@ -453,11 +478,11 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="border-t border-white/[0.08] bg-[#07080A] py-6 px-4 sm:px-6 text-xs text-apple-muted">
+      <footer className="border-t border-apple-border bg-apple-surface/60 backdrop-blur-md py-6 px-4 sm:px-6 text-xs text-apple-muted transition-colors duration-200">
         <div className="max-w-[1500px] mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
             <span className="w-2 h-2 rounded-full bg-apple-green shadow-[0_0_6px_rgba(48,209,88,0.7)]" />
-            <span className="font-semibold text-white tracking-tight">Quentra Pro</span>
+            <span className="font-semibold text-apple-text tracking-tight">Quentra Pro</span>
             <span className="text-apple-dim">/ Quantitative Trading Infrastructure</span>
           </div>
           <div className="flex items-center gap-4 text-apple-dim">

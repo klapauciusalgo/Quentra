@@ -121,6 +121,15 @@ class BinanceManager:
                             "data": self.ticker_data
                         })
 
+                        # On-the-fly live signal ticker evaluation (dynamic breakeven & intra-bar SL/TP)
+                        try:
+                            from live_signal_engine import live_signal_engine
+                            events = live_signal_engine.on_ticker_tick(price, event_time)
+                            for ev in events:
+                                await self.broadcast(ev)
+                        except Exception as ex:
+                            logger.debug(f"Ticker signal eval: {ex}")
+
             except asyncio.CancelledError:
                 logger.info("Binance WS stream cancelled.")
                 break
@@ -139,13 +148,18 @@ class BinanceManager:
                 retry_delay = min(retry_delay * 1.5, 30)
 
     async def start_kline_stream(self):
-        """Optional secondary kline stream for real-time candle bar close and high/low tracking"""
+        """Dual-stream (30m and 1h) kline listener for real-time bar close and autonomous signal triggering"""
+        combined_kline_url = "wss://stream.binance.com:9443/stream?streams=btcusdt@kline_30m/btcusdt@kline_1h"
         retry_delay = 5
         while True:
             try:
-                async with websockets.connect(BINANCE_WS_KLINE_30M_URL, ping_interval=20, ping_timeout=10) as ws:
+                logger.info(f"Connecting to Binance Combined Klines WS: {combined_kline_url}")
+                async with websockets.connect(combined_kline_url, ping_interval=20, ping_timeout=10) as ws:
                     async for raw_msg in ws:
-                        data = json.loads(raw_msg)
+                        msg = json.loads(raw_msg)
+                        stream = msg.get("stream", "")
+                        tf = "1h" if "1h" in stream else "30m"
+                        data = msg.get("data", {})
                         k = data.get("k", {})
                         if k:
                             candle = {
@@ -157,15 +171,26 @@ class BinanceManager:
                                 "volume": float(k["v"]),
                                 "is_closed": bool(k["x"])
                             }
-                            self.latest_candles["30m"] = candle
+                            self.latest_candles[tf] = candle
                             await self.broadcast({
                                 "type": "KLINE",
-                                "timeframe": "30m",
+                                "timeframe": tf,
                                 "candle": candle
                             })
+
+                            # Autonomous on-the-fly signal evaluation upon candle closure
+                            if candle["is_closed"]:
+                                try:
+                                    from live_signal_engine import live_signal_engine
+                                    await live_signal_engine.on_kline_closed(tf, candle, self)
+                                except Exception as eval_err:
+                                    logger.error(f"Error evaluating closed {tf} candle: {eval_err}", exc_info=True)
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
+                logger.warning(f"Kline WS stream error: {e}. Retrying in {retry_delay}s...")
                 await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 1.5, 30)
 
 binance_manager = BinanceManager()

@@ -258,12 +258,32 @@ export default function App() {
             setFloor(msg.floor);
           } else if (msg.type === 'NEW_SIGNAL') {
             playRetroSound('signal');
+            const direction = msg.ticket?.direction || 'SIGNAL';
+            const isLong = direction === 'LONG';
             setBannerAlert({
-              title: `NEW ${msg.ticket?.direction} SIGNAL DISPATCHED!`,
-              strategy: msg.ticket?.strategy_name,
+              title: `AUTONOMOUS ${direction} SIGNAL DISPATCHED!`,
+              strategy: `${msg.ticket?.strategy_name} @ $${Number(msg.ticket?.entry_price || 0).toLocaleString()} (SL: $${Number(msg.ticket?.stop_loss || 0).toLocaleString()})`,
               price: msg.ticket?.entry_price,
             });
-            setTimeout(() => setBannerAlert(null), 6000);
+            setTimeout(() => setBannerAlert(null), 7000);
+          } else if (msg.type === 'SIGNAL_EXIT') {
+            playRetroSound('alert');
+            const pnl = msg.trade?.net_return_pct;
+            const pnlStr = pnl !== undefined ? `${pnl > 0 ? '+' : ''}${pnl}%` : '';
+            setBannerAlert({
+              title: `AUTONOMOUS POSITION CLOSED: ${msg.strategy_name || ''}`,
+              strategy: `Exit Reason: ${msg.trade?.reason || 'Market'} | PnL: ${pnlStr}`,
+              price: msg.trade?.exit_price,
+            });
+            setTimeout(() => setBannerAlert(null), 7000);
+          } else if (msg.type === 'BREAKEVEN_LOCKED') {
+            playRetroSound('select');
+            setBannerAlert({
+              title: `DYNAMIC BREAKEVEN ENGAGED!`,
+              strategy: `${msg.strategy_name}: Stop Loss advanced to $${Number(msg.new_stop_loss || 0).toLocaleString()} (+0.2% locked)`,
+              price: msg.price,
+            });
+            setTimeout(() => setBannerAlert(null), 5000);
           }
         } catch (err) {
           console.error('Error handling WS message:', err);

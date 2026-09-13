@@ -42,7 +42,7 @@ export function StrategySelectorBar({
             Algo Strategy Runtime
           </span>
           <span className="text-xs text-apple-dim hidden md:inline">
-            / Verified Binance Historical Models
+            / Autonomous Live Engine (On-The-Fly)
           </span>
         </div>
 

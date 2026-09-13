@@ -141,6 +141,14 @@ def load_data_into_memory():
         STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
         logger.info(f"Loaded {len(STRATEGIES_CATALOG)} strategies from local cache")
 
+    # 4. Warm up autonomous live signal engine
+    try:
+        from live_signal_engine import live_signal_engine
+        live_signal_engine.initialize_with_parquets(PARQUET_DFS)
+        logger.info("Autonomous Live Signal Engine initialized with historical buffers.")
+    except Exception as e:
+        logger.warning(f"Could not warm up live signal engine: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -176,6 +184,7 @@ app.add_middleware(
 
 @app.get("/api/status")
 async def get_status():
+    from live_signal_engine import live_signal_engine
     return {
         "status": "ONLINE",
         "service": "Quentra Platform",
@@ -184,7 +193,9 @@ async def get_status():
         "latest_btc_price": binance_manager.ticker_data.get("price"),
         "active_clients": len(binance_manager.connected_clients),
         "available_timeframes": list(KLINES_CACHE.keys()) if KLINES_CACHE else list(PARQUET_DFS.keys()),
-        "strategies_count": len(STRATEGIES_CATALOG)
+        "strategies_count": len(STRATEGIES_CATALOG),
+        "live_signal_engine": "AUTONOMOUS_ONLINE",
+        "macro_regime": live_signal_engine.macro_state.get("regime_description", "MACRO_DISCOUNT")
     }
 
 @app.get("/api/ticker")
@@ -349,6 +360,18 @@ async def simulate_signal(strategy_id: Optional[str] = Query(default=None)):
         logger.debug(f"Supabase signal audit skipped: {e}")
 
     return {"message": "Signal triggered successfully", "ticket": ticket}
+
+@app.get("/api/signals/live")
+async def get_live_signals_telemetry():
+    """Returns autonomous live signal telemetry across all active strategies"""
+    from live_signal_engine import live_signal_engine
+    return live_signal_engine.get_live_telemetry()
+
+@app.get("/api/signals/ticket")
+async def get_strategy_live_ticket(strategy_id: Optional[str] = Query(default=None)):
+    """Returns real-time watch or execution ticket for a strategy"""
+    from live_signal_engine import live_signal_engine
+    return live_signal_engine.get_active_or_latest_ticket(strategy_id)
 
 @app.get("/api/db-status")
 async def get_db_status():

@@ -69,15 +69,43 @@ export default function App() {
 
     // Ticker
     fetch(`${API_BASE}/api/ticker`)
-      .then((r) => r.json())
+      .then((r) => {
+        const ct = r.headers.get('content-type') || '';
+        if (r.ok && ct.includes('application/json')) return r.json();
+        throw new Error('Not JSON');
+      })
       .then((data) => {
         if (data && data.price) setTicker(data);
       })
-      .catch(() => {});
+      .catch(() => {
+        // Direct Bybit public ticker fallback (accessible worldwide)
+        fetch('https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT')
+          .then((r) => r.json())
+          .then((data) => {
+            const item = data?.result?.list?.[0];
+            if (item) {
+              const curPrice = parseFloat(item.lastPrice);
+              const prevPrice = parseFloat(item.prevPrice24h || item.lastPrice);
+              const changePct = ((curPrice - prevPrice) / prevPrice) * 100;
+              setTicker({
+                price: curPrice,
+                change_24h_pct: changePct,
+                high_24h: parseFloat(item.highPrice24h),
+                low_24h: parseFloat(item.lowPrice24h),
+                volume_24h: parseFloat(item.volume24h),
+              });
+            }
+          })
+          .catch(() => {});
+      });
 
     // Floor state for market regime and sessions
     fetch(`${API_BASE}/api/floor`)
-      .then((r) => r.json())
+      .then((r) => {
+        const ct = r.headers.get('content-type') || '';
+        if (r.ok && ct.includes('application/json')) return r.json();
+        throw new Error('Not JSON');
+      })
       .then((data) => {
         if (data && (data.market_regime || data.session)) setFloor(data);
       })
@@ -85,7 +113,11 @@ export default function App() {
 
     // Strategies
     fetch(`${API_BASE}/api/strategies`)
-      .then((r) => r.json())
+      .then((r) => {
+        const ct = r.headers.get('content-type') || '';
+        if (r.ok && ct.includes('application/json')) return r.json();
+        throw new Error('Not JSON');
+      })
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setStrategies(data);
@@ -100,6 +132,34 @@ export default function App() {
   useEffect(() => {
     let reconnectTimeout = null;
     let fallbackTimeout = null;
+
+    function connectDirectBybit() {
+      try {
+        const bybitWs = new WebSocket('wss://stream.bybit.com/v5/public/spot');
+        bybitWs.onopen = () => {
+          bybitWs.send(JSON.stringify({ op: 'subscribe', args: ['tickers.BTCUSDT'] }));
+          setStatus((prev) => ({ ...prev, binance_ws_connected: true, ticker_status: 'BYBIT_LIVE' }));
+        };
+        bybitWs.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.topic === 'tickers.BTCUSDT' && msg.data) {
+              const d = msg.data;
+              const curPrice = parseFloat(d.lastPrice);
+              const prevPrice = parseFloat(d.prevPrice24h || d.lastPrice);
+              const changePct = ((curPrice - prevPrice) / prevPrice) * 100;
+              setTicker({
+                price: curPrice,
+                change_24h_pct: changePct,
+                high_24h: parseFloat(d.highPrice24h),
+                low_24h: parseFloat(d.lowPrice24h),
+                volume_24h: parseFloat(d.volume24h),
+              });
+            }
+          } catch (e) {}
+        };
+      } catch (e) {}
+    }
 
     function connectDirectBinance() {
       if (directBinanceWsRef.current) return;
@@ -130,9 +190,14 @@ export default function App() {
         };
 
         binanceWs.onerror = () => {
-          setStatus((prev) => ({ ...prev, binance_ws_connected: false }));
+          connectDirectBybit();
         };
-      } catch (e) {}
+        binanceWs.onclose = () => {
+          connectDirectBybit();
+        };
+      } catch (e) {
+        connectDirectBybit();
+      }
     }
 
     function connectBackend() {

@@ -10,6 +10,7 @@ import {
 } from 'lightweight-charts';
 import { formatPrice, formatPercent, playRetroSound } from '../utils/formatters';
 import { API_BASE } from '../config';
+import klinesBaseline from '../data/klinesBaseline.json';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -73,8 +74,8 @@ export default function TradingChart({
   const markersPrimitiveRef = useRef(null);
   const priceLinesRef = useRef([]);
 
-  const [loading, setLoading] = useState(true);
-  const [candles, setCandles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [candles, setCandles] = useState(() => klinesBaseline[timeframe] || []);
   const [hoveredData, setHoveredData] = useState(null);
   const [hoveredSignal, setHoveredSignal] = useState(null);
   const [showMarkers, setShowMarkers] = useState(true);
@@ -239,13 +240,19 @@ export default function TradingChart({
   // Fetch Klines whenever timeframe changes with multi-tier edge fallback
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
+
+    // 0. Instantly populate baseline candles for zero-latency initial paint
+    if (klinesBaseline[timeframe] && klinesBaseline[timeframe].length > 0) {
+      setCandles(klinesBaseline[timeframe]);
+      setLoading(false);
+    }
 
     async function loadKlines() {
-      // Tier 1: Try configured backend API
+      // Tier 1: Try configured backend API (validating JSON content-type)
       try {
         const res = await fetch(`${API_BASE}/api/klines?timeframe=${timeframe}&limit=5000`);
-        if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
           if (data && Array.isArray(data.candles) && data.candles.length > 0) {
             if (isMounted) {
@@ -256,18 +263,20 @@ export default function TradingChart({
           }
         }
       } catch (err) {
-        console.warn('Backend klines unavailable, falling back to Binance public stream:', err);
+        console.warn('Backend klines unavailable:', err);
       }
 
-      // Tier 2: Fetch directly from Binance official public REST API
+      // Tier 2: Bybit Spot Public REST API (accessible worldwide & not blocked by Indonesian Nawala)
       try {
-        const binanceInterval = timeframe.toLowerCase();
-        const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${binanceInterval}&limit=1000`);
+        const bybitTfMap = { '30m': '30', '1h': '60', '4h': '240', '1d': 'D', '1w': 'W' };
+        const bybitInterval = bybitTfMap[timeframe] || '60';
+        const res = await fetch(`https://api.bybit.com/v5/market/kline?category=spot&symbol=BTCUSDT&interval=${bybitInterval}&limit=1000`);
         if (res.ok) {
-          const raw = await res.json();
-          if (Array.isArray(raw) && raw.length > 0) {
-            const parsed = raw.map((c) => ({
-              time: Math.floor(c[0] / 1000),
+          const data = await res.json();
+          if (data?.result?.list && Array.isArray(data.result.list) && data.result.list.length > 0) {
+            const reversed = [...data.result.list].reverse();
+            const parsed = reversed.map((c) => ({
+              time: Math.floor(parseInt(c[0], 10) / 1000),
               open: parseFloat(c[1]),
               high: parseFloat(c[2]),
               low: parseFloat(c[3]),
@@ -275,7 +284,6 @@ export default function TradingChart({
               volume: parseFloat(c[5]),
             }));
 
-            // Compute MAs
             const ma8Arr = calculateMAValues(parsed, 8);
             const ma25Arr = calculateMAValues(parsed, 25);
             const ma50Arr = calculateMAValues(parsed, 50);
@@ -299,7 +307,49 @@ export default function TradingChart({
           }
         }
       } catch (err) {
-        console.error('Binance public klines fetch error:', err);
+        console.warn('Bybit public klines unavailable:', err);
+      }
+
+      // Tier 3: Binance official public REST API
+      try {
+        const binanceInterval = timeframe.toLowerCase();
+        const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${binanceInterval}&limit=1000`);
+        if (res.ok) {
+          const raw = await res.json();
+          if (Array.isArray(raw) && raw.length > 0) {
+            const parsed = raw.map((c) => ({
+              time: Math.floor(c[0] / 1000),
+              open: parseFloat(c[1]),
+              high: parseFloat(c[2]),
+              low: parseFloat(c[3]),
+              close: parseFloat(c[4]),
+              volume: parseFloat(c[5]),
+            }));
+
+            const ma8Arr = calculateMAValues(parsed, 8);
+            const ma25Arr = calculateMAValues(parsed, 25);
+            const ma50Arr = calculateMAValues(parsed, 50);
+            const ma55Arr = calculateMAValues(parsed, 55);
+            const ma111Arr = calculateMAValues(parsed, 111);
+
+            const enriched = parsed.map((c, idx) => ({
+              ...c,
+              ma8: ma8Arr[idx],
+              ma25: ma25Arr[idx],
+              ma50: ma50Arr[idx],
+              ma55: ma55Arr[idx],
+              ma111: ma111Arr[idx],
+            }));
+
+            if (isMounted) {
+              setCandles(enriched);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Binance public klines fetch error:', err);
       }
 
       if (isMounted) setLoading(false);

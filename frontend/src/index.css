@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #1A1D26;
+    color: #EDEDF2;
+    font-family: 'Inter', sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Pixel Art Rendering Enforcement */
+.pixelated {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+/* Custom Pixel Borders */
+.border-pixel {
+  border: 2px solid #2D344B;
+  box-shadow: 2px 2px 0px #0C0E14;
+}
+
+.border-pixel-cyan {
+  border: 2px solid #4FE0FF;
+  box-shadow: 0 0 10px rgba(79, 224, 255, 0.4), 2px 2px 0px #0C0E14;
+}
+
+.border-pixel-green {
+  border: 2px solid #39FF88;
+  box-shadow: 0 0 10px rgba(57, 255, 136, 0.4), 2px 2px 0px #0C0E14;
+}
+
+.border-pixel-red {
+  border: 2px solid #FF4B5C;
+  box-shadow: 0 0 10px rgba(255, 75, 92, 0.4), 2px 2px 0px #0C0E14;
+}
+
+.border-pixel-amber {
+  border: 2px solid #FFC145;
+  box-shadow: 0 0 10px rgba(255, 193, 69, 0.4), 2px 2px 0px #0C0E14;
+}
+
+/* Subtle CRT Scanlines */
+.crt-overlay {
+  background: linear-gradient(
+    rgba(18, 21, 29, 0) 50%, 
+    rgba(0, 0, 0, 0.25) 50%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+}
+
+/* Segmented Health-Bar Blocks */
+.confidence-block {
+  width: 8px;
+  height: 14px;
+  margin-right: 2px;
+  display: inline-block;
+  border: 1px solid #1A1D26;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #12151D;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2D344B;
+  border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4FE0FF;
+}
+
+/* Blinking cursor / text */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-blink {
+  animation: blink 1s infinite;
+}

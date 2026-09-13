@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+"""
+QuietAlgo Backend Server.
+FastAPI Application providing:
+- Binance WebSocket live streaming (ticker + klines)
+- Multi-timeframe BTCUSDT historical datasets (30m, 1h, 4h, 1D, 1W)
+- Strategy Catalog with full performance metrics, trade logs, and chart execution markers
+- Pixel Trading Floor interactive state engine
+- Static files hosting for production React frontend build
+"""
+
+import os
+import json
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from typing import Optional
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from binance_ws import binance_manager
+from pixel_floor import floor_engine
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("quietalgo_server")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+FRONTEND_DIST_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend", "dist")
+
+import numpy as np
+import pandas as pd
+import bisect
+
+# In-memory datasets cache
+KLINES_CACHE = {}
+STRATEGIES_CATALOG = []
+STRATEGIES_MAP = {}
+PARQUET_DFS = {}
+PARQUET_TIMESTAMPS = {}
+
+def load_data_into_memory():
+    global KLINES_CACHE, STRATEGIES_CATALOG, STRATEGIES_MAP, PARQUET_DFS, PARQUET_TIMESTAMPS
+    
+    # 1. Load Parquets for full historical coverage (2020-2026)
+    analysis_dir = "/home/ubuntu/BTC-analysis/data"
+    for tf in ["30m", "1h", "4h", "1d", "1w"]:
+        p = os.path.join(DATA_DIR, f"BTCUSDT_{tf}.parquet")
+        if not os.path.exists(p):
+            p = os.path.join(analysis_dir, f"BTCUSDT_{tf}.parquet")
+        if os.path.exists(p):
+            try:
+                df = pd.read_parquet(p)
+                PARQUET_DFS[tf] = df
+                if "timestamp" in df.columns:
+                    PARQUET_TIMESTAMPS[tf] = (df["timestamp"] // 1000).values
+                logger.info(f"Loaded {len(df)} historical bars for timeframe {tf}")
+            except Exception as e:
+                logger.warning(f"Could not load parquet for {tf}: {e}")
+
+    # 2. Load JSON cache
+    klines_path = os.path.join(DATA_DIR, "klines_cache.json")
+    if os.path.exists(klines_path):
+        with open(klines_path, "r") as f:
+            KLINES_CACHE = json.load(f)
+        logger.info(f"Loaded klines cache for timeframes: {list(KLINES_CACHE.keys())}")
+    else:
+        logger.warning("klines_cache.json not found! Run generate_data.py first.")
+
+    # 3. Load strategy catalog
+    strat_path = os.path.join(DATA_DIR, "strategies.json")
+    if os.path.exists(strat_path):
+        with open(strat_path, "r") as f:
+            STRATEGIES_CATALOG = json.load(f)
+        STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
+        logger.info(f"Loaded {len(STRATEGIES_CATALOG)} strategies: {[s['id'] for s in STRATEGIES_CATALOG]}")
+    else:
+        logger.warning("strategies.json not found! Run generate_data.py first.")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Initializing QuietAlgo Backend Server...")
+    load_data_into_memory()
+    
+    # Start Binance WebSocket background tasks
+    ticker_task = asyncio.create_task(binance_manager.start_ticker_stream())
+    kline_task = asyncio.create_task(binance_manager.start_kline_stream())
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down Binance WebSocket tasks...")
+    ticker_task.cancel()
+    kline_task.cancel()
+    await asyncio.gather(ticker_task, kline_task, return_exceptions=True)
+
+app = FastAPI(title="QuietAlgo API", version="1.0.0", lifespan=lifespan)
+
+# Enable CORS for frontend Vite development & production
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# -----------------------------------------------------------------------------
+# REST Endpoints
+# -----------------------------------------------------------------------------
+
+@app.get("/api/status")
+async def get_status():
+    return {
+        "status": "ONLINE",
+        "service": "QuietAlgo Platform",
+        "binance_ws_connected": binance_manager.is_connected,
+        "ticker_status": binance_manager.ticker_data.get("status"),
+        "latest_btc_price": binance_manager.ticker_data.get("price"),
+        "active_clients": len(binance_manager.connected_clients),
+        "available_timeframes": list(KLINES_CACHE.keys()) if KLINES_CACHE else list(PARQUET_DFS.keys()),
+        "strategies_count": len(STRATEGIES_CATALOG)
+    }
+
+@app.get("/api/ticker")
+async def get_ticker():
+    return binance_manager.ticker_data
+
+@app.get("/api/klines")
+async def get_klines(
+    timeframe: str = Query(default="30m", description="Timeframe: 30m, 1h, 4h, 1d, 1w"),
+    limit: int = Query(default=5000, le=20000, description="Number of bars to return"),
+    around_time: Optional[int] = Query(default=None, description="Center klines around this unix timestamp")
+):
+    tf = timeframe.lower()
+    
+    # If around_time is passed and parquet is in memory, slice around that exact timestamp!
+    if around_time and tf in PARQUET_DFS and tf in PARQUET_TIMESTAMPS:
+        df = PARQUET_DFS[tf]
+        timestamps = PARQUET_TIMESTAMPS[tf]
+        idx = bisect.bisect_left(timestamps, around_time)
+        half = limit // 2
+        start_idx = max(0, idx - half)
+        end_idx = min(len(df), idx + half)
+        slice_df = df.iloc[start_idx:end_idx]
+
+        time_arr = (slice_df['timestamp'] // 1000).values
+        open_arr = slice_df['open'].values
+        high_arr = slice_df['high'].values
+        low_arr = slice_df['low'].values
+        close_arr = slice_df['close'].values
+        vol_arr = slice_df['volume'].values if 'volume' in slice_df else np.zeros(len(slice_df))
+        ma8_arr = slice_df['MA8'].values if 'MA8' in slice_df else None
+        ma25_arr = slice_df['MA25'].values if 'MA25' in slice_df else None
+        ma50_arr = slice_df['MA50'].values if 'MA50' in slice_df else None
+        ma55_arr = slice_df['MA55'].values if 'MA55' in slice_df else None
+        ma111_arr = slice_df['MA111'].values if 'MA111' in slice_df else None
+
+        candles = [
+            {
+                "time": int(time_arr[i]),
+                "open": float(open_arr[i]),
+                "high": float(high_arr[i]),
+                "low": float(low_arr[i]),
+                "close": float(close_arr[i]),
+                "volume": float(vol_arr[i]),
+                "ma8": float(ma8_arr[i]) if ma8_arr is not None and not np.isnan(ma8_arr[i]) else None,
+                "ma25": float(ma25_arr[i]) if ma25_arr is not None and not np.isnan(ma25_arr[i]) else None,
+                "ma50": float(ma50_arr[i]) if ma50_arr is not None and not np.isnan(ma50_arr[i]) else None,
+                "ma55": float(ma55_arr[i]) if ma55_arr is not None and not np.isnan(ma55_arr[i]) else None,
+                "ma111": float(ma111_arr[i]) if ma111_arr is not None and not np.isnan(ma111_arr[i]) else None,
+            }
+            for i in range(len(time_arr))
+        ]
+        return {
+            "symbol": "BTCUSDT",
+            "timeframe": tf,
+            "count": len(candles),
+            "candles": candles
+        }
+
+    # Standard path: use klines cache
+    if tf not in KLINES_CACHE:
+        raise HTTPException(status_code=400, detail=f"Unsupported timeframe '{timeframe}'. Choose from: {list(KLINES_CACHE.keys())}")
+    
+    data = KLINES_CACHE[tf]
+    sliced = data[-limit:] if limit < len(data) else data
+
+    # If live price exists, inject or update the latest unfinished bar close
+    live_price = binance_manager.ticker_data.get("price")
+    if sliced and live_price and live_price > 0:
+        last_candle = dict(sliced[-1])
+        last_candle["close"] = float(live_price)
+        last_candle["high"] = max(last_candle["high"], float(live_price))
+        last_candle["low"] = min(last_candle["low"], float(live_price))
+        sliced = sliced[:-1] + [last_candle]
+
+    return {
+        "symbol": "BTCUSDT",
+        "timeframe": tf,
+        "count": len(sliced),
+        "candles": sliced
+    }
+
+@app.get("/api/strategies")
+async def list_strategies():
+    summaries = []
+    for s in STRATEGIES_CATALOG:
+        summary = {
+            "id": s["id"],
+            "name": s["name"],
+            "short_name": s.get("short_name", s["name"]),
+            "type": s["type"],
+            "timeframe": s["timeframe"],
+            "category": s.get("category", ""),
+            "archetype": s.get("archetype", ""),
+            "risk_tier": s.get("risk_tier", "Moderate"),
+            "recommended_for": s.get("recommended_for", ""),
+            "badge": s.get("badge", ""),
+            "metrics": s.get("metrics", {}),
+            "parameters": s.get("parameters", {}),
+            "logic_summary": s.get("logic_summary", ""),
+            "yearly_stats": s.get("yearly_stats", []),
+            "markers": s.get("markers", []),
+            "trades": s.get("trades", [])
+        }
+        summaries.append(summary)
+    return summaries
+
+@app.get("/api/strategies/{strategy_id}")
+async def get_strategy_detail(strategy_id: str):
+    if strategy_id not in STRATEGIES_MAP:
+        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
+    return STRATEGIES_MAP[strategy_id]
+
+@app.get("/api/floor")
+async def get_floor_state():
+    price = binance_manager.ticker_data.get("price", 77300.0)
+    return floor_engine.get_floor_state(price)
+
+@app.post("/api/floor/select-agent")
+async def select_agent(agent_id: str = Query(...)):
+    floor_engine.set_active_agent(agent_id)
+    price = binance_manager.ticker_data.get("price", 77300.0)
+    state = floor_engine.get_floor_state(price)
+    await binance_manager.broadcast({
+        "type": "FLOOR_UPDATE",
+        "floor": state
+    })
+    return state
+
+@app.post("/api/floor/simulate-signal")
+async def simulate_signal(strategy_id: Optional[str] = Query(default=None)):
+    strat = STRATEGIES_MAP.get(strategy_id) if strategy_id else STRATEGIES_CATALOG[0]
+    if not strat:
+        strat = STRATEGIES_CATALOG[0]
+    
+    price = binance_manager.ticker_data.get("price", 77300.0)
+    ticket = floor_engine.trigger_signal(
+        strategy_id=strat["id"],
+        strategy_name=strat["name"],
+        direction=strat["type"],
+        current_price=price
+    )
+    floor_state = floor_engine.get_floor_state(price)
+    
+    await binance_manager.broadcast({
+        "type": "NEW_SIGNAL",
+        "ticket": ticket,
+        "floor": floor_state
+    })
+    return {"message": "Signal triggered successfully", "ticket": ticket}
+
+# -----------------------------------------------------------------------------
+# WebSocket Endpoint
+# -----------------------------------------------------------------------------
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await binance_manager.register(websocket)
+    try:
+        while True:
+            msg_text = await websocket.receive_text()
+            try:
+                data = json.loads(msg_text)
+                action = data.get("action")
+                if action == "SELECT_AGENT":
+                    agent_id = data.get("agent_id")
+                    floor_engine.set_active_agent(agent_id)
+                    price = binance_manager.ticker_data.get("price", 77300.0)
+                    await websocket.send_json({
+                        "type": "FLOOR_UPDATE",
+                        "floor": floor_engine.get_floor_state(price)
+                    })
+                elif action == "PING":
+                    await websocket.send_json({"type": "PONG", "time": binance_manager.last_tick_time})
+            except Exception as ex:
+                logger.warning(f"Error handling WS message: {ex}")
+    except WebSocketDisconnect:
+        binance_manager.unregister(websocket)
+    except Exception as e:
+        binance_manager.unregister(websocket)
+
+# -----------------------------------------------------------------------------
+# Static files mount for React Production Build
+# -----------------------------------------------------------------------------
+if os.path.exists(FRONTEND_DIST_DIR):
+    logger.info(f"Mounting static frontend build from {FRONTEND_DIST_DIR}")
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST_DIR, html=True), name="static")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=False)

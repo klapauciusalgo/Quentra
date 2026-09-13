@@ -11,11 +11,7 @@ export default {
       return fetch(backendUrl.toString(), request);
     }
 
-    // Serve frontend static assets with SPA fallback to /index.html
-    let response = await env.ASSETS.fetch(request);
-    if (response.status === 404 && !url.pathname.includes('.')) {
-      response = await env.ASSETS.fetch(new Request(new URL('/index.html', request.url), request));
-    }
-    return response;
+    // Serve frontend static assets (Cloudflare automatically handles SPA routing via not_found_handling)
+    return env.ASSETS.fetch(request);
   }
 };

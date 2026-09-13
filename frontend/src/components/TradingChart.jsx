@@ -9,6 +9,7 @@ import {
   createSeriesMarkers 
 } from 'lightweight-charts';
 import { formatPrice, formatPercent, playRetroSound } from '../utils/formatters';
+import { API_BASE } from '../config';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -224,7 +225,7 @@ export default function TradingChart({
     let isMounted = true;
     setLoading(true);
 
-    fetch(`/api/klines?timeframe=${timeframe}&limit=5000`)
+    fetch(`${API_BASE}/api/klines?timeframe=${timeframe}&limit=5000`)
       .then((res) => res.json())
       .then((data) => {
         if (!isMounted) return;
@@ -701,7 +702,7 @@ export default function TradingChart({
 
       if (entrySec < minCandleTime || entrySec > maxCandleTime) {
         setLoading(true);
-        fetch(`/api/klines?timeframe=${timeframe}&around_time=${entrySec}&limit=3000`)
+        fetch(`${API_BASE}/api/klines?timeframe=${timeframe}&around_time=${entrySec}&limit=3000`)
           .then((res) => res.json())
           .then((data) => {
             if (data && data.candles && data.candles.length > 0) {

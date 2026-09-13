@@ -7,6 +7,7 @@ import StrategyDetail from './components/StrategyDetail';
 import RiskCalculator from './components/RiskCalculator';
 import { playRetroSound } from './utils/formatters';
 import { Bell } from 'lucide-react';
+import { API_BASE, getWsUrl } from './config';
 
 export default function App() {
   const [status, setStatus] = useState({
@@ -35,7 +36,7 @@ export default function App() {
   // 1. Fetch initial platform data
   useEffect(() => {
     // Status
-    fetch('/api/status')
+    fetch(`${API_BASE}/api/status`)
       .then((r) => r.json())
       .then((data) => {
         setStatus(data);
@@ -46,7 +47,7 @@ export default function App() {
       .catch(console.error);
 
     // Ticker
-    fetch('/api/ticker')
+    fetch(`${API_BASE}/api/ticker`)
       .then((r) => r.json())
       .then((data) => {
         if (data && data.price) setTicker(data);
@@ -54,13 +55,13 @@ export default function App() {
       .catch(console.error);
 
     // Floor state for market regime and sessions
-    fetch('/api/floor')
+    fetch(`${API_BASE}/api/floor`)
       .then((r) => r.json())
       .then((data) => setFloor(data))
       .catch(console.error);
 
     // Strategies (now includes markers and parameters)
-    fetch('/api/strategies')
+    fetch(`${API_BASE}/api/strategies`)
       .then((r) => r.json())
       .then((data) => {
         setStrategies(data);
@@ -77,9 +78,7 @@ export default function App() {
     let reconnectTimeout = null;
 
     function connect() {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
-
+      const wsUrl = getWsUrl();
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

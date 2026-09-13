@@ -11,7 +11,8 @@ import {
   AlertTriangle, 
   Search, 
   FileText,
-  Sliders
+  Sliders,
+  ChevronRight
 } from 'lucide-react';
 
 export default function StrategyDetail({ 
@@ -25,6 +26,19 @@ export default function StrategyDetail({
   const [tradeFilter, setTradeFilter] = useState('ALL'); // ALL, WINS, LOSSES
   const [tradeSearch, setTradeSearch] = useState('');
   const [activeTab, setActiveTab] = useState('overview'); // overview, yearly, trades
+
+  // Keyboard accessibility: ESC key closes modal (R-32)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        playRetroSound('blip');
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (!strategyId || !isOpen) return;
@@ -63,35 +77,44 @@ export default function StrategyDetail({
   });
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 overflow-y-auto">
-      <div className="relative w-full max-w-5xl bg-floor-dark border-2 border-floor-border shadow-2xl flex flex-col max-h-[92vh] font-mono animate-in zoom-in-95 duration-200">
+    <div 
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-2xl flex items-center justify-center p-3 md:p-6 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="relative w-full max-w-5xl rounded-3xl border border-white/[0.12] bg-[#0C0D12] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b-2 border-floor-border p-4 bg-floor-darker">
+        <div className="flex items-center justify-between border-b border-white/[0.08] p-5 bg-[#101117]/80">
           <div className="flex items-center gap-3">
-            <div className={`p-2 border ${isLong ? 'border-signal-bull text-signal-bull bg-signal-bull/10' : 'border-signal-bear text-signal-bear bg-signal-bear/10'}`}>
+            <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${
+              isLong 
+                ? 'border-apple-green/30 text-apple-green bg-apple-green/10' 
+                : 'border-apple-red/30 text-apple-red bg-apple-red/10'
+            }`}>
               <TrendingUp className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-pixel text-xs md:text-sm text-retro-text tracking-wide">
+                <h2 className="text-base md:text-lg font-semibold text-white tracking-tight">
                   {strategy?.name || 'Strategy Detail'}
                 </h2>
-                <span className={`text-[10px] font-pixel px-2 py-0.5 border ${
+                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
                   strategy?.id === 'pure-macro-weekly-ma55'
-                    ? 'text-signal-cyan border-signal-cyan/50 bg-signal-cyan/10'
+                    ? 'text-apple-cyan border-apple-cyan/30 bg-apple-cyan/10'
                     : isLong
-                    ? 'text-signal-bull border-signal-bull/50'
-                    : 'text-signal-bear border-signal-bear/50'
+                    ? 'text-apple-green border-apple-green/30 bg-apple-green/10'
+                    : 'text-apple-red border-apple-red/30 bg-apple-red/10'
                 }`}>
-                  {strategy?.id === 'pure-macro-weekly-ma55' ? 'MACRO DUAL (LONG / SHORT)' : strategy?.type}
+                  {strategy?.id === 'pure-macro-weekly-ma55' ? 'Macro Dual (Long / Short)' : strategy?.type}
                 </span>
-                <span className="text-xs font-bold px-1.5 py-0.5 bg-floor-wall text-retro-muted uppercase">
+                <span className="text-xs font-medium px-2 py-0.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-apple-muted uppercase">
                   {strategy?.timeframe}
                 </span>
               </div>
-              <p className="text-xs text-signal-cyan font-sans mt-0.5">
-                {strategy?.category} // {strategy?.archetype}
+              <p className="text-xs text-apple-blue font-medium mt-0.5">
+                {strategy?.category} / {strategy?.archetype}
               </p>
             </div>
           </div>
@@ -103,28 +126,29 @@ export default function StrategyDetail({
                 if (onSelectStrategy && strategy) onSelectStrategy(strategy.id);
                 onClose();
               }}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-signal-cyan text-floor-darker font-pixel text-[10px] hover:bg-signal-cyan/90 transition-colors shadow-pixel-cyan font-bold"
+              className="hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 bg-apple-blue hover:bg-blue-600 active:scale-[0.98] text-white text-xs font-semibold rounded-xl transition-all shadow-sm cursor-pointer"
             >
-              PLOT TO CHART
+              Plot to Chart
             </button>
             <button
               onClick={() => {
                 playRetroSound('blip');
                 onClose();
               }}
-              className="p-1.5 hover:bg-floor-wall text-retro-muted hover:text-retro-text border border-floor-border"
+              className="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/[0.12] active:scale-[0.96] border border-white/10 flex items-center justify-center text-apple-muted hover:text-white transition-all cursor-pointer"
+              aria-label="Close modal"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center border-b border-floor-border bg-floor-bg px-4 pt-2 gap-2 text-xs">
+        <div className="flex items-center border-b border-white/[0.08] bg-[#0E0F14] px-5 pt-3 gap-2">
           {[
-            { id: 'overview', label: '📊 OVERVIEW & LOGIC' },
-            { id: 'yearly', label: '📅 YEAR-BY-YEAR (YoY)' },
-            { id: 'trades', label: `📑 TRADE HISTORY (${trades.length})` },
+            { id: 'overview', label: 'Overview & Logic' },
+            { id: 'yearly', label: 'Year-by-Year (YoY)' },
+            { id: 'trades', label: `Trade Logs (${trades.length})` },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -132,10 +156,10 @@ export default function StrategyDetail({
                 playRetroSound('blip');
                 setActiveTab(tab.id);
               }}
-              className={`pb-2.5 px-3 border-b-2 font-pixel text-[10px] transition-colors ${
+              className={`pb-3 px-3.5 border-b-2 text-xs font-medium transition-all cursor-pointer ${
                 activeTab === tab.id
-                  ? 'border-signal-cyan text-signal-cyan font-bold'
-                  : 'border-transparent text-retro-muted hover:text-retro-text'
+                  ? 'border-apple-blue text-white font-semibold'
+                  : 'border-transparent text-apple-muted hover:text-white'
               }`}
             >
               {tab.label}
@@ -144,10 +168,10 @@ export default function StrategyDetail({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-5 md:p-7 space-y-6">
           {loading ? (
-            <div className="py-20 text-center font-pixel text-xs text-signal-cyan animate-pulse">
-              LOADING STRATEGY INTELLIGENCE...
+            <div className="py-24 text-center text-xs text-apple-muted animate-pulse">
+              Loading quantitative intelligence...
             </div>
           ) : (
             <>
@@ -155,67 +179,67 @@ export default function StrategyDetail({
               {activeTab === 'overview' && (
                 <div className="space-y-6">
                   {/* Performance Scorecard */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-floor-darker border border-floor-border p-4">
-                    <div>
-                      <div className="text-[10px] text-retro-dim">TOTAL NET RETURN</div>
-                      <div className="text-base sm:text-xl font-bold text-signal-bull">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="apple-glass-card rounded-2xl p-4">
+                      <div className="text-[11px] text-apple-dim uppercase tracking-wider">Total Net Return</div>
+                      <div className="text-xl md:text-2xl font-bold text-apple-green font-mono tabular-nums mt-1">
                         +{Number(m.total_return_pct || 0).toLocaleString()}%
                       </div>
                     </div>
 
-                    <div>
-                      <div className="text-[10px] text-retro-dim">WIN RATE</div>
-                      <div className="text-base sm:text-xl font-bold text-retro-text">
+                    <div className="apple-glass-card rounded-2xl p-4">
+                      <div className="text-[11px] text-apple-dim uppercase tracking-wider">Win Rate</div>
+                      <div className="text-xl md:text-2xl font-bold text-white font-mono tabular-nums mt-1">
                         {m.win_rate_pct || 0}%
-                        <span className="text-xs text-retro-muted font-normal ml-1">
+                        <span className="text-xs text-apple-muted font-normal ml-1.5">
                           ({m.win_trades || 0}W / {m.loss_trades || 0}L)
                         </span>
                       </div>
                     </div>
 
-                    <div>
-                      <div className="text-[10px] text-retro-dim">PROFIT FACTOR</div>
-                      <div className="text-base sm:text-xl font-bold text-signal-cyan">
+                    <div className="apple-glass-card rounded-2xl p-4">
+                      <div className="text-[11px] text-apple-dim uppercase tracking-wider">Profit Factor</div>
+                      <div className="text-xl md:text-2xl font-bold text-apple-cyan font-mono tabular-nums mt-1">
                         {m.profit_factor || 0}x
                       </div>
                     </div>
 
-                    <div>
-                      <div className="text-[10px] text-retro-dim">MAX DRAWDOWN</div>
-                      <div className="text-base sm:text-xl font-bold text-signal-bear">
+                    <div className="apple-glass-card rounded-2xl p-4">
+                      <div className="text-[11px] text-apple-dim uppercase tracking-wider">Max Drawdown</div>
+                      <div className="text-xl md:text-2xl font-bold text-apple-red font-mono tabular-nums mt-1">
                         {m.max_drawdown_pct || 0}%
                       </div>
                     </div>
                   </div>
 
                   {/* Quantitative Rationale & Logic */}
-                  <div className="bg-floor-darker border border-floor-border p-4 space-y-2">
-                    <div className="text-xs font-pixel text-signal-cyan flex items-center gap-1.5">
+                  <div className="apple-glass-card rounded-2xl p-5 space-y-2.5">
+                    <div className="text-xs font-semibold text-apple-blue flex items-center gap-1.5 uppercase tracking-wider">
                       <FileText className="w-4 h-4" />
-                      <span>STRATEGY LOGIC & THESIS</span>
+                      <span>Strategy Logic & Thesis</span>
                     </div>
-                    <p className="text-xs text-retro-text leading-relaxed font-sans">
+                    <p className="text-xs md:text-sm text-zinc-200 leading-relaxed">
                       {strategy.logic_summary}
                     </p>
-                    <p className="text-xs text-retro-muted leading-relaxed font-sans pt-1">
-                      <strong className="text-signal-warn">Recommended Profile:</strong> {strategy.recommended_for}
-                    </p>
+                    <div className="text-xs text-apple-muted leading-relaxed pt-1">
+                      <span className="text-white font-medium">Recommended Profile:</span> {strategy.recommended_for}
+                    </div>
                   </div>
 
                   {/* Exact Parameter Matrix */}
-                  <div className="bg-floor-darker border border-floor-border p-4 space-y-3">
-                    <div className="text-xs font-pixel text-signal-warn flex items-center gap-1.5">
+                  <div className="apple-glass-card rounded-2xl p-5 space-y-3.5">
+                    <div className="text-xs font-semibold text-apple-orange flex items-center gap-1.5 uppercase tracking-wider">
                       <Sliders className="w-4 h-4" />
-                      <span>EXECUTION PARAMETERS & RULES</span>
+                      <span>Execution Parameters & Mathematical Rules</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                       {Object.entries(params).map(([key, val]) => (
-                        <div key={key} className="flex items-center justify-between border-b border-floor-border/60 pb-1.5">
-                          <span className="text-retro-dim uppercase text-[11px]">
+                        <div key={key} className="flex items-center justify-between border-b border-white/[0.04] pb-2">
+                          <span className="text-apple-dim uppercase text-[11px]">
                             {key.replace(/_/g, ' ')}
                           </span>
-                          <span className="text-retro-text font-bold text-right max-w-[240px] truncate">
+                          <span className="text-white font-semibold font-mono tabular-nums text-right max-w-[260px] truncate">
                             {String(val)}
                           </span>
                         </div>
@@ -228,35 +252,35 @@ export default function StrategyDetail({
               {/* TAB 2: YEAR-BY-YEAR (YoY) */}
               {activeTab === 'yearly' && (
                 <div className="space-y-4">
-                  <div className="text-xs text-retro-muted">
-                    Historical year-over-year performance (2020 – 2026) showing algorithmic consistency across market regimes (Bull Cycles, Bear Markets, Consolidation).
-                  </div>
+                  <p className="text-xs text-apple-muted">
+                    Historical year-over-year performance (2020-2026) demonstrating algorithmic consistency across market regimes (bull cycles, bear drawdowns, and structural consolidation).
+                  </p>
 
-                  <div className="overflow-x-auto border border-floor-border bg-floor-darker">
-                    <table className="w-full text-left font-mono text-xs border-collapse">
+                  <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-white/[0.02]">
+                    <table className="w-full text-left text-xs border-collapse">
                       <thead>
-                        <tr className="bg-floor-wall text-retro-dim border-b border-floor-border text-[11px]">
-                          <th className="p-3">YEAR</th>
-                          <th className="p-3 text-right">RETURN</th>
-                          <th className="p-3 text-right">WIN RATE</th>
-                          <th className="p-3 text-right">PROFIT FACTOR</th>
-                          <th className="p-3 text-right">TRADE COUNT</th>
-                          <th className="p-3 text-right">W / L</th>
+                        <tr className="bg-white/[0.04] text-apple-muted border-b border-white/[0.08] text-[11px] font-medium">
+                          <th className="p-3.5">Year</th>
+                          <th className="p-3.5 text-right">Return</th>
+                          <th className="p-3.5 text-right">Win Rate</th>
+                          <th className="p-3.5 text-right">Profit Factor</th>
+                          <th className="p-3.5 text-right">Trade Count</th>
+                          <th className="p-3.5 text-right">W / L Ratio</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-floor-border">
+                      <tbody className="divide-y divide-white/[0.04]">
                         {yearly.map((y) => (
-                          <tr key={y.year} className="hover:bg-floor-wall/40">
-                            <td className="p-3 font-bold text-retro-text">{y.year}</td>
-                            <td className={`p-3 text-right font-bold ${
-                              (y.total_return_pct || 0) >= 0 ? 'text-signal-bull' : 'text-signal-bear'
+                          <tr key={y.year} className="hover:bg-white/[0.04] transition-colors">
+                            <td className="p-3.5 font-semibold text-white font-mono">{y.year}</td>
+                            <td className={`p-3.5 text-right font-semibold font-mono tabular-nums ${
+                              (y.total_return_pct || 0) >= 0 ? 'text-apple-green' : 'text-apple-red'
                             }`}>
                               {formatPercent(y.total_return_pct || 0)}
                             </td>
-                            <td className="p-3 text-right text-retro-text">{y.win_rate || 0}%</td>
-                            <td className="p-3 text-right text-signal-cyan font-bold">{y.profit_factor || 0}x</td>
-                            <td className="p-3 text-right text-retro-muted">{y.trades || 0}</td>
-                            <td className="p-3 text-right text-retro-dim">
+                            <td className="p-3.5 text-right text-white font-mono tabular-nums">{y.win_rate || 0}%</td>
+                            <td className="p-3.5 text-right text-apple-cyan font-semibold font-mono tabular-nums">{y.profit_factor || 0}x</td>
+                            <td className="p-3.5 text-right text-apple-muted font-mono tabular-nums">{y.trades || 0}</td>
+                            <td className="p-3.5 text-right text-apple-dim font-mono tabular-nums">
                               {y.wins || 0}W / {y.losses || 0}L
                             </td>
                           </tr>
@@ -271,76 +295,89 @@ export default function StrategyDetail({
               {activeTab === 'trades' && (
                 <div className="space-y-4">
                   {/* Trade Search & Filter Bar */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 bg-floor-darker border border-floor-border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 apple-glass-card rounded-2xl p-3.5">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] text-retro-dim mr-1">FILTER:</span>
-                      {['ALL', 'WINS', 'LOSSES'].map((f) => (
-                        <button
-                          key={f}
-                          onClick={() => setTradeFilter(f)}
-                          className={`px-2 py-0.5 border text-xs ${
-                            tradeFilter === f
-                              ? 'border-signal-cyan bg-signal-cyan/15 text-signal-cyan font-bold'
-                              : 'border-floor-border bg-floor-wall text-retro-muted'
-                          }`}
-                        >
-                          {f}
-                        </button>
-                      ))}
+                      <span className="text-xs text-apple-dim mr-1">Filter:</span>
+                      <div className="flex items-center bg-white/[0.04] border border-white/[0.08] p-0.5 rounded-xl">
+                        {['ALL', 'WINS', 'LOSSES'].map((f) => (
+                          <button
+                            key={f}
+                            onClick={() => setTradeFilter(f)}
+                            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                              tradeFilter === f
+                                ? 'bg-white/15 text-white shadow-sm font-semibold'
+                                : 'text-apple-muted hover:text-white'
+                            }`}
+                          >
+                            {f === 'ALL' ? 'All' : f === 'WINS' ? 'Wins' : 'Losses'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
-                    <div className="relative min-w-[200px]">
-                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-retro-dim" />
+                    <div className="relative min-w-[220px]">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-apple-dim" />
                       <input
                         type="text"
-                        placeholder="Filter by exit reason or date..."
+                        placeholder="Search exit reason or date..."
                         value={tradeSearch}
                         onChange={(e) => setTradeSearch(e.target.value)}
-                        className="w-full bg-floor-bg border border-floor-border text-xs pl-8 pr-3 py-1 text-retro-text focus:border-signal-cyan focus:outline-none"
+                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl text-xs pl-8 pr-3 py-1.5 text-white placeholder:text-apple-dim focus:outline-none focus:ring-2 focus:ring-apple-blue/50"
                       />
                     </div>
                   </div>
 
                   {/* Trades Table */}
-                  <div className="overflow-x-auto border border-floor-border bg-floor-darker max-h-[380px]">
-                    <table className="w-full text-left font-mono text-xs border-collapse">
-                      <thead className="sticky top-0 bg-floor-wall text-retro-dim border-b border-floor-border text-[11px]">
+                  <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-white/[0.02] max-h-[420px]">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="sticky top-0 bg-[#15161F] text-apple-muted border-b border-white/[0.08] text-[11px] font-medium z-10">
                         <tr>
-                          <th className="p-2.5">#</th>
-                          <th className="p-2.5 text-center">SIDE</th>
-                          <th className="p-2.5">ENTRY TIME</th>
-                          <th className="p-2.5">EXIT TIME</th>
-                          <th className="p-2.5 text-right">ENTRY PRICE</th>
-                          <th className="p-2.5 text-right">EXIT PRICE</th>
-                          <th className="p-2.5 text-right">NET RETURN</th>
-                          <th className="p-2.5">EXIT REASON</th>
+                          <th className="p-3">#</th>
+                          <th className="p-3 text-center">Side</th>
+                          <th className="p-3">Entry Time</th>
+                          <th className="p-3">Exit Time</th>
+                          <th className="p-3 text-right">Entry Price</th>
+                          <th className="p-3 text-right">Exit Price</th>
+                          <th className="p-3 text-right">Net Return</th>
+                          <th className="p-3">Exit Reason</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-floor-border">
+                      <tbody className="divide-y divide-white/[0.04]">
                         {filteredTrades.slice(0, 100).map((t) => {
                           const isWin = (t.net_return_pct || 0) > 0;
-                          const side = t.side || t.type || strategy.type;
                           return (
-                            <tr key={t.trade_no} className="hover:bg-floor-wall/40 text-[11px]">
-                              <td className="p-2.5 text-retro-dim">#{t.trade_no}</td>
-                              <td className="p-2.5 text-center">
-                                <span className={`text-[10px] font-pixel px-1.5 py-0.5 border ${
-                                  side === 'LONG'
-                                    ? 'border-signal-bull/50 text-signal-bull bg-signal-bull/10'
-                                    : 'border-signal-bear/50 text-signal-bear bg-signal-bear/10'
+                            <tr key={t.trade_no} className="hover:bg-white/[0.04] transition-colors">
+                              <td className="p-3 font-mono text-apple-dim">#{t.trade_no}</td>
+                              <td className="p-3 text-center">
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                  (t.side || strategy?.type) === 'LONG'
+                                    ? 'bg-apple-green/10 text-apple-green'
+                                    : 'bg-apple-red/10 text-apple-red'
                                 }`}>
-                                  {side}
+                                  {t.side || strategy?.type}
                                 </span>
                               </td>
-                              <td className="p-2.5 text-retro-text">{String(t.entry_time).substring(0, 16)}</td>
-                              <td className="p-2.5 text-retro-muted">{String(t.exit_time).substring(0, 16)}</td>
-                              <td className="p-2.5 text-right text-retro-text">{formatPrice(t.entry_price)}</td>
-                              <td className="p-2.5 text-right text-retro-text">{formatPrice(t.exit_price)}</td>
-                              <td className={`p-2.5 text-right font-bold ${isWin ? 'text-signal-bull' : 'text-signal-bear'}`}>
+                              <td className="p-3 font-mono text-apple-muted text-[11px]">
+                                {String(t.entry_time).substring(0, 16).replace('T', ' ')}
+                              </td>
+                              <td className="p-3 font-mono text-apple-muted text-[11px]">
+                                {t.exit_time && !String(t.exit_time).includes('RUNNING')
+                                  ? String(t.exit_time).substring(0, 16).replace('T', ' ')
+                                  : 'Active'}
+                              </td>
+                              <td className="p-3 text-right font-mono tabular-nums text-white">
+                                {formatPrice(t.entry_price)}
+                              </td>
+                              <td className="p-3 text-right font-mono tabular-nums text-white">
+                                {t.exit_price ? formatPrice(t.exit_price) : '-'}
+                              </td>
+                              <td className={`p-3 text-right font-mono font-semibold tabular-nums ${
+                                isWin ? 'text-apple-green' : 'text-apple-red'
+                              }`}>
                                 {formatPercent(t.net_return_pct || 0)}
                               </td>
-                              <td className="p-2.5 text-retro-muted truncate max-w-[200px]">
-                                {t.exit_reason || '-'}
+                              <td className="p-3 text-[11px] text-apple-muted truncate max-w-[180px]">
+                                {t.exit_reason || 'Exit Rule'}
                               </td>
                             </tr>
                           );
@@ -348,43 +385,10 @@ export default function StrategyDetail({
                       </tbody>
                     </table>
                   </div>
-                  {filteredTrades.length > 100 && (
-                    <div className="text-[11px] text-retro-dim text-center">
-                      Displaying recent 100 trades of {filteredTrades.length} total.
-                    </div>
-                  )}
                 </div>
               )}
             </>
           )}
-        </div>
-
-        {/* Modal Footer */}
-        <div className="border-t-2 border-floor-border p-3.5 bg-floor-darker flex items-center justify-between">
-          <div className="text-xs text-retro-muted hidden sm:block">
-            Ground-truth verified from 2020–2026 Binance spot & futures execution logs.
-          </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
-              onClick={() => {
-                playRetroSound('select');
-                if (onSelectStrategy && strategy) onSelectStrategy(strategy.id);
-                onClose();
-              }}
-              className="flex-1 sm:flex-none px-4 py-2 bg-signal-cyan text-floor-darker font-pixel text-xs font-bold hover:bg-signal-cyan/90 transition-colors shadow-pixel-cyan"
-            >
-              PLOT STRATEGY ON BTCUSDT CHART
-            </button>
-            <button
-              onClick={() => {
-                playRetroSound('blip');
-                onClose();
-              }}
-              className="px-4 py-2 bg-floor-wall hover:bg-floor-border border border-floor-border text-retro-text text-xs"
-            >
-              CLOSE
-            </button>
-          </div>
         </div>
 
       </div>

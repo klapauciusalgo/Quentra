@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { formatPrice, formatPercent, playRetroSound, isAudioEnabled, toggleAudio } from '../utils/formatters';
-import { Radio, Volume2, VolumeX, Zap, Activity, Clock, ShieldCheck } from 'lucide-react';
+import { Volume2, VolumeX, Zap, Activity, Clock, ChevronDown, Check } from 'lucide-react';
 
 export default function Header({ ticker, status, floor, onSimulateSignal }) {
   const [audioActive, setAudioActive] = useState(true);
@@ -11,7 +11,7 @@ export default function Header({ ticker, status, floor, onSimulateSignal }) {
     if (ticker?.price && ticker.price !== prevPrice) {
       setPriceFlash(ticker.price > prevPrice ? 'up' : 'down');
       setPrevPrice(ticker.price);
-      const t = setTimeout(() => setPriceFlash(null), 800);
+      const t = setTimeout(() => setPriceFlash(null), 600);
       return () => clearTimeout(t);
     }
   }, [ticker?.price]);
@@ -25,51 +25,43 @@ export default function Header({ ticker, status, floor, onSimulateSignal }) {
   const isPositive = (ticker?.change_24h_pct || 0) >= 0;
 
   return (
-    <header className="border-b-2 border-floor-border bg-floor-darker px-4 py-2.5 sticky top-0 z-40">
-      <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
+    <header className="sticky top-0 z-40 backdrop-blur-2xl bg-[#07080A]/80 border-b border-white/[0.08] transition-all">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
         
-        {/* Logo & Brand */}
+        {/* Brand & Platform Identity */}
         <div className="flex items-center gap-3">
-          <div className="relative w-9 h-9 bg-floor-wall border-2 border-signal-cyan flex items-center justify-center shadow-pixel-cyan">
-            {/* 16-bit mini floor logo */}
-            <div className="grid grid-cols-3 gap-0.5 w-5 h-5">
-              <span className="bg-signal-cyan"></span>
-              <span className="bg-signal-bull"></span>
-              <span className="bg-signal-cyan"></span>
-              <span className="bg-floor-bg"></span>
-              <span className="bg-signal-warn"></span>
-              <span className="bg-floor-bg"></span>
-              <span className="bg-signal-bear"></span>
-              <span className="bg-signal-cyan"></span>
-              <span className="bg-signal-bull"></span>
-            </div>
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-b from-white/[0.12] to-white/[0.02] border border-white/15 flex items-center justify-center shadow-sm">
+            <span className="w-3.5 h-3.5 rounded-sm bg-apple-blue flex items-center justify-center text-[9px] font-bold text-white">
+              Q
+            </span>
           </div>
+
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-pixel text-xs md:text-sm text-retro-text tracking-wider">
-                QUEN<span className="text-signal-cyan">TRA</span>
-              </h1>
-              <span className="bg-signal-cyan/10 border border-signal-cyan/40 text-signal-cyan font-mono text-[10px] px-1.5 py-0.5 rounded-none font-bold">
-                v2.6 PRO
+              <span className="font-semibold text-base tracking-tight text-white">
+                Quentra
+              </span>
+              <span className="px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase rounded-full bg-apple-blue/15 text-apple-cyan border border-apple-blue/30">
+                Pro
               </span>
             </div>
-            <p className="text-[11px] text-retro-muted font-mono hidden sm:block">
-              Algorithmic Strategy Hub & Real-Time Analytics
+            <p className="text-[11px] text-apple-muted hidden sm:block">
+              Quantitative Algorithmic Platform
             </p>
           </div>
         </div>
 
-        {/* Live BTC Ticker & 24h Stats */}
-        <div className="flex items-center gap-4 bg-floor-bg border border-floor-border px-3 py-1.5 rounded-none">
+        {/* Live BTC Ticker Telemetry */}
+        <div className="flex items-center gap-3 bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.08] rounded-2xl px-3.5 py-1.5 transition-colors">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-bold text-signal-warn">BTC/USDT</span>
+            <span className="text-xs font-semibold text-apple-muted tracking-wide">BTC/USDT</span>
             <span
-              className={`font-mono font-bold text-sm md:text-base tracking-tight transition-colors duration-200 ${
+              className={`font-mono text-sm md:text-base font-bold tabular-nums transition-colors duration-200 ${
                 priceFlash === 'up'
-                  ? 'text-signal-bull'
+                  ? 'text-apple-green'
                   : priceFlash === 'down'
-                  ? 'text-signal-bear'
-                  : 'text-retro-text'
+                  ? 'text-apple-red'
+                  : 'text-white'
               }`}
             >
               {formatPrice(ticker?.price || 77300)}
@@ -77,77 +69,78 @@ export default function Header({ ticker, status, floor, onSimulateSignal }) {
           </div>
 
           <div
-            className={`font-mono text-xs font-semibold px-2 py-0.5 border ${
+            className={`text-xs font-medium px-2 py-0.5 rounded-full border tabular-nums ${
               isPositive
-                ? 'text-signal-bull border-signal-bull/30 bg-signal-bull/10'
-                : 'text-signal-bear border-signal-bear/30 bg-signal-bear/10'
+                ? 'text-apple-green bg-apple-green/10 border-apple-green/20'
+                : 'text-apple-red bg-apple-red/10 border-apple-red/20'
             }`}
           >
             {formatPercent(ticker?.change_24h_pct || 0)}
           </div>
 
-          <div className="hidden lg:flex items-center gap-3 text-[11px] font-mono text-retro-muted border-l border-floor-border pl-3">
+          <div className="hidden xl:flex items-center gap-3 text-xs text-apple-muted border-l border-white/10 pl-3">
             <div>
-              <span className="text-retro-dim">24h High: </span>
-              <span className="text-retro-text">{formatPrice(ticker?.high_24h || 79800)}</span>
+              <span className="text-apple-dim">High: </span>
+              <span className="text-zinc-200 font-mono tabular-nums">{formatPrice(ticker?.high_24h || 79800)}</span>
             </div>
             <div>
-              <span className="text-retro-dim">24h Low: </span>
-              <span className="text-retro-text">{formatPrice(ticker?.low_24h || 76100)}</span>
+              <span className="text-apple-dim">Low: </span>
+              <span className="text-zinc-200 font-mono tabular-nums">{formatPrice(ticker?.low_24h || 76100)}</span>
             </div>
           </div>
         </div>
 
-        {/* Status Indicators & Controls */}
+        {/* Status Indicators & Tactile Controls */}
         <div className="flex items-center gap-2.5">
-          {/* Market Session */}
-          <div className="hidden md:flex items-center gap-1.5 bg-floor-wall/80 border border-floor-border px-2.5 py-1 text-[11px] font-mono text-retro-muted">
-            <Clock className="w-3.5 h-3.5 text-signal-warn" />
-            <span>{floor?.session?.name || 'Asia / Global Market'}</span>
+          {/* Market Session Pill */}
+          <div className="hidden md:flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.08] rounded-full px-3 py-1 text-xs text-apple-muted">
+            <Clock className="w-3.5 h-3.5 text-apple-orange" />
+            <span className="truncate max-w-[140px]">{floor?.session?.name || 'Asia Market'}</span>
           </div>
 
-          {/* Binance WS Live Badge */}
-          <div className="flex items-center gap-1.5 bg-floor-wall border border-floor-border px-2.5 py-1 text-[11px] font-mono">
+          {/* Binance WebSocket Status */}
+          <div className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.08] rounded-full px-3 py-1 text-xs">
             <span
               className={`w-2 h-2 rounded-full ${
                 status?.binance_ws_connected
-                  ? 'bg-signal-bull animate-pulse shadow-pixel-green'
-                  : 'bg-signal-warn animate-pulse'
+                  ? 'bg-apple-green shadow-[0_0_8px_rgba(48,209,88,0.5)]'
+                  : 'bg-apple-orange animate-pulse'
               }`}
             />
-            <span className="hidden sm:inline text-retro-muted">BINANCE WS:</span>
+            <span className="hidden sm:inline text-apple-muted font-normal">Stream:</span>
             <span
-              className={`font-bold ${
-                status?.binance_ws_connected ? 'text-signal-bull' : 'text-signal-warn'
+              className={`font-medium ${
+                status?.binance_ws_connected ? 'text-apple-green' : 'text-apple-orange'
               }`}
             >
-              {status?.binance_ws_connected ? 'LIVE' : 'RECONNECTING'}
+              {status?.binance_ws_connected ? 'Live' : 'Syncing'}
             </span>
           </div>
 
-          {/* Dispatch Test Signal */}
+          {/* Dispatch Simulated Signal Trigger */}
           <button
             onClick={() => {
               playRetroSound('signal');
               if (onSimulateSignal) onSimulateSignal();
             }}
-            className="flex items-center gap-1.5 bg-signal-cyan/10 hover:bg-signal-cyan/20 border border-signal-cyan text-signal-cyan text-[11px] font-pixel px-2.5 py-1.5 transition-all shadow-pixel-cyan hover:scale-[1.02] active:scale-95"
-            title="Dispatch a real-time signal alert to test the floor!"
+            className="flex items-center gap-1.5 bg-white/[0.08] hover:bg-white/[0.14] active:scale-[0.98] border border-white/15 text-white text-xs font-medium px-3 py-1.5 rounded-full transition-all cursor-pointer min-h-[34px]"
+            title="Dispatch a real-time signal alert to test execution feed"
           >
-            <Zap className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">DISPATCH</span>
+            <Zap className="w-3.5 h-3.5 text-apple-cyan" />
+            <span className="hidden sm:inline">Test Signal</span>
           </button>
 
-          {/* Audio Toggle */}
+          {/* Audio Haptics Toggle */}
           <button
             onClick={handleAudioToggle}
-            className="p-1.5 bg-floor-wall hover:bg-floor-border border border-floor-border text-retro-muted hover:text-retro-text transition-colors"
-            title={audioActive ? 'Mute 8-bit sound effects' : 'Enable 8-bit sound effects'}
+            className="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/[0.1] active:scale-[0.96] border border-white/10 flex items-center justify-center text-apple-muted hover:text-white transition-all cursor-pointer min-w-[44px] min-h-[44px]"
+            title={audioActive ? 'Mute haptic audio feedback' : 'Enable haptic audio feedback'}
+            aria-label="Toggle audio"
           >
             {audioActive ? (
-              <Volume2 className="w-4 h-4 text-signal-cyan" />
+              <Volume2 className="w-4 h-4 text-apple-blue" />
             ) : (
-              <VolumeX className="w-4 h-4 text-retro-dim" />
+              <VolumeX className="w-4 h-4 text-apple-dim" />
             )}
           </button>
         </div>

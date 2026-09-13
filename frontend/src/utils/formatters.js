@@ -1,4 +1,4 @@
-// Number, Currency & Time Formatters
+// Number, Currency & Time Formatters for Quentra
 
 export function formatPrice(val) {
   if (val === undefined || val === null || isNaN(val)) return '$0.00';
@@ -34,7 +34,8 @@ export function formatDateTime(ts) {
   }
 }
 
-// 8-bit Retro Synthesizer using Web Audio API (zero audio files needed!)
+// Apple-Grade Acoustic Haptic Audio using Web Audio API
+// Emulates refined physical click / haptic feedback (zero audio files needed)
 let audioCtx = null;
 let soundEnabled = true;
 
@@ -68,43 +69,41 @@ export function playRetroSound(type = 'blip') {
     const now = audioCtx.currentTime;
 
     if (type === 'blip') {
-      // Short UI click blip
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(440, now);
-      osc.frequency.exponentialRampToValueAtTime(880, now + 0.05);
-      gain.gain.setValueAtTime(0.04, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+      // Apple soft haptic tap
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(320, now + 0.025);
+      gain.gain.setValueAtTime(0.025, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.025);
       osc.start(now);
-      osc.stop(now + 0.05);
+      osc.stop(now + 0.025);
     } else if (type === 'select') {
-      // Crisp 8-bit select chime
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(523.25, now); // C5
-      osc.frequency.setValueAtTime(659.25, now + 0.04); // E5
-      gain.gain.setValueAtTime(0.06, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      // Apple refined selection tick
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(600, now);
+      osc.frequency.exponentialRampToValueAtTime(900, now + 0.035);
+      gain.gain.setValueAtTime(0.03, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
       osc.start(now);
-      osc.stop(now + 0.12);
+      osc.stop(now + 0.04);
     } else if (type === 'signal') {
-      // Exciting arcade high-score fanfare
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(392.00, now); // G4
-      osc.frequency.setValueAtTime(523.25, now + 0.08); // C5
-      osc.frequency.setValueAtTime(659.25, now + 0.16); // E5
-      osc.frequency.setValueAtTime(783.99, now + 0.24); // G5
-      gain.gain.setValueAtTime(0.08, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      // Apple notification chime (dual sine wave)
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, now); // D5
+      osc.frequency.setValueAtTime(880.00, now + 0.08); // A5
+      gain.gain.setValueAtTime(0.04, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
       osc.start(now);
-      osc.stop(now + 0.45);
+      osc.stop(now + 0.35);
     } else if (type === 'desk_click') {
-      // Office desk terminal keypress
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(320, now);
-      osc.frequency.exponentialRampToValueAtTime(200, now + 0.06);
-      gain.gain.setValueAtTime(0.05, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      // Soft mechanical key tap
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(240, now);
+      osc.frequency.exponentialRampToValueAtTime(120, now + 0.03);
+      gain.gain.setValueAtTime(0.03, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
       osc.start(now);
-      osc.stop(now + 0.06);
+      osc.stop(now + 0.03);
     }
   } catch (e) {
     // Audio context may be restricted by browser policy before user interaction

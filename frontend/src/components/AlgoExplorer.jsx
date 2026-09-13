@@ -10,11 +10,11 @@ import {
   Activity, 
   Check, 
   Eye, 
-  Sparkles, 
   Table, 
   LayoutGrid,
   Filter,
-  Search
+  Search,
+  ChevronRight
 } from 'lucide-react';
 
 export default function AlgoExplorer({ 
@@ -62,129 +62,129 @@ export default function AlgoExplorer({
   }, [strategies, directionFilter, timeframeFilter, archetypeFilter, sortBy, searchQuery]);
 
   return (
-    <div className="bg-floor-dark border-2 border-floor-border p-4 md:p-6 space-y-6">
+    <div className="apple-glass rounded-3xl p-5 md:p-7 space-y-6">
       
       {/* Header & Title */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-floor-border pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.08] pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 bg-signal-bull animate-pulse"></span>
-            <h2 className="font-pixel text-xs md:text-sm text-retro-text tracking-wider">
-              ALGO STRATEGY EXPLORER
+          <div className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-apple-green shadow-[0_0_8px_rgba(48,209,88,0.6)]" />
+            <h2 className="font-semibold text-lg md:text-xl text-white tracking-tight">
+              Algorithm Strategy Directory
             </h2>
-            <span className="bg-signal-cyan/10 border border-signal-cyan/40 text-signal-cyan font-mono text-[10px] px-1.5 py-0.5">
-              {strategies.length} STRATEGIES READY
+            <span className="bg-apple-blue/15 border border-apple-blue/30 text-apple-cyan text-[11px] font-medium px-2.5 py-0.5 rounded-full">
+              {strategies.length} Verified Models
             </span>
           </div>
-          <p className="text-xs text-retro-muted font-mono mt-1">
-            Discover quantitative trading strategies calibrated for your risk profile, timeframe, and profit targets.
+          <p className="text-xs md:text-sm text-apple-muted mt-1 max-w-2xl">
+            Explore quantitative trading systems calibrated with empirical backtest performance and disciplined risk limits.
           </p>
         </div>
 
-        {/* View Mode Toggle */}
-        <div className="flex items-center gap-1 bg-floor-darker border border-floor-border p-1">
+        {/* View Mode Segmented Control */}
+        <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] p-1 rounded-xl">
           <button
             onClick={() => {
               playRetroSound('blip');
               setViewMode('cards');
             }}
-            className={`p-1.5 flex items-center gap-1 font-mono text-xs ${
-              viewMode === 'cards' ? 'bg-signal-cyan text-floor-darker font-bold' : 'text-retro-muted hover:text-retro-text'
+            className={`px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+              viewMode === 'cards' ? 'bg-white/15 text-white shadow-sm font-semibold' : 'text-apple-muted hover:text-white'
             }`}
           >
             <LayoutGrid className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Cards</span>
+            <span>Cards</span>
           </button>
           <button
             onClick={() => {
               playRetroSound('blip');
               setViewMode('table');
             }}
-            className={`p-1.5 flex items-center gap-1 font-mono text-xs ${
-              viewMode === 'table' ? 'bg-signal-cyan text-floor-darker font-bold' : 'text-retro-muted hover:text-retro-text'
+            className={`px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+              viewMode === 'table' ? 'bg-white/15 text-white shadow-sm font-semibold' : 'text-apple-muted hover:text-white'
             }`}
           >
             <Table className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Matrix</span>
+            <span>Matrix</span>
           </button>
         </div>
       </div>
 
       {/* Filter & Preference Matcher Toolbar */}
-      <div className="bg-floor-darker border border-floor-border p-3.5 space-y-3">
-        {/* Row 1: Direction & Timeframe */}
+      <div className="apple-glass-card rounded-2xl p-4 space-y-3.5">
+        {/* Row 1: Direction, Timeframe, Search */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           
           {/* Direction Filter */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-pixel text-retro-dim mr-1">TYPE:</span>
-            {['ALL', 'LONG', 'SHORT'].map((type) => (
-              <button
-                key={type}
-                onClick={() => {
-                  playRetroSound('blip');
-                  setDirectionFilter(type);
-                }}
-                className={`font-pixel text-[10px] px-2.5 py-1 border transition-all ${
-                  directionFilter === type
-                    ? type === 'LONG'
-                      ? 'border-signal-bull bg-signal-bull text-floor-darker font-bold'
-                      : type === 'SHORT'
-                      ? 'border-signal-bear bg-signal-bear text-floor-darker font-bold'
-                      : 'border-signal-cyan bg-signal-cyan text-floor-darker font-bold'
-                    : 'border-floor-border bg-floor-wall text-retro-muted hover:text-retro-text'
-                }`}
-              >
-                {type}
-              </button>
-            ))}
+            <span className="text-xs text-apple-dim font-medium mr-1">Type:</span>
+            <div className="flex items-center bg-white/[0.04] border border-white/[0.08] p-0.5 rounded-xl">
+              {['ALL', 'LONG', 'SHORT'].map((type) => (
+                <button
+                  key={type}
+                  onClick={() => {
+                    playRetroSound('blip');
+                    setDirectionFilter(type);
+                  }}
+                  className={`text-xs px-3 py-1 rounded-lg transition-all font-medium cursor-pointer ${
+                    directionFilter === type
+                      ? 'bg-white/15 text-white font-semibold shadow-sm'
+                      : 'text-apple-muted hover:text-white'
+                  }`}
+                >
+                  {type === 'ALL' ? 'All' : type === 'LONG' ? 'Long' : 'Short'}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Timeframe Filter */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-pixel text-retro-dim mr-1">TF:</span>
-            {['ALL', '30m', '1h', '4h', '1w'].map((tf) => (
-              <button
-                key={tf}
-                onClick={() => {
-                  playRetroSound('blip');
-                  setTimeframeFilter(tf);
-                }}
-                className={`font-mono text-xs px-2.5 py-0.5 border uppercase transition-all ${
-                  timeframeFilter.toLowerCase() === tf.toLowerCase()
-                    ? 'border-signal-cyan bg-signal-cyan/15 text-signal-cyan font-bold'
-                    : 'border-floor-border bg-floor-wall text-retro-muted hover:text-retro-text'
-                }`}
-              >
-                {tf}
-              </button>
-            ))}
+            <span className="text-xs text-apple-dim font-medium mr-1">Timeframe:</span>
+            <div className="flex items-center bg-white/[0.04] border border-white/[0.08] p-0.5 rounded-xl">
+              {['ALL', '30m', '1h', '4h', '1w'].map((tf) => (
+                <button
+                  key={tf}
+                  onClick={() => {
+                    playRetroSound('blip');
+                    setTimeframeFilter(tf);
+                  }}
+                  className={`text-xs px-2.5 py-1 rounded-lg uppercase transition-all font-medium cursor-pointer ${
+                    timeframeFilter.toLowerCase() === tf.toLowerCase()
+                      ? 'bg-white/15 text-white font-semibold shadow-sm'
+                      : 'text-apple-muted hover:text-white'
+                  }`}
+                >
+                  {tf}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Search Box */}
-          <div className="relative min-w-[200px] flex-1 max-w-xs">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-retro-dim" />
+          <div className="relative min-w-[220px] flex-1 max-w-sm">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-apple-dim" />
             <input
               type="text"
-              placeholder="Search algorithms (e.g. Scalp, Alpha, V2)..."
+              placeholder="Search by name, archetype, or logic..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-floor-bg border border-floor-border text-xs font-mono pl-8 pr-3 py-1.5 text-retro-text placeholder:text-retro-dim focus:border-signal-cyan focus:outline-none"
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl text-xs pl-9 pr-3.5 py-2 text-white placeholder:text-apple-dim focus:outline-none focus:ring-2 focus:ring-apple-blue/50 transition-all"
             />
           </div>
 
         </div>
 
         {/* Row 2: Archetype Quick Filters & Sorting */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-floor-border pt-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
           {/* Quick Style Filters */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-mono text-retro-dim mr-1">PREFERENCE:</span>
+            <span className="text-xs text-apple-dim font-medium mr-1">Profile:</span>
             {[
               { id: 'ALL', label: 'All Profiles' },
-              { id: 'HIGH_WINRATE', label: '🎯 High Win Rate (65%+)' },
-              { id: 'RUNNER', label: '🚀 Mega Runners (+1,000%+)' },
-              { id: 'DEFENSIVE', label: '🛡️ Low Drawdown (<30%)' },
+              { id: 'HIGH_WINRATE', label: 'High Win Rate (65%+)' },
+              { id: 'RUNNER', label: 'Trend Runners (+1,000%+)' },
+              { id: 'DEFENSIVE', label: 'Low Drawdown (<30%)' },
             ].map((pref) => (
               <button
                 key={pref.id}
@@ -192,10 +192,10 @@ export default function AlgoExplorer({
                   playRetroSound('blip');
                   setArchetypeFilter(pref.id);
                 }}
-                className={`font-mono text-[11px] px-2 py-0.5 border transition-all ${
+                className={`text-xs px-3 py-1 rounded-full border transition-all cursor-pointer ${
                   archetypeFilter === pref.id
-                    ? 'border-signal-warn bg-signal-warn/15 text-signal-warn font-semibold'
-                    : 'border-floor-border bg-floor-wall/50 text-retro-muted hover:text-retro-text'
+                    ? 'bg-apple-orange/15 text-apple-orange border-apple-orange/40 font-medium'
+                    : 'bg-white/[0.02] border-white/[0.06] text-apple-muted hover:text-white hover:bg-white/[0.06]'
                 }`}
               >
                 {pref.label}
@@ -203,22 +203,22 @@ export default function AlgoExplorer({
             ))}
           </div>
 
-          {/* Sort By Dropdown */}
+          {/* Sort Dropdown */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono text-retro-dim">SORT BY:</span>
+            <span className="text-xs text-apple-dim font-medium">Sort:</span>
             <select
               value={sortBy}
               onChange={(e) => {
                 playRetroSound('blip');
                 setSortBy(e.target.value);
               }}
-              className="bg-floor-bg border border-floor-border text-retro-text font-mono text-xs px-2.5 py-1 focus:border-signal-cyan focus:outline-none cursor-pointer"
+              className="bg-white/[0.05] border border-white/[0.08] text-white rounded-xl text-xs px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-apple-blue/50 cursor-pointer"
             >
-              <option value="return">Total Return (Highest)</option>
-              <option value="winrate">Win Rate (Highest)</option>
-              <option value="pf">Profit Factor (Highest)</option>
-              <option value="dd">Max Drawdown (Lowest)</option>
-              <option value="trades">Trade Count (Most)</option>
+              <option value="return" className="bg-zinc-900 text-white">Total Return (Highest)</option>
+              <option value="winrate" className="bg-zinc-900 text-white">Win Rate (Highest)</option>
+              <option value="pf" className="bg-zinc-900 text-white">Profit Factor (Highest)</option>
+              <option value="dd" className="bg-zinc-900 text-white">Max Drawdown (Lowest)</option>
+              <option value="trades" className="bg-zinc-900 text-white">Trade Count (Most)</option>
             </select>
           </div>
         </div>
@@ -236,114 +236,108 @@ export default function AlgoExplorer({
             return (
               <div
                 key={algo.id}
-                className={`relative bg-floor-darker border-2 transition-all duration-200 p-4 flex flex-col justify-between group ${
+                className={`apple-glass-card rounded-2xl p-5 flex flex-col justify-between transition-all duration-200 group ${
                   isSelected
-                    ? 'border-signal-cyan shadow-pixel-cyan bg-floor-darker/95'
-                    : 'border-floor-border hover:border-floor-borderLight'
+                    ? 'ring-2 ring-apple-blue/60 bg-[#161724]/90 border-white/20'
+                    : 'hover:border-white/20'
                 }`}
               >
                 {/* Card Top: Badges & Title */}
                 <div>
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    {/* Direction & Timeframe */}
-                    <div className="flex items-center gap-1.5">
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2">
                       <span
-                        className={`font-pixel text-[9px] px-2 py-0.5 border flex items-center gap-1 ${
+                        className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
                           isLong
-                            ? 'border-signal-bull/60 text-signal-bull bg-signal-bull/10'
-                            : 'border-signal-bear/60 text-signal-bear bg-signal-bear/10'
+                            ? 'border-apple-green/40 text-apple-green bg-apple-green/10'
+                            : 'border-apple-red/40 text-apple-red bg-apple-red/10'
                         }`}
                       >
-                        {isLong ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                        {algo.type}
+                        {isLong ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                        <span>{algo.type}</span>
                       </span>
-                      <span className="font-mono text-xs px-1.5 py-0.5 bg-floor-wall border border-floor-border text-retro-muted uppercase font-bold">
+                      <span className="text-xs px-2 py-0.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-apple-muted uppercase font-medium">
                         {algo.timeframe}
                       </span>
                     </div>
 
-                    {/* Highlight Badge */}
                     {algo.badge && (
-                      <span className="font-mono text-[10px] text-signal-warn bg-signal-warn/10 border border-signal-warn/30 px-2 py-0.5 truncate max-w-[170px]">
-                        ★ {algo.badge}
+                      <span className="text-[11px] text-apple-orange bg-apple-orange/10 border border-apple-orange/25 px-2.5 py-0.5 rounded-full font-medium truncate max-w-[170px]">
+                        {algo.badge}
                       </span>
                     )}
                   </div>
 
-                  <h3 className="font-pixel text-xs text-retro-text tracking-wide mb-1 group-hover:text-signal-cyan transition-colors">
+                  <h3 className="text-base font-semibold text-white tracking-tight mb-1 group-hover:text-apple-cyan transition-colors">
                     {algo.name}
                   </h3>
 
-                  <div className="text-[11px] font-mono text-signal-cyan/90 mb-3">
-                    // {algo.category || algo.archetype}
+                  <div className="text-xs text-apple-blue font-medium mb-3">
+                    {algo.category || algo.archetype}
                   </div>
 
                   {/* 4 Core Metrics Grid */}
-                  <div className="grid grid-cols-2 gap-2 bg-floor-bg border border-floor-border p-2.5 mb-3 font-mono">
-                    {/* Return */}
+                  <div className="grid grid-cols-2 gap-2.5 bg-white/[0.02] border border-white/[0.06] rounded-xl p-3 mb-3">
                     <div>
-                      <div className="text-[10px] text-retro-dim">TOTAL RETURN</div>
-                      <div className="font-bold text-sm text-signal-bull">
+                      <div className="text-[10px] text-apple-dim uppercase tracking-wider">Total Return</div>
+                      <div className="font-semibold text-sm text-apple-green font-mono tabular-nums mt-0.5">
                         +{Number(m.total_return_pct || 0).toLocaleString()}%
                       </div>
                     </div>
 
-                    {/* Win Rate */}
                     <div>
-                      <div className="text-[10px] text-retro-dim">WIN RATE</div>
-                      <div className="font-bold text-sm text-retro-text">
+                      <div className="text-[10px] text-apple-dim uppercase tracking-wider">Win Rate</div>
+                      <div className="font-semibold text-sm text-white font-mono tabular-nums mt-0.5">
                         {m.win_rate_pct || 0}%
-                        <span className="text-[10px] text-retro-muted font-normal ml-1">
+                        <span className="text-[10px] text-apple-muted font-normal ml-1">
                           ({m.total_trades || 0}T)
                         </span>
                       </div>
                     </div>
 
-                    {/* Profit Factor */}
                     <div>
-                      <div className="text-[10px] text-retro-dim">PROFIT FACTOR</div>
-                      <div className="font-bold text-sm text-signal-cyan">
+                      <div className="text-[10px] text-apple-dim uppercase tracking-wider">Profit Factor</div>
+                      <div className="font-semibold text-sm text-apple-cyan font-mono tabular-nums mt-0.5">
                         {m.profit_factor || 0}x
                       </div>
                     </div>
 
-                    {/* Max Drawdown */}
                     <div>
-                      <div className="text-[10px] text-retro-dim">MAX DRAWDOWN</div>
-                      <div className="font-bold text-sm text-signal-bear">
+                      <div className="text-[10px] text-apple-dim uppercase tracking-wider">Max Drawdown</div>
+                      <div className="font-semibold text-sm text-apple-red font-mono tabular-nums mt-0.5">
                         {m.max_drawdown_pct || 0}%
                       </div>
                     </div>
                   </div>
 
                   {/* Recommended Thesis */}
-                  <p className="text-xs text-retro-muted leading-relaxed font-sans mb-4 line-clamp-2">
+                  <p className="text-xs text-apple-muted leading-relaxed mb-4 line-clamp-2">
                     {algo.recommended_for}
                   </p>
                 </div>
 
                 {/* Card Actions */}
-                <div className="border-t border-floor-border pt-3 flex items-center gap-2">
+                <div className="border-t border-white/[0.06] pt-3 flex items-center gap-2">
                   <button
                     onClick={() => {
                       playRetroSound('select');
                       if (onSelectStrategy) onSelectStrategy(algo.id);
                     }}
-                    className={`flex-1 py-2 font-pixel text-[10px] border transition-all flex items-center justify-center gap-1.5 ${
+                    className={`flex-1 py-2 text-xs font-medium rounded-xl border transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[38px] ${
                       isSelected
-                        ? 'bg-signal-cyan border-signal-cyan text-floor-darker font-bold shadow-pixel-cyan'
-                        : 'bg-floor-wall hover:bg-floor-border border-floor-border text-retro-text'
+                        ? 'bg-apple-blue text-white border-apple-blue shadow-sm font-semibold'
+                        : 'bg-white/[0.05] hover:bg-white/[0.1] border-white/[0.08] text-white'
                     }`}
                   >
                     {isSelected ? (
                       <>
-                        <Check className="w-3.5 h-3.5" />
-                        <span>CHART ACTIVE</span>
+                        <Check className="w-4 h-4 text-white" />
+                        <span>Active on Chart</span>
                       </>
                     ) : (
                       <>
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>PLOT TO CHART</span>
+                        <Eye className="w-4 h-4 text-apple-muted" />
+                        <span>Plot to Chart</span>
                       </>
                     )}
                   </button>
@@ -353,10 +347,11 @@ export default function AlgoExplorer({
                       playRetroSound('blip');
                       if (onOpenDetail) onOpenDetail(algo.id);
                     }}
-                    className="px-3 py-2 bg-floor-bg hover:bg-floor-wall border border-floor-border text-signal-cyan font-mono text-xs transition-colors"
+                    className="px-3 py-2 bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] text-white text-xs font-medium rounded-xl transition-colors cursor-pointer min-h-[38px] flex items-center gap-1"
                     title="View full parameters & trade history"
                   >
-                    DETAIL &gt;
+                    <span>Details</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-apple-muted" />
                   </button>
                 </div>
 
@@ -368,22 +363,22 @@ export default function AlgoExplorer({
 
       {/* View Mode: Comparison Matrix Table */}
       {viewMode === 'table' && (
-        <div className="overflow-x-auto border border-floor-border bg-floor-darker">
-          <table className="w-full text-left font-mono text-xs border-collapse">
+        <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-white/[0.02]">
+          <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-floor-wall text-retro-dim border-b border-floor-border text-[11px]">
-                <th className="p-3">STRATEGY</th>
-                <th className="p-3 text-center">TYPE</th>
-                <th className="p-3 text-center">TIMEFRAME</th>
-                <th className="p-3 text-right">TOTAL RETURN</th>
-                <th className="p-3 text-right">WIN RATE</th>
-                <th className="p-3 text-right">PROFIT FACTOR</th>
-                <th className="p-3 text-right">MAX DRAWDOWN</th>
-                <th className="p-3 text-right">TRADES</th>
-                <th className="p-3 text-center">ACTION</th>
+              <tr className="bg-white/[0.04] text-apple-muted border-b border-white/[0.08] text-[11px] font-medium">
+                <th className="p-3.5">Strategy</th>
+                <th className="p-3.5 text-center">Type</th>
+                <th className="p-3.5 text-center">Timeframe</th>
+                <th className="p-3.5 text-right">Total Return</th>
+                <th className="p-3.5 text-right">Win Rate</th>
+                <th className="p-3.5 text-right">Profit Factor</th>
+                <th className="p-3.5 text-right">Max Drawdown</th>
+                <th className="p-3.5 text-right">Trades</th>
+                <th className="p-3.5 text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-floor-border">
+            <tbody className="divide-y divide-white/[0.04]">
               {filteredStrategies.map((algo) => {
                 const isSelected = selectedStrategyId === algo.id;
                 const isLong = algo.type === 'LONG';
@@ -392,60 +387,60 @@ export default function AlgoExplorer({
                 return (
                   <tr
                     key={algo.id}
-                    className={`hover:bg-floor-wall/50 transition-colors ${
-                      isSelected ? 'bg-signal-cyan/5 border-l-4 border-l-signal-cyan' : ''
+                    className={`hover:bg-white/[0.04] transition-colors ${
+                      isSelected ? 'bg-apple-blue/10 border-l-2 border-l-apple-blue' : ''
                     }`}
                   >
-                    <td className="p-3">
-                      <div className="font-pixel text-xs text-retro-text">{algo.name}</div>
-                      <div className="text-[11px] text-retro-muted">{algo.archetype}</div>
+                    <td className="p-3.5">
+                      <div className="font-semibold text-white">{algo.name}</div>
+                      <div className="text-[11px] text-apple-muted">{algo.archetype}</div>
                     </td>
-                    <td className="p-3 text-center">
+                    <td className="p-3.5 text-center">
                       <span
-                        className={`text-[10px] font-pixel px-2 py-0.5 border ${
+                        className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
                           isLong
-                            ? 'text-signal-bull border-signal-bull/40 bg-signal-bull/10'
-                            : 'text-signal-bear border-signal-bear/40 bg-signal-bear/10'
+                            ? 'text-apple-green border-apple-green/30 bg-apple-green/10'
+                            : 'text-apple-red border-apple-red/30 bg-apple-red/10'
                         }`}
                       >
                         {algo.type}
                       </span>
                     </td>
-                    <td className="p-3 text-center uppercase font-bold text-retro-text">
+                    <td className="p-3.5 text-center uppercase font-medium text-white">
                       {algo.timeframe}
                     </td>
-                    <td className="p-3 text-right font-bold text-signal-bull">
+                    <td className="p-3.5 text-right font-semibold font-mono tabular-nums text-apple-green">
                       +{Number(m.total_return_pct || 0).toLocaleString()}%
                     </td>
-                    <td className="p-3 text-right text-retro-text">
+                    <td className="p-3.5 text-right text-white font-mono tabular-nums">
                       {m.win_rate_pct || 0}%
                     </td>
-                    <td className="p-3 text-right text-signal-cyan font-bold">
+                    <td className="p-3.5 text-right text-apple-cyan font-semibold font-mono tabular-nums">
                       {m.profit_factor || 0}x
                     </td>
-                    <td className="p-3 text-right text-signal-bear">
+                    <td className="p-3.5 text-right text-apple-red font-mono tabular-nums">
                       {m.max_drawdown_pct || 0}%
                     </td>
-                    <td className="p-3 text-right text-retro-muted">
+                    <td className="p-3.5 text-right text-apple-muted font-mono tabular-nums">
                       {m.total_trades || 0}
                     </td>
-                    <td className="p-3 text-center">
+                    <td className="p-3.5 text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
                           onClick={() => onSelectStrategy && onSelectStrategy(algo.id)}
-                          className={`px-2 py-1 text-[10px] font-pixel border ${
+                          className={`px-3 py-1 text-xs font-medium rounded-lg border transition-all cursor-pointer ${
                             isSelected
-                              ? 'bg-signal-cyan text-floor-darker border-signal-cyan font-bold'
-                              : 'bg-floor-wall border-floor-border text-retro-text hover:bg-floor-border'
+                              ? 'bg-apple-blue text-white border-apple-blue font-semibold'
+                              : 'bg-white/[0.04] border-white/[0.08] text-white hover:bg-white/[0.1]'
                           }`}
                         >
-                          {isSelected ? 'ACTIVE' : 'PLOT'}
+                          {isSelected ? 'Active' : 'Plot'}
                         </button>
                         <button
                           onClick={() => onOpenDetail && onOpenDetail(algo.id)}
-                          className="px-2 py-1 text-[11px] bg-floor-bg border border-floor-border text-signal-cyan hover:bg-floor-wall"
+                          className="px-3 py-1 text-xs font-medium bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.06] text-apple-muted hover:text-white rounded-lg transition-colors cursor-pointer"
                         >
-                          DETAIL
+                          Details
                         </button>
                       </div>
                     </td>

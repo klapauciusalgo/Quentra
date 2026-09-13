@@ -383,39 +383,39 @@ export default function TradingChart({
       width: container.clientWidth,
       height: 520,
       layout: {
-        background: { type: ColorType.Solid, color: '#12151D' },
-        textColor: '#8A8FA3',
-        fontFamily: '"JetBrains Mono", monospace',
+        background: { type: ColorType.Solid, color: '#07080A' },
+        textColor: '#86868B',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist", monospace',
         fontSize: 11,
       },
       grid: {
-        vertLines: { color: '#1E2330' },
-        horzLines: { color: '#1E2330' },
+        vertLines: { color: 'rgba(255, 255, 255, 0.04)' },
+        horzLines: { color: 'rgba(255, 255, 255, 0.04)' },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: {
-          color: '#4FE0FF',
+          color: '#0A84FF',
           width: 1,
           style: 3,
-          labelBackgroundColor: '#232838',
+          labelBackgroundColor: '#16171F',
         },
         horzLine: {
-          color: '#4FE0FF',
+          color: '#0A84FF',
           width: 1,
           style: 3,
-          labelBackgroundColor: '#232838',
+          labelBackgroundColor: '#16171F',
         },
       },
       rightPriceScale: {
-        borderColor: '#2D344B',
+        borderColor: 'rgba(255, 255, 255, 0.08)',
         scaleMargins: {
           top: 0.08,
           bottom: 0.2,
         },
       },
       timeScale: {
-        borderColor: '#2D344B',
+        borderColor: 'rgba(255, 255, 255, 0.08)',
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 12,
@@ -427,18 +427,18 @@ export default function TradingChart({
 
     // 1. Candlestick Series
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#39FF88',
-      downColor: '#FF4B5C',
-      borderUpColor: '#39FF88',
-      borderDownColor: '#FF4B5C',
-      wickUpColor: '#39FF88',
-      wickDownColor: '#FF4B5C',
+      upColor: '#30D158',
+      downColor: '#FF453A',
+      borderUpColor: '#30D158',
+      borderDownColor: '#FF453A',
+      wickUpColor: '#30D158',
+      wickDownColor: '#FF453A',
     });
     candleSeriesRef.current = candleSeries;
 
     // 2. Volume Histogram Series
     const volumeSeries = chart.addSeries(HistogramSeries, {
-      color: '#26a69a',
+      color: 'rgba(10, 132, 255, 0.3)',
       priceFormat: { type: 'volume' },
       priceScaleId: '', // overlay
     });
@@ -452,28 +452,28 @@ export default function TradingChart({
 
     // 3. Moving Average Series
     const ma25Series = chart.addSeries(LineSeries, {
-      color: '#4FE0FF',
+      color: '#64D2FF',
       lineWidth: 1,
       title: 'MA25',
       priceLineVisible: false,
     });
 
     const ma50Series = chart.addSeries(LineSeries, {
-      color: '#38BDF8',
+      color: '#0A84FF',
       lineWidth: 1.5,
       title: 'MA50',
       priceLineVisible: false,
     });
 
     const ma55Series = chart.addSeries(LineSeries, {
-      color: '#A855F7',
+      color: '#BF5AF2',
       lineWidth: 2,
       title: 'MA55 (Macro)',
       priceLineVisible: false,
     });
 
     const ma111Series = chart.addSeries(LineSeries, {
-      color: '#FB923C',
+      color: '#FF9F0A',
       lineWidth: 1.5,
       title: 'MA111',
       priceLineVisible: false,
@@ -754,21 +754,21 @@ export default function TradingChart({
   };
 
   return (
-    <div className="bg-floor-dark border-2 border-floor-border p-3 sm:p-4 space-y-3">
+    <div className="apple-glass rounded-3xl p-4 sm:p-6 space-y-4">
       
       {/* 1. Chart Controls Header: Symbol, Timeframes, Signal Controls, Indicators */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-floor-border pb-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-3.5">
         
         {/* Left: Symbol & Timeframe Switcher */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="font-pixel text-xs text-signal-cyan">BTCUSDT</span>
-            <span className="text-[10px] font-mono text-signal-warn bg-floor-darker border border-floor-border px-1.5 py-0.5">
-              BINANCE
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm text-white tracking-tight">BTC/USDT</span>
+            <span className="text-[10px] font-medium tracking-wide uppercase px-2 py-0.5 rounded-full bg-apple-blue/15 text-apple-cyan border border-apple-blue/30">
+              Binance
             </span>
           </div>
 
-          <div className="flex items-center bg-floor-darker border border-floor-border p-0.5">
+          <div className="flex items-center bg-white/[0.04] border border-white/[0.08] p-1 rounded-xl">
             {TIMEFRAMES.map((tf) => (
               <button
                 key={tf.id}
@@ -776,10 +776,10 @@ export default function TradingChart({
                   playRetroSound('blip');
                   if (onTimeframeChange) onTimeframeChange(tf.id);
                 }}
-                className={`font-pixel text-[10px] px-2 sm:px-2.5 py-1 transition-all ${
+                className={`text-xs px-2.5 py-1 rounded-lg transition-all font-medium cursor-pointer ${
                   timeframe === tf.id
-                    ? 'bg-signal-cyan text-floor-darker font-bold shadow-pixel-cyan'
-                    : 'text-retro-muted hover:text-retro-text hover:bg-floor-wall'
+                    ? 'bg-white/15 text-white shadow-sm font-semibold'
+                    : 'text-apple-muted hover:text-white hover:bg-white/[0.05]'
                 }`}
               >
                 {tf.label}
@@ -789,16 +789,16 @@ export default function TradingChart({
         </div>
 
         {/* Right: Signal Visibility & Label Controls + Indicators */}
-        <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           
           {/* Signal Label Style Switcher */}
           {activeStrategy && showMarkers && (
-            <div className="flex items-center bg-floor-darker border border-floor-border p-0.5">
-              <span className="text-[10px] text-retro-dim px-1.5 hidden md:inline">LABELS:</span>
+            <div className="flex items-center bg-white/[0.04] border border-white/[0.08] p-1 rounded-xl">
+              <span className="text-[11px] text-apple-dim px-2 hidden md:inline">Labels:</span>
               {[
-                { id: 'compact', label: 'COMPACT' },
-                { id: 'minimal', label: 'SHAPES' },
-                { id: 'prices', label: 'PRICES' },
+                { id: 'compact', label: 'Compact' },
+                { id: 'minimal', label: 'Minimal' },
+                { id: 'prices', label: 'Prices' },
               ].map((style) => (
                 <button
                   key={style.id}
@@ -806,10 +806,10 @@ export default function TradingChart({
                     playRetroSound('blip');
                     setMarkerLabelMode(style.id);
                   }}
-                  className={`px-2 py-0.5 text-[10px] transition-colors ${
+                  className={`px-2 py-0.5 text-xs rounded-lg transition-all cursor-pointer ${
                     markerLabelMode === style.id
-                      ? 'bg-floor-wall text-signal-cyan font-bold border border-floor-border'
-                      : 'text-retro-muted hover:text-retro-text'
+                      ? 'bg-white/15 text-white font-medium shadow-sm'
+                      : 'text-apple-muted hover:text-white'
                   }`}
                   title={`Marker Label Display: ${style.label}`}
                 >
@@ -823,14 +823,14 @@ export default function TradingChart({
           {activeStrategy && showMarkers && (
             <button
               onClick={() => setIsHudVisible(!isHudVisible)}
-              className={`flex items-center gap-1 px-2 py-1 border text-[10px] transition-colors ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs transition-all cursor-pointer ${
                 isHudVisible
-                  ? 'border-signal-cyan text-signal-cyan bg-signal-cyan/10'
-                  : 'border-floor-border text-retro-dim hover:text-retro-muted'
+                  ? 'bg-apple-blue/15 text-white border-apple-blue/40 shadow-sm font-medium'
+                  : 'bg-white/[0.03] text-apple-muted border-white/[0.06] hover:bg-white/[0.07] hover:text-white'
               }`}
               title="Toggle On-Chart Signal Inspector HUD"
             >
-              {isHudVisible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+              {isHudVisible ? <Eye className="w-3.5 h-3.5 text-apple-cyan" /> : <EyeOff className="w-3.5 h-3.5 text-apple-dim" />}
               <span>HUD</span>
             </button>
           )}
@@ -839,37 +839,37 @@ export default function TradingChart({
           {activeStrategy && showMarkers && (
             <button
               onClick={() => setShowPriceLevels(!showPriceLevels)}
-              className={`flex items-center gap-1 px-2 py-1 border text-[10px] transition-colors ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs transition-all cursor-pointer ${
                 showPriceLevels
-                  ? 'border-signal-cyan text-signal-cyan bg-signal-cyan/10'
-                  : 'border-floor-border text-retro-dim hover:text-retro-muted'
+                  ? 'bg-apple-blue/15 text-white border-apple-blue/40 shadow-sm font-medium'
+                  : 'bg-white/[0.03] text-apple-muted border-white/[0.06] hover:bg-white/[0.07] hover:text-white'
               }`}
               title="Toggle Dynamic Entry / SL / TP Price Lines"
             >
-              <Target className="w-3 h-3" />
-              <span>LEVELS</span>
+              <Target className="w-3.5 h-3.5 text-apple-cyan" />
+              <span>Levels</span>
             </button>
           )}
 
           {/* Show / Hide Signals */}
           <button
             onClick={() => setShowMarkers(!showMarkers)}
-            className={`flex items-center gap-1 px-2.5 py-1 border text-[10px] font-pixel transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-xl border text-xs transition-all cursor-pointer ${
               showMarkers
-                ? 'border-signal-cyan bg-signal-cyan text-floor-darker font-bold shadow-pixel-cyan'
-                : 'border-floor-border bg-floor-wall text-retro-muted hover:text-retro-text'
+                ? 'bg-white/15 text-white border-white/20 font-medium shadow-sm'
+                : 'bg-white/[0.03] text-apple-muted border-white/[0.06] hover:bg-white/[0.07] hover:text-white'
             }`}
           >
-            <CheckCircle2 className="w-3 h-3" />
-            <span>{showMarkers ? 'SIGNALS ON' : 'SIGNALS OFF'}</span>
+            <CheckCircle2 className={`w-3.5 h-3.5 ${showMarkers ? 'text-apple-green' : 'text-apple-dim'}`} />
+            <span>{showMarkers ? 'Signals On' : 'Signals Off'}</span>
           </button>
 
           {/* Indicators Toggle Pill */}
-          <div className="flex items-center gap-1 pl-1 border-l border-floor-border/80">
+          <div className="flex items-center gap-1 pl-1 border-l border-white/10">
             <button
               onClick={() => toggleMA('ma55')}
-              className={`px-1.5 py-0.5 border text-[10px] font-bold ${
-                visibleMAs.ma55 ? 'border-signal-purple text-signal-purple bg-signal-purple/10' : 'border-floor-border text-retro-dim'
+              className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-all cursor-pointer ${
+                visibleMAs.ma55 ? 'bg-apple-purple/15 text-apple-purple border-apple-purple/30' : 'bg-white/[0.03] border-white/[0.06] text-apple-dim'
               }`}
               title="Weekly MA55 Macro Regime Anchor"
             >
@@ -877,8 +877,8 @@ export default function TradingChart({
             </button>
             <button
               onClick={() => toggleMA('ma111')}
-              className={`px-1.5 py-0.5 border text-[10px] ${
-                visibleMAs.ma111 ? 'border-orange-400 text-orange-400 bg-orange-400/10' : 'border-floor-border text-retro-dim'
+              className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-all cursor-pointer ${
+                visibleMAs.ma111 ? 'bg-apple-orange/15 text-apple-orange border-apple-orange/30' : 'bg-white/[0.03] border-white/[0.06] text-apple-dim'
               }`}
             >
               MA111
@@ -891,7 +891,7 @@ export default function TradingChart({
               playRetroSound('blip');
               if (chartRef.current) chartRef.current.timeScale().fitContent();
             }}
-            className="px-2 py-1 bg-floor-wall hover:bg-floor-border border border-floor-border text-retro-muted hover:text-retro-text text-[10px]"
+            className="px-2.5 py-1 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] border border-white/[0.08] rounded-xl text-apple-muted hover:text-white text-xs transition-all cursor-pointer"
             title="Fit all candles in viewport"
           >
             Fit View
@@ -901,79 +901,79 @@ export default function TradingChart({
       </div>
 
       {/* 2. OHLCV Metrics & Signal Hover Callout Bar */}
-      <div className="h-6 flex items-center justify-between gap-4 text-[11px] font-mono text-retro-muted overflow-x-auto whitespace-nowrap">
+      <div className="h-6 flex items-center justify-between gap-4 text-xs font-mono text-apple-muted overflow-x-auto whitespace-nowrap">
         {hoveredSignal ? (
-          <div className="flex items-center gap-2 bg-signal-cyan/15 border border-signal-cyan/50 px-2.5 py-0.5 text-signal-cyan font-bold animate-in fade-in duration-150">
-            <Zap className="w-3.5 h-3.5 text-signal-cyan animate-pulse" />
+          <div className="flex items-center gap-2 bg-apple-blue/15 border border-apple-blue/30 rounded-lg px-2.5 py-0.5 text-white font-medium animate-in fade-in duration-150">
+            <Zap className="w-3.5 h-3.5 text-apple-cyan" />
             <span>
               {hoveredSignal.eventType === 'ENTRY' 
-                ? `SIGNAL ENTRY: ${hoveredSignal.side || hoveredSignal.type} #${hoveredSignal.trade_no} @ ${formatPrice(hoveredSignal.entry_price)} (${hoveredSignal.entry_time})`
-                : `SIGNAL EXIT: Trade #${hoveredSignal.trade_no} @ ${formatPrice(hoveredSignal.exit_price)} (${formatPercent(hoveredSignal.net_return_pct)}) — ${hoveredSignal.exit_reason || 'Exit Rule'}`
+                ? `Signal Entry: ${hoveredSignal.side || hoveredSignal.type} #${hoveredSignal.trade_no} @ ${formatPrice(hoveredSignal.entry_price)} (${hoveredSignal.entry_time})`
+                : `Signal Exit: Trade #${hoveredSignal.trade_no} @ ${formatPrice(hoveredSignal.exit_price)} (${formatPercent(hoveredSignal.net_return_pct)}) - ${hoveredSignal.exit_reason || 'Exit Rule'}`
               }
             </span>
           </div>
         ) : hoveredData ? (
           <div className="flex items-center gap-4">
             <div>
-              <span className="text-retro-dim">O:</span>{' '}
-              <span className="text-retro-text">{formatPrice(hoveredData.open)}</span>
+              <span className="text-apple-dim">O:</span>{' '}
+              <span className="text-white tabular-nums">{formatPrice(hoveredData.open)}</span>
             </div>
             <div>
-              <span className="text-retro-dim">H:</span>{' '}
-              <span className="text-signal-bull">{formatPrice(hoveredData.high)}</span>
+              <span className="text-apple-dim">H:</span>{' '}
+              <span className="text-apple-green tabular-nums">{formatPrice(hoveredData.high)}</span>
             </div>
             <div>
-              <span className="text-retro-dim">L:</span>{' '}
-              <span className="text-signal-bear">{formatPrice(hoveredData.low)}</span>
+              <span className="text-apple-dim">L:</span>{' '}
+              <span className="text-apple-red tabular-nums">{formatPrice(hoveredData.low)}</span>
             </div>
             <div>
-              <span className="text-retro-dim">C:</span>{' '}
-              <span className={hoveredData.close >= hoveredData.open ? 'text-signal-bull font-bold' : 'text-signal-bear font-bold'}>
+              <span className="text-apple-dim">C:</span>{' '}
+              <span className={`tabular-nums font-semibold ${hoveredData.close >= hoveredData.open ? 'text-apple-green' : 'text-apple-red'}`}>
                 {formatPrice(hoveredData.close)}
               </span>
             </div>
             {hoveredData.volume && (
               <div>
-                <span className="text-retro-dim">VOL:</span>{' '}
-                <span className="text-retro-text">{Number(hoveredData.volume).toFixed(2)} BTC</span>
+                <span className="text-apple-dim">VOL:</span>{' '}
+                <span className="text-white tabular-nums">{Number(hoveredData.volume).toFixed(2)} BTC</span>
               </div>
             )}
             {hoveredData.ma55 && visibleMAs.ma55 && (
               <div>
-                <span className="text-signal-purple">MA55:</span>{' '}
-                <span>{formatPrice(hoveredData.ma55)}</span>
+                <span className="text-apple-purple">MA55:</span>{' '}
+                <span className="tabular-nums text-zinc-300">{formatPrice(hoveredData.ma55)}</span>
               </div>
             )}
             {hoveredData.ma111 && visibleMAs.ma111 && (
               <div>
-                <span className="text-orange-400">MA111:</span>{' '}
-                <span>{formatPrice(hoveredData.ma111)}</span>
+                <span className="text-apple-orange">MA111:</span>{' '}
+                <span className="tabular-nums text-zinc-300">{formatPrice(hoveredData.ma111)}</span>
               </div>
             )}
           </div>
         ) : (
-          <div className="text-retro-dim flex items-center gap-2">
+          <div className="text-apple-dim flex items-center gap-2">
             <span>Hover cursor or click on candles to inspect price & signal execution.</span>
             {activeStrategy && (
-              <span className="text-signal-cyan font-medium hidden sm:inline">
-                // Active Algo: {activeStrategy.name} ({tradesList.length} trades plotted)
+              <span className="text-apple-cyan font-medium hidden sm:inline">
+                · Active Algo: {activeStrategy.name} ({tradesList.length} trades plotted)
               </span>
             )}
           </div>
         )}
 
         {/* Indicator Legend */}
-        <div className="hidden lg:flex items-center gap-3 text-[10px] text-retro-dim">
-          <div className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-signal-bull"></span>
+        <div className="hidden lg:flex items-center gap-3 text-[11px] text-apple-dim">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-apple-green"></span>
             <span>Entry (Buy)</span>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-signal-bear"></span>
-            <span>Short / Exit (Sell)</span>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-apple-red"></span>
+            <span>Short / Exit</span>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="w-2 h-0.5 bg-signal-cyan"></span>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-0.5 rounded bg-apple-cyan"></span>
             <span>Price Levels</span>
           </div>
         </div>
@@ -982,13 +982,13 @@ export default function TradingChart({
       {/* 3. Chart Canvas Viewport with Floating Signal Position HUD */}
       <div 
         ref={chartViewportRef} 
-        className="relative w-full border border-floor-border bg-[#12151D] overflow-hidden"
+        className="relative w-full rounded-2xl border border-white/[0.08] bg-[#07080A] overflow-hidden"
       >
         {loading && (
-          <div className="absolute inset-0 z-20 bg-floor-dark/80 flex items-center justify-center font-pixel text-xs text-signal-cyan">
+          <div className="absolute inset-0 z-20 bg-black/75 backdrop-blur-sm flex items-center justify-center text-xs text-white">
             <div className="flex items-center gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin" />
-              <span>LOADING {timeframe.toUpperCase()} CANDLESTICKS...</span>
+              <RefreshCw className="w-4 h-4 animate-spin text-apple-blue" />
+              <span>Loading {timeframe.toUpperCase()} candlestick stream...</span>
             </div>
           </div>
         )}
@@ -996,7 +996,7 @@ export default function TradingChart({
         {/* Lightweight Charts Canvas Element */}
         <div ref={chartContainerRef} className="w-full" style={{ height: '520px' }} />
 
-        {/* On-Chart Signal Position HUD (High-Taste, Anti-Slop Floating Inspector) */}
+        {/* On-Chart Signal Position HUD (Apple-Grade Translucent Inspector) */}
         {showMarkers && activeStrategy && activeTrade && isHudVisible && (
           <div
             ref={hudRef}
@@ -1011,24 +1011,24 @@ export default function TradingChart({
               isHudExpanded ? 'w-72 sm:w-80' : 'w-auto'
             } ${
               isDraggingHud
-                ? 'cursor-grabbing select-none shadow-cyan-500/25 shadow-2xl ring-1 ring-signal-cyan/60 transition-none'
+                ? 'cursor-grabbing select-none shadow-2xl ring-1 ring-apple-blue/60 transition-none'
                 : 'transition-all duration-150'
             }`}
           >
-            <div className="bg-[#0C0E14]/92 backdrop-blur-md border border-floor-border hover:border-signal-cyan/40 shadow-2xl p-3 text-xs font-mono text-retro-text select-none transition-colors">
+            <div className="bg-[#0D0E14]/90 backdrop-blur-2xl border border-white/[0.12] rounded-2xl shadow-2xl p-3.5 text-xs text-apple-text select-none transition-colors">
               
               {/* HUD Header Bar (Draggable Handle) */}
               <div
                 onPointerDown={handleHudPointerDown}
                 onDoubleClick={() => setHudPos({ x: null, y: null })}
-                className="flex items-center justify-between border-b border-floor-border/70 pb-2 mb-2 cursor-grab active:cursor-grabbing group/header"
+                className="flex items-center justify-between border-b border-white/[0.08] pb-2.5 mb-2.5 cursor-grab active:cursor-grabbing group/header"
                 title="Click and drag to move • Double-click to reset position"
               >
-                <div className="flex items-center gap-1.5 pointer-events-none">
-                  <GripHorizontal className="w-3.5 h-3.5 text-retro-dim group-hover/header:text-signal-cyan transition-colors" />
-                  <span className="w-2 h-2 rounded-full bg-signal-cyan animate-pulse"></span>
-                  <span className="font-pixel text-[10px] text-signal-cyan tracking-wider">
-                    SIGNAL INSPECTOR
+                <div className="flex items-center gap-2 pointer-events-none">
+                  <GripHorizontal className="w-3.5 h-3.5 text-apple-dim group-hover/header:text-apple-cyan transition-colors" />
+                  <span className="w-2 h-2 rounded-full bg-apple-cyan" />
+                  <span className="font-semibold text-xs text-white tracking-tight">
+                    Signal Inspector
                   </span>
                 </div>
 
@@ -1036,11 +1036,11 @@ export default function TradingChart({
                   className="flex items-center gap-1"
                   onPointerDown={(e) => e.stopPropagation()}
                 >
-                  {/* Reset Position Button (appears when moved from default) */}
+                  {/* Reset Position Button */}
                   {hudPos.x !== null && (
                     <button
                       onClick={() => setHudPos({ x: null, y: null })}
-                      className="p-1 hover:bg-floor-wall text-retro-muted hover:text-signal-cyan border border-floor-border transition-colors"
+                      className="p-1 hover:bg-white/[0.08] text-apple-muted hover:text-white rounded-lg border border-white/[0.06] transition-colors"
                       title="Reset position to default top-right"
                     >
                       <RotateCcw className="w-3 h-3" />
@@ -1055,14 +1055,14 @@ export default function TradingChart({
                       handleJumpToTrade(tradesList[nextIdx], nextIdx);
                     }}
                     disabled={focusedTradeIndex === 0}
-                    className="p-1 hover:bg-floor-wall disabled:opacity-25 text-retro-muted hover:text-retro-text border border-floor-border"
+                    className="p-1 hover:bg-white/[0.08] disabled:opacity-25 text-apple-muted hover:text-white rounded-lg border border-white/[0.06] transition-colors"
                     title="Previous Signal"
                   >
                     <ChevronLeft className="w-3.5 h-3.5" />
                   </button>
 
                   {/* Stepper Count */}
-                  <span className="text-[10px] text-retro-muted px-1">
+                  <span className="text-[11px] text-apple-dim px-1 font-mono tabular-nums">
                     {focusedTradeIndex + 1}/{tradesList.length}
                   </span>
 
@@ -1074,7 +1074,7 @@ export default function TradingChart({
                       handleJumpToTrade(tradesList[nextIdx], nextIdx);
                     }}
                     disabled={focusedTradeIndex === tradesList.length - 1}
-                    className="p-1 hover:bg-floor-wall disabled:opacity-25 text-retro-muted hover:text-retro-text border border-floor-border"
+                    className="p-1 hover:bg-white/[0.08] disabled:opacity-25 text-apple-muted hover:text-white rounded-lg border border-white/[0.06] transition-colors"
                     title="Next Signal"
                   >
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -1083,7 +1083,7 @@ export default function TradingChart({
                   {/* Collapse / Expand Toggle */}
                   <button
                     onClick={() => setIsHudExpanded(!isHudExpanded)}
-                    className="p-1 hover:bg-floor-wall text-retro-muted hover:text-retro-text border border-floor-border ml-0.5"
+                    className="p-1 hover:bg-white/[0.08] text-apple-muted hover:text-white rounded-lg border border-white/[0.06] ml-0.5 transition-colors"
                     title={isHudExpanded ? 'Minimize HUD' : 'Expand HUD'}
                   >
                     {isHudExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
@@ -1098,65 +1098,65 @@ export default function TradingChart({
                   {/* Signal Title & Net Return */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={`font-pixel text-[10px] px-2 py-0.5 border ${
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
                         (activeTrade.side || activeTrade.type) === 'LONG'
-                          ? 'border-signal-bull/60 text-signal-bull bg-signal-bull/15'
-                          : 'border-signal-bear/60 text-signal-bear bg-signal-bear/15'
+                          ? 'border-apple-green/40 text-apple-green bg-apple-green/15'
+                          : 'border-apple-red/40 text-apple-red bg-apple-red/15'
                       }`}>
                         {activeTrade.side || activeTrade.type} #{activeTrade.trade_no}
                       </span>
-                      <span className={`text-[10px] px-1.5 py-0.2 border ${
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full border ${
                         activeTrade.status === 'CLOSED'
-                          ? 'border-floor-border bg-floor-wall text-retro-muted'
-                          : 'border-signal-cyan/50 bg-signal-cyan/15 text-signal-cyan font-bold animate-pulse'
+                          ? 'border-white/[0.08] bg-white/[0.04] text-apple-muted'
+                          : 'border-apple-blue/40 bg-apple-blue/15 text-apple-cyan font-medium'
                       }`}>
                         {activeTrade.status || 'CLOSED'}
                       </span>
                     </div>
 
-                    <div className={`text-sm font-bold font-mono ${
-                      (activeTrade.net_return_pct || 0) > 0 ? 'text-signal-bull' : 'text-signal-bear'
+                    <div className={`text-sm font-semibold font-mono tabular-nums ${
+                      (activeTrade.net_return_pct || 0) > 0 ? 'text-apple-green' : 'text-apple-red'
                     }`}>
                       {formatPercent(activeTrade.net_return_pct || 0)}
                     </div>
                   </div>
 
                   {/* Execution Metrics Grid */}
-                  <div className="grid grid-cols-2 gap-2 text-[11px] bg-floor-bg border border-floor-border/60 p-2">
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-white/[0.03] border border-white/[0.06] rounded-xl p-2.5">
                     <div>
-                      <div className="text-[9px] text-retro-dim uppercase tracking-wider">Entry Price</div>
-                      <div className="font-bold text-retro-text mt-0.5">
+                      <div className="text-[10px] text-apple-dim uppercase tracking-wider">Entry Price</div>
+                      <div className="font-semibold text-white mt-0.5 font-mono tabular-nums">
                         {formatPrice(activeTrade.entry_price)}
                       </div>
-                      <div className="text-[9px] text-retro-muted truncate">
+                      <div className="text-[10px] text-apple-muted truncate">
                         {String(activeTrade.entry_time).substring(0, 10)}
                       </div>
                     </div>
 
                     <div>
-                      <div className="text-[9px] text-retro-dim uppercase tracking-wider">
+                      <div className="text-[10px] text-apple-dim uppercase tracking-wider">
                         {activeTrade.status === 'CLOSED' ? 'Exit Price' : 'Current Mark'}
                       </div>
-                      <div className="font-bold text-retro-text mt-0.5">
+                      <div className="font-semibold text-white mt-0.5 font-mono tabular-nums">
                         {formatPrice(activeTrade.exit_price || liveTicker?.price)}
                       </div>
-                      <div className="text-[9px] text-retro-muted truncate">
+                      <div className="text-[10px] text-apple-muted truncate">
                         {activeTrade.exit_time && !String(activeTrade.exit_time).includes('RUNNING')
                           ? String(activeTrade.exit_time).substring(0, 10)
                           : 'Active Candle'}
                       </div>
                     </div>
 
-                    <div className="col-span-2 pt-1 border-t border-floor-border/40 flex items-center justify-between text-[10px]">
+                    <div className="col-span-2 pt-2 border-t border-white/[0.06] flex items-center justify-between text-xs">
                       <div>
-                        <span className="text-[9px] text-retro-dim uppercase mr-1">Duration:</span>
-                        <span className="text-retro-text font-bold">
+                        <span className="text-[10px] text-apple-dim uppercase mr-1.5">Duration:</span>
+                        <span className="text-white font-medium">
                           {formatDuration(activeTrade.entry_time, activeTrade.exit_time)}
                         </span>
                       </div>
                       <div>
-                        <span className="text-[9px] text-retro-dim uppercase mr-1">Exit:</span>
-                        <span className="text-signal-cyan truncate max-w-[110px] inline-block align-bottom" title={activeTrade.exit_reason}>
+                        <span className="text-[10px] text-apple-dim uppercase mr-1.5">Exit:</span>
+                        <span className="text-apple-cyan truncate max-w-[110px] inline-block align-bottom font-medium" title={activeTrade.exit_reason}>
                           {activeTrade.exit_reason || 'Structural'}
                         </span>
                       </div>
@@ -1164,42 +1164,42 @@ export default function TradingChart({
                   </div>
 
                   {/* Tactical Actions */}
-                  <div className="flex items-center gap-2 pt-0.5">
+                  <div className="flex items-center gap-2 pt-1">
                     <button
                       onClick={() => handleJumpToTrade(activeTrade, focusedTradeIndex)}
-                      className="flex-1 py-1 px-2 bg-signal-cyan/15 hover:bg-signal-cyan/25 border border-signal-cyan/50 text-signal-cyan font-pixel text-[9px] flex items-center justify-center gap-1 transition-colors"
+                      className="flex-1 py-1.5 px-3 bg-apple-blue hover:bg-blue-600 active:scale-[0.98] text-white font-medium text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
                     >
-                      <Crosshair className="w-3 h-3" />
-                      <span>FOCUS CANDLE</span>
+                      <Crosshair className="w-3.5 h-3.5" />
+                      <span>Focus Candle</span>
                     </button>
                     <button
                       onClick={() => {
                         const latestIdx = tradesList.length - 1;
                         handleJumpToTrade(tradesList[latestIdx], latestIdx);
                       }}
-                      className="py-1 px-2.5 bg-floor-wall hover:bg-floor-border border border-floor-border text-retro-muted hover:text-retro-text text-[10px] transition-colors"
+                      className="py-1.5 px-3 bg-white/[0.06] hover:bg-white/[0.1] active:scale-[0.98] border border-white/[0.08] text-white text-xs font-medium rounded-xl transition-all cursor-pointer"
                       title="Jump to latest position"
                     >
-                      Latest ⚡
+                      Latest
                     </button>
                   </div>
 
                 </div>
               ) : (
                 /* Minimized Single-line Strip */
-                <div className="flex items-center gap-2 text-[10px]">
-                  <span className={`font-pixel px-1.5 py-0.2 border ${
+                <div className="flex items-center gap-2.5 text-xs">
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                     (activeTrade.side || activeTrade.type) === 'LONG'
-                      ? 'border-signal-bull/60 text-signal-bull'
-                      : 'border-signal-bear/60 text-signal-bear'
+                      ? 'bg-apple-green/15 text-apple-green'
+                      : 'bg-apple-red/15 text-apple-red'
                   }`}>
                     #{activeTrade.trade_no}
                   </span>
-                  <span className="font-bold text-retro-text">
+                  <span className="font-semibold text-white font-mono tabular-nums">
                     {formatPrice(activeTrade.entry_price)}
                   </span>
-                  <span className={`font-bold ${
-                    (activeTrade.net_return_pct || 0) > 0 ? 'text-signal-bull' : 'text-signal-bear'
+                  <span className={`font-semibold font-mono tabular-nums ${
+                    (activeTrade.net_return_pct || 0) > 0 ? 'text-apple-green' : 'text-apple-red'
                   }`}>
                     {formatPercent(activeTrade.net_return_pct || 0)}
                   </span>
@@ -1214,23 +1214,23 @@ export default function TradingChart({
 
       {/* 4. Interactive Signal Timeline Carousel & Filter Bar (Below Chart) */}
       {activeStrategy && tradesList.length > 0 && (
-        <div className="bg-floor-bg border border-floor-border p-2.5 space-y-2 font-mono text-xs">
+        <div className="apple-glass-card rounded-2xl p-3 sm:p-4 space-y-3 text-xs">
           
           {/* Timeline Bar Header */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-floor-border/60 pb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] pb-2.5">
             
             {/* Filter Tabs */}
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-retro-dim flex items-center gap-1 font-bold">
-                <Sliders className="w-3 h-3 text-signal-cyan" />
-                SIGNALS ({tradesList.length}):
+              <span className="text-xs text-apple-dim flex items-center gap-1.5 font-medium">
+                <Sliders className="w-3.5 h-3.5 text-apple-cyan" />
+                Signals ({tradesList.length}):
               </span>
               
-              <div className="flex items-center gap-1">
+              <div className="flex items-center bg-white/[0.04] border border-white/[0.08] p-0.5 rounded-xl">
                 {[
-                  { id: 'ALL', label: `ALL (${tradesList.length})` },
-                  { id: 'WINS', label: `WINS (${tradesList.filter((t) => (t.net_return_pct || 0) > 0).length})` },
-                  { id: 'LOSSES', label: `LOSSES (${tradesList.filter((t) => (t.net_return_pct || 0) <= 0).length})` },
+                  { id: 'ALL', label: `All (${tradesList.length})` },
+                  { id: 'WINS', label: `Wins (${tradesList.filter((t) => (t.net_return_pct || 0) > 0).length})` },
+                  { id: 'LOSSES', label: `Losses (${tradesList.filter((t) => (t.net_return_pct || 0) <= 0).length})` },
                 ].map((f) => (
                   <button
                     key={f.id}
@@ -1238,10 +1238,10 @@ export default function TradingChart({
                       playRetroSound('blip');
                       setTradeFilter(f.id);
                     }}
-                    className={`px-2 py-0.5 text-[10px] border transition-colors ${
+                    className={`px-2.5 py-1 text-xs rounded-lg transition-all cursor-pointer ${
                       tradeFilter === f.id
-                        ? 'border-signal-cyan bg-signal-cyan/15 text-signal-cyan font-bold'
-                        : 'border-floor-border bg-floor-darker text-retro-muted hover:text-retro-text'
+                        ? 'bg-white/15 text-white font-medium shadow-sm'
+                        : 'text-apple-muted hover:text-white'
                     }`}
                   >
                     {f.label}
@@ -1251,7 +1251,7 @@ export default function TradingChart({
             </div>
 
             {/* Stepper Controls */}
-            <div className="flex items-center gap-1.5 text-[10px]">
+            <div className="flex items-center gap-2 text-xs">
               <button
                 onClick={() => {
                   playRetroSound('select');
@@ -1259,13 +1259,13 @@ export default function TradingChart({
                   handleJumpToTrade(tradesList[nextIdx], nextIdx);
                 }}
                 disabled={focusedTradeIndex === 0}
-                className="px-2 py-0.5 bg-floor-darker hover:bg-floor-wall disabled:opacity-30 border border-floor-border text-retro-muted hover:text-retro-text flex items-center gap-1"
+                className="px-2.5 py-1 bg-white/[0.04] hover:bg-white/[0.08] disabled:opacity-30 border border-white/[0.08] rounded-xl text-apple-muted hover:text-white flex items-center gap-1 cursor-pointer transition-all"
               >
-                <ChevronLeft className="w-3 h-3" />
-                <span>PREV</span>
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Prev</span>
               </button>
 
-              <span className="text-retro-dim">
+              <span className="text-apple-dim font-mono tabular-nums">
                 Signal #{tradesList[focusedTradeIndex]?.trade_no || 1}
               </span>
 
@@ -1276,17 +1276,17 @@ export default function TradingChart({
                   handleJumpToTrade(tradesList[nextIdx], nextIdx);
                 }}
                 disabled={focusedTradeIndex === tradesList.length - 1}
-                className="px-2 py-0.5 bg-floor-darker hover:bg-floor-wall disabled:opacity-30 border border-floor-border text-retro-muted hover:text-retro-text flex items-center gap-1"
+                className="px-2.5 py-1 bg-white/[0.04] hover:bg-white/[0.08] disabled:opacity-30 border border-white/[0.08] rounded-xl text-apple-muted hover:text-white flex items-center gap-1 cursor-pointer transition-all"
               >
-                <span>NEXT</span>
-                <ChevronRight className="w-3 h-3" />
+                <span>Next</span>
+                <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
           </div>
 
           {/* Scrollable Trade Chips Strip */}
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-thin">
+          <div className="flex items-center gap-2 overflow-x-auto py-1">
             {filteredTrades.map((tr) => {
               const actualIdx = tradesList.findIndex((t) => t.trade_no === tr.trade_no);
               const isWin = (tr.net_return_pct || 0) > 0;
@@ -1298,18 +1298,18 @@ export default function TradingChart({
                 <button
                   key={tr.trade_no}
                   onClick={() => handleJumpToTrade(tr, actualIdx)}
-                  className={`px-2.5 py-1 border text-[10px] whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl border text-xs whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
                     isCurrent
-                      ? 'border-signal-cyan bg-signal-cyan text-floor-darker font-bold shadow-pixel-cyan scale-105 z-10'
+                      ? 'bg-white/15 text-white border-white/30 shadow-md font-semibold ring-1 ring-apple-blue/50 scale-[1.03] z-10'
                       : isWin
-                      ? 'border-signal-bull/30 bg-signal-bull/5 text-signal-bull hover:border-signal-bull/70'
-                      : 'border-signal-bear/30 bg-signal-bear/5 text-signal-bear hover:border-signal-bear/70'
+                      ? 'bg-apple-green/5 text-apple-green border-apple-green/20 hover:border-apple-green/50 hover:bg-apple-green/10'
+                      : 'bg-apple-red/5 text-apple-red border-apple-red/20 hover:border-apple-red/50 hover:bg-apple-red/10'
                   }`}
                   title={`Trade #${tr.trade_no}: ${side} @ $${tr.entry_price?.toLocaleString()} -> ${formatPercent(tr.net_return_pct || 0)}`}
                 >
                   <span className="opacity-70 font-sans">{isLong ? '▲' : '▼'}</span>
-                  <span>#{tr.trade_no}</span>
-                  <span className="font-bold">{formatPercent(tr.net_return_pct || 0)}</span>
+                  <span className="font-mono">#{tr.trade_no}</span>
+                  <span className="font-semibold font-mono tabular-nums">{formatPercent(tr.net_return_pct || 0)}</span>
                 </button>
               );
             })}

@@ -160,7 +160,7 @@ export default function App() {
   const activeStrategyObj = strategies.find((s) => s.id === selectedStrategyId);
 
   return (
-    <div className="min-h-screen bg-floor-bg text-retro-text flex flex-col selection:bg-signal-cyan selection:text-floor-darker font-sans">
+    <div className="min-h-screen bg-[#07080A] text-apple-text flex flex-col font-sans selection:bg-apple-blue selection:text-white">
       
       {/* Top Header */}
       <Header
@@ -170,27 +170,28 @@ export default function App() {
         onSimulateSignal={handleSimulateSignal}
       />
 
-      {/* Real-time Signal Alert Banner */}
+      {/* Real-time Signal Alert Dynamic Banner */}
       {bannerAlert && (
-        <div className="bg-signal-cyan/20 border-b-2 border-signal-cyan p-2.5 font-mono text-xs flex items-center justify-between animate-in slide-in-from-top duration-300">
-          <div className="max-w-[1600px] mx-auto w-full flex items-center justify-between">
-            <div className="flex items-center gap-2 text-signal-cyan font-bold">
-              <Bell className="w-4 h-4 animate-bounce" />
-              <span className="font-pixel text-[11px]">{bannerAlert.title}</span>
-              <span className="text-retro-text font-normal">// {bannerAlert.strategy} @ ${bannerAlert.price?.toLocaleString()}</span>
+        <div className="bg-apple-blue/15 border-b border-apple-blue/30 backdrop-blur-xl px-4 py-2.5 text-xs flex items-center justify-between animate-in slide-in-from-top duration-300">
+          <div className="max-w-[1500px] mx-auto w-full flex items-center justify-between">
+            <div className="flex items-center gap-2.5 text-white font-medium">
+              <span className="w-2 h-2 rounded-full bg-apple-cyan animate-ping" />
+              <Bell className="w-4 h-4 text-apple-cyan" />
+              <span className="font-semibold">{bannerAlert.title}</span>
+              <span className="text-apple-muted">/ {bannerAlert.strategy} @ ${bannerAlert.price?.toLocaleString()}</span>
             </div>
             <button
               onClick={() => setBannerAlert(null)}
-              className="text-retro-muted hover:text-retro-text text-xs font-mono"
+              className="text-apple-muted hover:text-white text-xs px-2 py-0.5 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
             >
-              [CLOSE]
+              Dismiss
             </button>
           </div>
         </div>
       )}
 
       {/* Main Container */}
-      <main className="flex-1 max-w-[1600px] mx-auto w-full p-3 sm:p-4 md:p-6 space-y-6">
+      <main className="flex-1 max-w-[1500px] mx-auto w-full px-4 sm:px-6 py-6 space-y-6 md:space-y-8">
         
         {/* Section 1: Quantitative Strategy Switcher & Execution Ribbon */}
         <section>
@@ -240,15 +241,15 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="border-t-2 border-floor-border bg-floor-darker py-4 px-4 font-mono text-xs text-retro-muted">
-        <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-signal-bull animate-pulse"></span>
-            <span className="font-pixel text-[10px] text-retro-text">QUENTRA PLATFORM</span>
-            <span className="text-retro-dim">// Algorithmic Trading Intelligence</span>
+      <footer className="border-t border-white/[0.08] bg-[#07080A] py-6 px-4 sm:px-6 text-xs text-apple-muted">
+        <div className="max-w-[1500px] mx-auto flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-apple-green shadow-[0_0_6px_rgba(48,209,88,0.7)]" />
+            <span className="font-semibold text-white tracking-tight">Quentra Pro</span>
+            <span className="text-apple-dim">/ Quantitative Trading Infrastructure</span>
           </div>
-          <div className="flex items-center gap-4 text-[11px] text-retro-dim">
-            <span>Data: Binance WebSocket Stream + 2020-2026 Ground Truth</span>
+          <div className="flex items-center gap-4 text-apple-dim">
+            <span>Binance WebSocket Stream + 2020-2026 Ground Truth</span>
           </div>
         </div>
       </footer>

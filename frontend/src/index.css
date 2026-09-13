@@ -4,90 +4,87 @@
 
 @layer base {
   body {
-    background-color: #1A1D26;
-    color: #EDEDF2;
-    font-family: 'Inter', sans-serif;
+    background-color: #07080A;
+    color: #F5F5F7;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Geist", "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
+  }
+
+  /* Universal Keyboard Accessibility Focus Ring */
+  :focus-visible {
+    outline: 2px solid #0A84FF;
+    outline-offset: 2px;
   }
 }
 
-/* Pixel Art Rendering Enforcement */
-.pixelated {
-  image-rendering: pixelated;
-  image-rendering: -moz-crisp-edges;
-  image-rendering: crisp-edges;
+/* Apple Pro Refined Glass Panels */
+.apple-glass {
+  background: rgba(15, 16, 21, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
-/* Custom Pixel Borders */
-.border-pixel {
-  border: 2px solid #2D344B;
-  box-shadow: 2px 2px 0px #0C0E14;
+.apple-glass-card {
+  background: rgba(22, 23, 31, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.border-pixel-cyan {
-  border: 2px solid #4FE0FF;
-  box-shadow: 0 0 10px rgba(79, 224, 255, 0.4), 2px 2px 0px #0C0E14;
+.apple-glass-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(26, 28, 38, 0.75);
 }
 
-.border-pixel-green {
-  border: 2px solid #39FF88;
-  box-shadow: 0 0 10px rgba(57, 255, 136, 0.4), 2px 2px 0px #0C0E14;
+/* Apple Segmented Control Container */
+.apple-segmented-container {
+  display: inline-flex;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.border-pixel-red {
-  border: 2px solid #FF4B5C;
-  box-shadow: 0 0 10px rgba(255, 75, 92, 0.4), 2px 2px 0px #0C0E14;
+.apple-segmented-item {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 9px;
+  color: #86868B;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.border-pixel-amber {
-  border: 2px solid #FFC145;
-  box-shadow: 0 0 10px rgba(255, 193, 69, 0.4), 2px 2px 0px #0C0E14;
+.apple-segmented-item:hover {
+  color: #F5F5F7;
 }
 
-/* Subtle CRT Scanlines */
-.crt-overlay {
-  background: linear-gradient(
-    rgba(18, 21, 29, 0) 50%, 
-    rgba(0, 0, 0, 0.25) 50%
-  );
-  background-size: 100% 4px;
-  pointer-events: none;
+.apple-segmented-item.active {
+  background: rgba(255, 255, 255, 0.14);
+  color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
-/* Segmented Health-Bar Blocks */
-.confidence-block {
-  width: 8px;
-  height: 14px;
-  margin-right: 2px;
-  display: inline-block;
-  border: 1px solid #1A1D26;
-}
-
-/* Custom Scrollbar */
+/* Apple Pro Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #12151D;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2D344B;
-  border-radius: 0px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4FE0FF;
-}
-
-/* Blinking cursor / text */
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-
-.animate-blink {
-  animation: blink 1s infinite;
+  background: rgba(255, 255, 255, 0.28);
 }

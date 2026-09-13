@@ -131,7 +131,7 @@ export default function StrategyDetail({
       <div className="relative w-full max-w-5xl rounded-3xl border border-black/10 dark:border-white/[0.12] bg-white dark:bg-[#0C0D12] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-black/[0.08] dark:border-white/[0.08] p-5 bg-black/[0.02] dark:bg-[#101117]/80">
+        <div className="shrink-0 flex items-center justify-between border-b border-black/[0.08] dark:border-white/[0.08] p-5 bg-black/[0.02] dark:bg-[#101117]/80">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${
               isLong 
@@ -189,7 +189,7 @@ export default function StrategyDetail({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center border-b border-black/[0.08] dark:border-white/[0.08] bg-black/[0.01] dark:bg-[#0E0F14] px-5 pt-3 gap-2 overflow-x-auto no-scrollbar">
+        <div className="shrink-0 flex items-center border-b border-black/[0.08] dark:border-white/[0.08] bg-black/[0.01] dark:bg-[#0E0F14] px-5 pt-3 gap-2 overflow-x-auto no-scrollbar">
           {[
             { id: 'overview', label: 'Overview & Logic' },
             { id: 'yearly', label: 'Year-by-Year (YoY)' },
@@ -217,7 +217,7 @@ export default function StrategyDetail({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-5 md:p-7 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 md:p-7 space-y-6">
           {loading ? (
             <div className="py-24 text-center text-xs text-apple-muted animate-pulse">
               Loading quantitative intelligence...

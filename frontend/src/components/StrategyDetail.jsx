@@ -194,9 +194,9 @@ export default function StrategyDetail({
             { id: 'overview', label: 'Overview & Logic' },
             { id: 'yearly', label: 'Year-by-Year (YoY)' },
             { id: 'trades', label: `Trade Logs (${trades.length})` },
-            { id: 'vs-btc', label: 'Algo vs Bitcoin Price', icon: LineChart },
+            { id: 'vs-btc', label: 'Algo vs Bitcoin Price' },
           ].map((tab) => {
-            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
@@ -204,13 +204,12 @@ export default function StrategyDetail({
                   playRetroSound('blip');
                   setActiveTab(tab.id);
                 }}
-                className={`pb-3 px-3.5 border-b-2 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'border-apple-blue text-apple-blue dark:text-white font-semibold'
+                className={`pb-3 px-3.5 border-b-2 text-xs font-semibold shrink-0 transition-colors duration-150 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                  isActive
+                    ? 'border-apple-blue text-apple-blue dark:text-white'
                     : 'border-transparent text-apple-muted hover:text-apple-text'
                 }`}
               >
-                {Icon && <Icon className="w-3.5 h-3.5" />}
                 <span>{tab.label}</span>
               </button>
             );

@@ -720,7 +720,7 @@ export default function App() {
             <span className="text-apple-dim">/ Quantitative Trading Infrastructure</span>
           </div>
           <div className="flex items-center gap-4 text-apple-dim">
-            <span>Binance WebSocket Stream + 2020-2026 Ground Truth</span>
+            <span>Developed by i_setyawans - Crypto Algo Enthusiast</span>
           </div>
         </div>
       </footer>

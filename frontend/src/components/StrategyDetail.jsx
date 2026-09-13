@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { formatPrice, formatPercent, formatDateTime, playRetroSound } from '../utils/formatters';
+import strategiesData from '../data/strategiesData.json';
 import { 
   X, 
   TrendingUp, 
@@ -43,14 +44,23 @@ export default function StrategyDetail({
   useEffect(() => {
     if (!strategyId || !isOpen) return;
     setLoading(true);
+
+    // Immediate baseline fallback
+    const localStrat = strategiesData.find((s) => s.id === strategyId);
+    if (localStrat) {
+      setStrategy(localStrat);
+    }
+
     fetch(`/api/strategies/${strategyId}`)
       .then((res) => res.json())
       .then((data) => {
-        setStrategy(data);
+        if (data && data.id) {
+          setStrategy(data);
+        }
         setLoading(false);
       })
-      .catch((err) => {
-        console.error('Error loading strategy detail:', err);
+      .catch(() => {
+        // Kept localStrat from strategiesData
         setLoading(false);
       });
   }, [strategyId, isOpen]);

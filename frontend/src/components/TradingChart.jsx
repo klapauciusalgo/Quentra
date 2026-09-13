@@ -220,24 +220,92 @@ export default function TradingChart({
     return tradesList;
   }, [tradesList, tradeFilter]);
 
-  // Fetch Klines whenever timeframe changes
+  // Compute moving averages over candles array
+  const calculateMAValues = (candleArr, period) => {
+    const result = new Array(candleArr.length).fill(null);
+    let sum = 0;
+    for (let i = 0; i < candleArr.length; i++) {
+      sum += candleArr[i].close;
+      if (i >= period) {
+        sum -= candleArr[i - period].close;
+      }
+      if (i >= period - 1) {
+        result[i] = parseFloat((sum / period).toFixed(2));
+      }
+    }
+    return result;
+  };
+
+  // Fetch Klines whenever timeframe changes with multi-tier edge fallback
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
 
-    fetch(`${API_BASE}/api/klines?timeframe=${timeframe}&limit=5000`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!isMounted) return;
-        if (data && data.candles) {
-          setCandles(data.candles);
+    async function loadKlines() {
+      // Tier 1: Try configured backend API
+      try {
+        const res = await fetch(`${API_BASE}/api/klines?timeframe=${timeframe}&limit=5000`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.candles) && data.candles.length > 0) {
+            if (isMounted) {
+              setCandles(data.candles);
+              setLoading(false);
+              return;
+            }
+          }
         }
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Error loading klines:', err);
-        if (isMounted) setLoading(false);
-      });
+      } catch (err) {
+        console.warn('Backend klines unavailable, falling back to Binance public stream:', err);
+      }
+
+      // Tier 2: Fetch directly from Binance official public REST API
+      try {
+        const binanceInterval = timeframe.toLowerCase();
+        const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${binanceInterval}&limit=1000`);
+        if (res.ok) {
+          const raw = await res.json();
+          if (Array.isArray(raw) && raw.length > 0) {
+            const parsed = raw.map((c) => ({
+              time: Math.floor(c[0] / 1000),
+              open: parseFloat(c[1]),
+              high: parseFloat(c[2]),
+              low: parseFloat(c[3]),
+              close: parseFloat(c[4]),
+              volume: parseFloat(c[5]),
+            }));
+
+            // Compute MAs
+            const ma8Arr = calculateMAValues(parsed, 8);
+            const ma25Arr = calculateMAValues(parsed, 25);
+            const ma50Arr = calculateMAValues(parsed, 50);
+            const ma55Arr = calculateMAValues(parsed, 55);
+            const ma111Arr = calculateMAValues(parsed, 111);
+
+            const enriched = parsed.map((c, idx) => ({
+              ...c,
+              ma8: ma8Arr[idx],
+              ma25: ma25Arr[idx],
+              ma50: ma50Arr[idx],
+              ma55: ma55Arr[idx],
+              ma111: ma111Arr[idx],
+            }));
+
+            if (isMounted) {
+              setCandles(enriched);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Binance public klines fetch error:', err);
+      }
+
+      if (isMounted) setLoading(false);
+    }
+
+    loadKlines();
 
     return () => {
       isMounted = false;
@@ -379,8 +447,9 @@ export default function TradingChart({
     }
 
     const container = chartContainerRef.current;
+    const initialWidth = Math.max(300, container.clientWidth || container.parentElement?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth - 64 : 800));
     const chart = createChart(container, {
-      width: container.clientWidth,
+      width: initialWidth,
       height: 520,
       layout: {
         background: { type: ColorType.Solid, color: '#07080A' },
@@ -540,8 +609,28 @@ export default function TradingChart({
         const validMarkers = activeStrategy.markers.filter((m) => candleTimes.has(m.time));
 
         if (validMarkers.length > 0) {
-          const formatted = formatMarkersForDisplay(validMarkers, markerLabelMode);
-          markersPrimitiveRef.current = createSeriesMarkers(candleSeries, formatted);
+          const sortedMarkers = [...validMarkers].sort((a, b) => {
+            if (a.time !== b.time) return a.time - b.time;
+            return (a.tradeNo || 0) - (b.tradeNo || 0);
+          });
+
+          const deduplicatedMarkers = [];
+          const seenTimes = new Set();
+          sortedMarkers.forEach((m) => {
+            let mTime = m.time;
+            while (seenTimes.has(mTime)) {
+              mTime += 1;
+            }
+            seenTimes.add(mTime);
+            deduplicatedMarkers.push({ ...m, time: mTime });
+          });
+
+          const formatted = formatMarkersForDisplay(deduplicatedMarkers, markerLabelMode);
+          try {
+            markersPrimitiveRef.current = createSeriesMarkers(candleSeries, formatted);
+          } catch (markerErr) {
+            console.warn('Marker rendering fallback:', markerErr);
+          }
 
           // Focus viewport around the latest execution marker
           const lastMarker = validMarkers[validMarkers.length - 1];
@@ -551,6 +640,8 @@ export default function TradingChart({
               from: Math.max(0, lastMarkerIndex - 60),
               to: Math.min(formattedCandles.length - 1, lastMarkerIndex + 30),
             });
+          } else {
+            chart.timeScale().fitContent();
           }
         } else {
           chart.timeScale().fitContent();
@@ -612,7 +703,20 @@ export default function TradingChart({
       }
     });
 
-    // Window Resize listener
+    // Responsive Resize Observer
+    let resizeObserver = null;
+    if (typeof ResizeObserver !== 'undefined' && container) {
+      resizeObserver = new ResizeObserver((entries) => {
+        if (!entries || entries.length === 0 || !chartRef.current) return;
+        const entryWidth = Math.floor(entries[0].contentRect.width);
+        if (entryWidth > 50) {
+          chartRef.current.applyOptions({ width: entryWidth });
+        }
+      });
+      resizeObserver.observe(container);
+    }
+
+    // Window Resize fallback listener
     const handleResize = () => {
       if (chartRef.current && container) {
         chartRef.current.applyOptions({ width: container.clientWidth });
@@ -621,6 +725,7 @@ export default function TradingChart({
     window.addEventListener('resize', handleResize);
 
     return () => {
+      if (resizeObserver) resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
       if (chartRef.current) {
         chartRef.current.remove();
@@ -645,16 +750,47 @@ export default function TradingChart({
     if (showMarkers && activeStrategy?.markers && activeStrategy.markers.length > 0) {
       const candleTimes = new Set(candles.map((c) => c.time));
       const validMarkers = activeStrategy.markers.filter((m) => candleTimes.has(m.time));
-      const formatted = formatMarkersForDisplay(validMarkers, markerLabelMode);
 
-      if (markersPrimitiveRef.current) {
-        markersPrimitiveRef.current.setMarkers(formatted);
+      if (validMarkers.length > 0) {
+        const sortedMarkers = [...validMarkers].sort((a, b) => {
+          if (a.time !== b.time) return a.time - b.time;
+          return (a.tradeNo || 0) - (b.tradeNo || 0);
+        });
+
+        const deduplicatedMarkers = [];
+        const seenTimes = new Set();
+        sortedMarkers.forEach((m) => {
+          let mTime = m.time;
+          while (seenTimes.has(mTime)) {
+            mTime += 1;
+          }
+          seenTimes.add(mTime);
+          deduplicatedMarkers.push({ ...m, time: mTime });
+        });
+
+        const formatted = formatMarkersForDisplay(deduplicatedMarkers, markerLabelMode);
+
+        try {
+          if (markersPrimitiveRef.current) {
+            markersPrimitiveRef.current.setMarkers(formatted);
+          } else {
+            markersPrimitiveRef.current = createSeriesMarkers(candleSeriesRef.current, formatted);
+          }
+        } catch (err) {
+          console.warn('Marker update warning:', err);
+        }
       } else {
-        markersPrimitiveRef.current = createSeriesMarkers(candleSeriesRef.current, formatted);
+        if (markersPrimitiveRef.current) {
+          try {
+            markersPrimitiveRef.current.setMarkers([]);
+          } catch (e) {}
+        }
       }
     } else {
       if (markersPrimitiveRef.current) {
-        markersPrimitiveRef.current.setMarkers([]);
+        try {
+          markersPrimitiveRef.current.setMarkers([]);
+        } catch (e) {}
       }
     }
   }, [activeStrategy, showMarkers, markerLabelMode, candles]);
@@ -683,7 +819,11 @@ export default function TradingChart({
       close: liveTicker.price,
     };
 
-    candleSeriesRef.current.update(updated);
+    try {
+      candleSeriesRef.current.update(updated);
+    } catch (e) {
+      // Safe catch
+    }
   }, [liveTicker?.price]);
 
   // Jump chart to specific trade

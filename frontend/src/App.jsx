@@ -2,117 +2,26 @@ import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import StrategyRibbon from './components/StrategyRibbon';
 import TradingChart from './components/TradingChart';
-import PixelTradingFloor from './components/PixelTradingFloor';
 import AlgoExplorer from './components/AlgoExplorer';
 import StrategyDetail from './components/StrategyDetail';
 import RiskCalculator from './components/RiskCalculator';
-import AgentDrawer from './components/AgentDrawer';
 import { playRetroSound } from './utils/formatters';
-import { Bell, BarChart3, Layers, Compass, ShieldCheck, Grid } from 'lucide-react';
+import { Bell, BarChart3, Compass, ShieldCheck, Grid } from 'lucide-react';
 import { API_BASE, getWsUrl } from './config';
 import strategiesData from './data/strategiesData.json';
 
-// Default floor state for offline or standalone edge deployments
+// Minimal market regime and session state
 const DEFAULT_FLOOR_STATE = {
-  active_agent_id: 'trader',
   market_regime: {
     status: 'MACRO_DISCOUNT',
     weekly_ma55: 82654,
     distance_pct: -6.5,
-    stance_description: 'Weekly MA55 Anchor at $82,654 (-6.5% discount)'
   },
   session: {
-    name: 'London / New York Overlap (Peak Volume)',
+    name: 'London / New York Overlap',
     active: true,
     code: 'LDN_NY',
-    time_utc: '15:00 UTC'
   },
-  signal_ticket: {
-    symbol: 'BTC/USDT',
-    direction: 'LONG',
-    strategy_name: 'Pippo 1h Enhanced',
-    strategy_id: 'pippo-1h-enhanced',
-    confidence_pct: 88,
-    confidence_blocks: 8,
-    entry_price: 77293.0,
-    stop_loss: 71109.0,
-    stop_loss_pct: -8.0,
-    breakeven_trigger: 81157.0,
-    breakeven_trigger_pct: 5.0,
-    take_profit: 135262.0,
-    take_profit_pct: 75.0,
-    risk_reward_ratio: '9.37x',
-    timestamp: '2026-09-13 16:00 UTC',
-    contributing_agents: ['quant', 'trader', 'informan'],
-    status: 'ACTIVE WATCH'
-  },
-  agents: [
-    {
-      id: 'researcher',
-      name: 'Researcher',
-      role: 'Macro & On-Chain Scout',
-      status_badge: 'ANALYZING',
-      speech_bubble: 'Global liquidity index +2.4%. On-chain UTXO accumulation steady.',
-      reasoning_log: [
-        'Macro Liquidity: Global central bank balance sheets showing mild expansion.',
-        'On-Chain Health: Long-term holder supply holding above 74% total circulating BTC.',
-        'Derivatives Funding: Neutral-to-negative (-0.002%), indicating healthy short-squeeze potential.',
-        'ETF Flows: Net inflows over the trailing 5-day cycle totaling $420M.',
-        'Cycle Thesis: 4-year halving trajectory in prime expansion phase; macro dips remain high-conviction accumulation zones.'
-      ]
-    },
-    {
-      id: 'quant',
-      name: 'Quant',
-      role: 'SMC & Algorithmic Indicators',
-      status_badge: 'COMPUTING',
-      speech_bubble: '1H 16-bar internal structure broke bullish. 48h floor intact.',
-      reasoning_log: [
-        'BTC Price: Momentum holding above 1H EMA50 ($76,920).',
-        'Smart Money Concepts (SMC): 50-bar major swing high validated; 16-bar internal CHoCH confirmed.',
-        'Structural Exit Floor: 48-hour swing low set at $74,800. Any candle close below terminates runner.',
-        'Volatility Compression: Bollinger Band bandwidth down to 2.8%, signaling incoming expansion impulse.'
-      ]
-    },
-    {
-      id: 'trader',
-      name: 'Trader',
-      role: 'Signal Dispatcher & Execution',
-      status_badge: 'SIGNAL DISPATCH',
-      speech_bubble: 'Pippo 1H Enhanced setup primed. Limit orders standing by.',
-      reasoning_log: [
-        'Active Setup: Pippo 1h Enhanced (Historical Win Rate 65.6%, Profit Factor 3.81).',
-        'Order Routing: Limit fill protocol on bar close confirmation (0.09% taker fee modeled).',
-        'Risk Gate: Hard stop loss fixed at -8.0% ($71,109).',
-        'Dynamic Breakeven: At +5.0% profit ($81,157), stop loss will automatically jump to entry + 0.2% for risk-free run.',
-        'Target Runner: +75.0% take profit ladder ($135,262) with 48h trailing structural floor.'
-      ]
-    },
-    {
-      id: 'informan',
-      name: 'Informan',
-      role: 'Market Regime & Sentiment',
-      status_badge: 'REGIME WATCH',
-      speech_bubble: 'Weekly MA55 at $82,654 (-6.5%). Macro accumulation floor validated.',
-      reasoning_log: [
-        'Macro Regime: Price operating in accumulation band below Weekly MA55 ($82,654).',
-        'Historical Comp: Similar cyclical setups in Q4 2020 yielded multi-month trending rallies.',
-        'Liquidity Vacuum: Thin sell-side liquidity above $80,000 creates accelerated path to new highs once resistance breaks.'
-      ]
-    },
-    {
-      id: 'risk_officer',
-      name: 'Risk Officer',
-      role: 'Capital Preservation & Volatility Guard',
-      status_badge: 'GUARDED',
-      speech_bubble: 'Liquidation buffer verified -96% from market. Drawdown stop locked.',
-      reasoning_log: [
-        'Leverage Cap: Spot-equivalent 1.0x modeled. Zero liquidation danger.',
-        'Drawdown Ceiling: Historical max drawdown capped at -19.7% across 6-year test suite.',
-        'Capital Allocation: 80% free cash held in reserve; 20% max deployed per isolated trade.'
-      ]
-    }
-  ]
 };
 
 export default function App() {
@@ -132,14 +41,12 @@ export default function App() {
   const [selectedStrategyId, setSelectedStrategyId] = useState('pippo-1h-enhanced');
   const [timeframe, setTimeframe] = useState('1h');
   
-  // View Filter Segment: 'all' | 'chart' | 'desk' | 'catalog' | 'risk'
+  // View Filter Segment: 'all' | 'chart' | 'catalog' | 'risk'
   const [activeView, setActiveView] = useState('all');
 
-  // Modals, Drawers & Banners
+  // Modals & Banners
   const [detailStrategyId, setDetailStrategyId] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState(null);
-  const [isAgentDrawerOpen, setIsAgentDrawerOpen] = useState(false);
   const [bannerAlert, setBannerAlert] = useState(null);
 
   const wsRef = useRef(null);
@@ -156,8 +63,8 @@ export default function App() {
           setTicker((prev) => ({ ...prev, price: data.latest_btc_price }));
         }
       })
-      .catch((err) => {
-        console.warn('Status endpoint unavailable, using direct edge telemetry');
+      .catch(() => {
+        // Edge mode: direct stream active
       });
 
     // Ticker
@@ -172,11 +79,9 @@ export default function App() {
     fetch(`${API_BASE}/api/floor`)
       .then((r) => r.json())
       .then((data) => {
-        if (data && data.agents) setFloor(data);
+        if (data && (data.market_regime || data.session)) setFloor(data);
       })
-      .catch(() => {
-        // Keep default rich floor state
-      });
+      .catch(() => {});
 
     // Strategies
     fetch(`${API_BASE}/api/strategies`)
@@ -187,7 +92,7 @@ export default function App() {
         }
       })
       .catch(() => {
-        // Already initialized with bundled strategiesData
+        // Initialized with bundled strategiesData
       });
   }, []);
 
@@ -266,7 +171,6 @@ export default function App() {
             setFloor(msg.floor);
           } else if (msg.type === 'NEW_SIGNAL') {
             playRetroSound('signal');
-            setFloor(msg.floor);
             setBannerAlert({
               title: `NEW ${msg.ticket?.direction} SIGNAL DISPATCHED!`,
               strategy: msg.ticket?.strategy_name,
@@ -314,21 +218,12 @@ export default function App() {
     setIsDetailOpen(true);
   };
 
-  // Open agent inspector drawer
-  const handleSelectAgent = (agentId) => {
-    const foundAgent = floor?.agents?.find((a) => a.id === agentId) || DEFAULT_FLOOR_STATE.agents.find((a) => a.id === agentId);
-    if (foundAgent) {
-      setSelectedAgent(foundAgent);
-      setIsAgentDrawerOpen(true);
-    }
-  };
-
   // Dispatch simulated test signal
   const handleSimulateSignal = () => {
     fetch(`${API_BASE}/api/floor/simulate-signal?strategy_id=${selectedStrategyId}`, { method: 'POST' })
       .then((r) => r.json())
       .catch(() => {
-        // Local simulation trigger if backend endpoint offline
+        // Local simulation fallback
         playRetroSound('signal');
         setBannerAlert({
           title: 'NEW LONG SIGNAL DISPATCHED',
@@ -386,7 +281,7 @@ export default function App() {
               className={`apple-segmented-item ${activeView === 'all' ? 'active' : ''}`}
             >
               <Grid className="w-3.5 h-3.5" />
-              <span>Full Workspace</span>
+              <span>Full Platform</span>
             </button>
             <button
               onClick={() => {
@@ -396,17 +291,7 @@ export default function App() {
               className={`apple-segmented-item ${activeView === 'chart' ? 'active' : ''}`}
             >
               <BarChart3 className="w-3.5 h-3.5" />
-              <span>Chart & Signals</span>
-            </button>
-            <button
-              onClick={() => {
-                playRetroSound('select');
-                setActiveView('desk');
-              }}
-              className={`apple-segmented-item ${activeView === 'desk' ? 'active' : ''}`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Autonomous Desk</span>
+              <span>Execution Chart</span>
             </button>
             <button
               onClick={() => {
@@ -416,7 +301,7 @@ export default function App() {
               className={`apple-segmented-item ${activeView === 'catalog' ? 'active' : ''}`}
             >
               <Compass className="w-3.5 h-3.5" />
-              <span>Algo Catalog</span>
+              <span>Strategy Directory</span>
             </button>
             <button
               onClick={() => {
@@ -461,19 +346,7 @@ export default function App() {
           </section>
         )}
 
-        {/* Section 3: Autonomous Agent Desk / Command Center */}
-        {(activeView === 'all' || activeView === 'desk') && (
-          <section>
-            <PixelTradingFloor
-              floor={floor}
-              onSelectAgent={handleSelectAgent}
-              onSelectStrategy={handleSelectStrategy}
-              currentBtcPrice={ticker.price}
-            />
-          </section>
-        )}
-
-        {/* Section 4: Algo Strategy Explorer & Preference Matcher */}
+        {/* Section 3: Algo Strategy Explorer & Preference Matcher */}
         {(activeView === 'all' || activeView === 'catalog') && (
           <section>
             <AlgoExplorer
@@ -485,7 +358,7 @@ export default function App() {
           </section>
         )}
 
-        {/* Section 5: Leverage & Liquidation Safety Calculator */}
+        {/* Section 4: Leverage & Liquidation Safety Calculator */}
         {(activeView === 'all' || activeView === 'risk') && (
           <section>
             <RiskCalculator currentBtcPrice={ticker.price} />
@@ -499,14 +372,6 @@ export default function App() {
         strategyId={detailStrategyId}
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
-        onSelectStrategy={handleSelectStrategy}
-      />
-
-      {/* Slide-over Sheet: Autonomous Agent Inspector */}
-      <AgentDrawer
-        agent={selectedAgent}
-        isOpen={isAgentDrawerOpen}
-        onClose={() => setIsAgentDrawerOpen(false)}
         onSelectStrategy={handleSelectStrategy}
       />
 

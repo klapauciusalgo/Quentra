@@ -310,13 +310,21 @@ export default function App() {
     };
   }, []);
 
-  // Switch strategy AND automatically adapt chart timeframe
+  // Switch strategy AND automatically adapt chart timeframe and live ticket
   const handleSelectStrategy = (stratId) => {
     setSelectedStrategyId(stratId);
     const strat = strategies.find((s) => s.id === stratId);
     if (strat?.timeframe) {
       setTimeframe(strat.timeframe.toLowerCase());
     }
+    fetch(`${API_BASE}/api/signals/ticket?strategy_id=${stratId}`)
+      .then((r) => r.json())
+      .then((ticket) => {
+        if (ticket) {
+          setFloor((prev) => ({ ...prev, signal_ticket: ticket }));
+        }
+      })
+      .catch(() => {});
   };
 
   // Open strategy detail modal
@@ -453,6 +461,7 @@ export default function App() {
               activeStrategy={activeStrategyObj}
               liveTicker={ticker}
               theme={theme}
+              floor={floor}
             />
           </section>
         )}

@@ -67,6 +67,7 @@ export default function TradingChart({
   liveTicker = null,
   onTradeSelect = null,
   theme = 'light',
+  floor = null,
 }) {
   const isDark = theme === 'dark';
   const chartContainerRef = useRef(null);
@@ -1114,7 +1115,7 @@ export default function TradingChart({
       </div>
 
       {/* 2. OHLCV Metrics & Signal Hover Callout Bar */}
-      <div className="h-6 flex items-center justify-between gap-4 text-xs font-mono text-apple-muted overflow-x-auto whitespace-nowrap">
+      <div className="min-h-[30px] py-0.5 flex items-center justify-between gap-3 text-xs font-mono text-apple-muted overflow-x-auto no-scrollbar">
         {hoveredSignal ? (
           <div className="flex items-center gap-2 bg-apple-blue/15 border border-apple-blue/30 rounded-lg px-2.5 py-0.5 text-white font-medium animate-in fade-in duration-150">
             <Zap className="w-3.5 h-3.5 text-apple-cyan" />
@@ -1165,13 +1166,34 @@ export default function TradingChart({
             )}
           </div>
         ) : (
-          <div className="text-apple-dim flex items-center gap-2">
-            <span>Hover cursor or click on candles to inspect price & signal execution.</span>
-            {activeStrategy && (
-              <span className="text-apple-cyan font-medium hidden sm:inline">
-                · Active Algo: {activeStrategy.name} ({tradesList.length} trades plotted)
-              </span>
+          <div className="flex items-center gap-2 text-xs flex-wrap overflow-x-auto no-scrollbar py-0.5">
+            {floor?.signal_ticket && (
+              <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-medium transition-all ${
+                floor.signal_ticket.status === 'LIVE_SIGNAL'
+                  ? 'bg-apple-green/15 text-apple-green border-apple-green/40 shadow-sm animate-pulse'
+                  : 'bg-black/[0.04] dark:bg-white/[0.05] text-apple-text border-black/10 dark:border-white/10'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  floor.signal_ticket.status === 'LIVE_SIGNAL' ? 'bg-apple-green shadow-[0_0_6px_rgba(48,209,88,0.8)]' : 'bg-apple-blue shadow-[0_0_6px_rgba(0,113,227,0.6)]'
+                }`} />
+                <span className="font-semibold text-apple-text">
+                  {floor.signal_ticket.status === 'LIVE_SIGNAL' ? 'LIVE POSITION' : 'LIVE ENGINE'}:
+                </span>
+                <span className="text-apple-muted">
+                  {floor.signal_ticket.status === 'LIVE_SIGNAL'
+                    ? `${floor.signal_ticket.direction} @ ${formatPrice(floor.signal_ticket.entry_price)}`
+                    : `Active Watch (${floor.signal_ticket.direction || 'LONG'}) · Next Trigger: ${formatPrice(floor.signal_ticket.entry_price)} (${floor.signal_ticket.trigger_distance_pct >= 0 ? '+' : ''}${floor.signal_ticket.trigger_distance_pct}%)`}
+                </span>
+                {floor.signal_ticket.stop_loss && (
+                  <span className="text-apple-dim hidden sm:inline">
+                    · Floor: ${Number(floor.signal_ticket.stop_loss).toLocaleString()}
+                  </span>
+                )}
+              </div>
             )}
+            <span className="text-apple-dim hidden lg:inline">
+              · Active Algo: {activeStrategy?.name} ({tradesList.length} trades plotted)
+            </span>
           </div>
         )}
 

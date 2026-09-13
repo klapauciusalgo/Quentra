@@ -70,26 +70,76 @@ def load_data_into_memory():
     else:
         logger.warning("klines_cache.json not found! Run generate_data.py first.")
 
-    # 3. Load strategy catalog (check Supabase first, fallback to JSON cache)
+    # 3. Load strategy catalog (load local strategies.json with full rich data & markers, enrich with Supabase)
+    strat_path = os.path.join(DATA_DIR, "strategies.json")
+    local_catalog = []
+    if os.path.exists(strat_path):
+        with open(strat_path, "r") as f:
+            local_catalog = json.load(f)
+
     try:
         from supabase_client import fetch_strategies_from_db
         sb_strategies = fetch_strategies_from_db()
         if sb_strategies and len(sb_strategies) > 0:
-            STRATEGIES_CATALOG = sb_strategies
+            local_map = {s["id"]: s for s in local_catalog}
+            merged = []
+            for sb_s in sb_strategies:
+                sid = sb_s["id"]
+                base_s = local_map.get(sid, {})
+                combined = {**base_s, **sb_s}
+                
+                # Ensure rich metadata is preserved from base
+                for field in ["markers", "logic_summary", "badge", "archetype", "recommended_for", "yearly_stats", "parameters"]:
+                    if not combined.get(field) and base_s.get(field):
+                        combined[field] = base_s[field]
+
+                # Ensure metrics dict is fully populated
+                base_metrics = base_s.get("metrics") or {}
+                m = combined.get("metrics") or {}
+                combined["metrics"] = {
+                    "total_return_pct": m.get("total_return_pct") or base_metrics.get("total_return_pct") or combined.get("total_return_pct", 0),
+                    "win_rate_pct": m.get("win_rate_pct") or base_metrics.get("win_rate_pct") or combined.get("win_rate_pct", 0),
+                    "profit_factor": m.get("profit_factor") or base_metrics.get("profit_factor") or combined.get("profit_factor", 1.0),
+                    "max_drawdown_pct": m.get("max_drawdown_pct") or base_metrics.get("max_drawdown_pct") or combined.get("max_drawdown_pct", 0),
+                    "total_trades": m.get("total_trades") or base_metrics.get("total_trades") or combined.get("trades_count", len(combined.get("trades", []))),
+                    "cagr_pct": base_metrics.get("cagr_pct", 0),
+                    "calmar_ratio": base_metrics.get("calmar_ratio", 1.0),
+                    "win_trades": base_metrics.get("win_trades", 0),
+                    "loss_trades": base_metrics.get("loss_trades", 0),
+                    "avg_win_pct": base_metrics.get("avg_win_pct", 0),
+                    "avg_loss_pct": base_metrics.get("avg_loss_pct", 0),
+                    "best_trade_pct": base_metrics.get("best_trade_pct", 0),
+                    "worst_trade_pct": base_metrics.get("worst_trade_pct", 0),
+                }
+                combined["total_return_pct"] = combined["metrics"]["total_return_pct"]
+                combined["win_rate_pct"] = combined["metrics"]["win_rate_pct"]
+                combined["profit_factor"] = combined["metrics"]["profit_factor"]
+                # Deduplicate trades by trade_no
+                raw_trades = combined.get("trades") or base_s.get("trades", [])
+                unique_trades = {}
+                for tr in raw_trades:
+                    t_no = tr.get("trade_no")
+                    if t_no not in unique_trades:
+                        unique_trades[t_no] = tr
+                combined["trades"] = sorted(unique_trades.values(), key=lambda x: x.get("trade_no", 0))
+
+                merged.append(combined)
+
+            seen_ids = {s["id"] for s in merged}
+            for loc_s in local_catalog:
+                if loc_s["id"] not in seen_ids:
+                    merged.append(loc_s)
+
+            STRATEGIES_CATALOG = merged
             STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
-            logger.info(f"Loaded {len(STRATEGIES_CATALOG)} strategies from Supabase database!")
+            logger.info(f"Loaded {len(STRATEGIES_CATALOG)} strategies (enriched with Supabase and markers preserved)!")
         else:
             raise ValueError("No strategies in Supabase or Supabase not connected")
     except Exception as e:
         logger.info(f"Using local strategies.json cache: {e}")
-        strat_path = os.path.join(DATA_DIR, "strategies.json")
-        if os.path.exists(strat_path):
-            with open(strat_path, "r") as f:
-                STRATEGIES_CATALOG = json.load(f)
-            STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
-            logger.info(f"Loaded {len(STRATEGIES_CATALOG)} strategies from local cache")
-        else:
-            logger.warning("strategies.json not found! Run generate_data.py first.")
+        STRATEGIES_CATALOG = local_catalog
+        STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
+        logger.info(f"Loaded {len(STRATEGIES_CATALOG)} strategies from local cache")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

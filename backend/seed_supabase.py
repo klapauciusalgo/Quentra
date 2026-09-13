@@ -46,6 +46,7 @@ def seed():
         trades = strat.get("trades", [])
         
         # 1. Upsert Strategy Record
+        m = strat.get("metrics", {})
         strat_record = {
             "id": strat["id"],
             "name": strat["name"],
@@ -54,14 +55,14 @@ def seed():
             "timeframe": strat["timeframe"],
             "category": strat.get("category", "Quantitative Model"),
             "status": strat.get("status", "ACTIVE"),
-            "win_rate_pct": float(strat.get("win_rate_pct", 0)),
-            "total_return_pct": float(strat.get("total_return_pct", 0)),
-            "profit_factor": float(strat.get("profit_factor", 1.0)),
-            "max_drawdown_pct": float(strat.get("max_drawdown_pct", 0)),
-            "trades_count": int(strat.get("trades_count", len(trades))),
-            "sharpe_ratio": float(strat.get("sharpe_ratio", 1.0)) if strat.get("sharpe_ratio") else None,
+            "win_rate_pct": float(m.get("win_rate_pct") if m.get("win_rate_pct") is not None else strat.get("win_rate_pct", 0)),
+            "total_return_pct": float(m.get("total_return_pct") if m.get("total_return_pct") is not None else strat.get("total_return_pct", 0)),
+            "profit_factor": float(m.get("profit_factor") if m.get("profit_factor") is not None else strat.get("profit_factor", 1.0)),
+            "max_drawdown_pct": float(m.get("max_drawdown_pct") if m.get("max_drawdown_pct") is not None else strat.get("max_drawdown_pct", 0)),
+            "trades_count": int(m.get("total_trades") or strat.get("trades_count", len(trades))),
+            "sharpe_ratio": float(m.get("sharpe_ratio") or m.get("calmar_ratio") or 1.0),
             "parameters": strat.get("parameters", {}),
-            "yoy_stats": strat.get("yoy_stats", [])
+            "yoy_stats": strat.get("yearly_stats") or strat.get("yoy_stats", [])
         }
 
         logger.info(f"Upserting strategy: {strat['name']} ({strat['id']})...")

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
-import StrategyRibbon from './components/StrategyRibbon';
+import StrategyRibbon, { StrategyDetailCard } from './components/StrategyRibbon';
 import TradingChart from './components/TradingChart';
 import AlgoExplorer from './components/AlgoExplorer';
 import StrategyDetail from './components/StrategyDetail';
@@ -320,7 +320,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Section 1: Quantitative Strategy Ribbon */}
+        {/* Section 1: Quantitative Strategy Selector Strip */}
         {(activeView === 'all' || activeView === 'chart') && (
           <section>
             <StrategyRibbon
@@ -330,6 +330,7 @@ export default function App() {
               onOpenDetail={handleOpenDetail}
               currentBtcPrice={ticker.price}
               floor={floor}
+              showDetailsCard={false}
             />
           </section>
         )}
@@ -342,6 +343,17 @@ export default function App() {
               onTimeframeChange={(tf) => setTimeframe(tf)}
               activeStrategy={activeStrategyObj}
               liveTicker={ticker}
+            />
+          </section>
+        )}
+
+        {/* Section 3: Selected Strategy Parameter Matrix & Execution Targets */}
+        {(activeView === 'all' || activeView === 'chart') && (
+          <section>
+            <StrategyDetailCard
+              activeStrat={activeStrategyObj}
+              currentBtcPrice={ticker.price}
+              onOpenDetail={handleOpenDetail}
             />
           </section>
         )}

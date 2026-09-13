@@ -141,19 +141,6 @@ export default function Header({
             onClearNotifications={onClearNotifications}
           />
 
-          {/* Dispatch Simulated Signal Trigger */}
-          <button
-            onClick={() => {
-              playRetroSound('signal');
-              if (onSimulateSignal) onSimulateSignal();
-            }}
-            className="flex items-center gap-1.5 bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.07] dark:hover:bg-white/[0.14] active:scale-[0.98] border border-black/10 dark:border-white/15 text-apple-text text-xs font-medium px-3 py-1.5 rounded-full transition-all cursor-pointer min-h-[34px]"
-            title="Dispatch a real-time signal alert to test execution feed"
-          >
-            <Zap className="w-3.5 h-3.5 text-apple-cyan" />
-            <span className="hidden sm:inline">Test Signal</span>
-          </button>
-
           {/* Theme Switcher: Light / Dark Toggle */}
           <button
             onClick={onToggleTheme}

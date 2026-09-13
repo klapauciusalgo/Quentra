@@ -968,13 +968,25 @@ export default function TradingChart({
       {/* 1. Chart Controls Header: Symbol, Timeframes, Signal Controls, Indicators */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.08] dark:border-white/[0.08] pb-3.5">
         
-        {/* Left: Symbol & Timeframe Switcher */}
-        <div className="flex items-center gap-3">
+        {/* Left: Symbol, Live Price & Timeframe Switcher */}
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm text-apple-text tracking-tight">BTC/USDT</span>
             <span className="text-[10px] font-medium tracking-wide uppercase px-2 py-0.5 rounded-full bg-apple-blue/15 text-apple-cyan border border-apple-blue/30">
               Binance
             </span>
+            <span className="font-mono text-sm md:text-base font-bold text-apple-text tabular-nums ml-1">
+              {formatPrice(liveTicker?.price || (candles.length > 0 ? candles[candles.length - 1].close : 77300))}
+            </span>
+            {liveTicker?.change_24h_pct !== undefined && (
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border tabular-nums ${
+                (liveTicker.change_24h_pct || 0) >= 0
+                  ? 'text-apple-green bg-apple-green/10 border-apple-green/20'
+                  : 'text-apple-red bg-apple-red/10 border-apple-red/20'
+              }`}>
+                {formatPercent(liveTicker.change_24h_pct || 0)}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] p-1 rounded-xl">
@@ -1171,7 +1183,41 @@ export default function TradingChart({
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 text-xs flex-wrap overflow-x-auto no-scrollbar py-0.5">
+          <div className="flex items-center gap-3 text-xs flex-wrap overflow-x-auto no-scrollbar py-0.5">
+            {candles.length > 0 && (() => {
+              const lastC = candles[candles.length - 1];
+              const curPrice = liveTicker?.price || lastC.close;
+              const curHigh = Math.max(lastC.high, curPrice);
+              const curLow = Math.min(lastC.low, curPrice);
+              const isUp = curPrice >= lastC.open;
+              return (
+                <div className="flex items-center gap-3 border-r border-black/[0.08] dark:border-white/[0.08] pr-3 mr-1">
+                  <div className="flex items-center gap-1 text-[11px] text-apple-dim">
+                    <span className="w-1.5 h-1.5 rounded-full bg-apple-green animate-pulse" />
+                    <span>Live Bar:</span>
+                  </div>
+                  <div>
+                    <span className="text-apple-dim">O:</span>{' '}
+                    <span className="text-apple-text tabular-nums">{formatPrice(lastC.open)}</span>
+                  </div>
+                  <div>
+                    <span className="text-apple-dim">H:</span>{' '}
+                    <span className="text-apple-green tabular-nums">{formatPrice(curHigh)}</span>
+                  </div>
+                  <div>
+                    <span className="text-apple-dim">L:</span>{' '}
+                    <span className="text-apple-red tabular-nums">{formatPrice(curLow)}</span>
+                  </div>
+                  <div>
+                    <span className="text-apple-dim">C:</span>{' '}
+                    <span className={`tabular-nums font-semibold ${isUp ? 'text-apple-green' : 'text-apple-red'}`}>
+                      {formatPrice(curPrice)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
             {floor?.signal_ticket && (
               <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-medium transition-all ${
                 floor.signal_ticket.status === 'LIVE_SIGNAL'
@@ -1189,16 +1235,8 @@ export default function TradingChart({
                     ? `${floor.signal_ticket.direction} @ ${formatPrice(floor.signal_ticket.entry_price)}`
                     : `Active Watch (${floor.signal_ticket.direction || 'LONG'}) · Next Trigger: ${formatPrice(floor.signal_ticket.entry_price)} (${floor.signal_ticket.trigger_distance_pct >= 0 ? '+' : ''}${floor.signal_ticket.trigger_distance_pct}%)`}
                 </span>
-                {floor.signal_ticket.stop_loss && (
-                  <span className="text-apple-dim hidden sm:inline">
-                    · Floor: ${Number(floor.signal_ticket.stop_loss).toLocaleString()}
-                  </span>
-                )}
               </div>
             )}
-            <span className="text-apple-dim hidden lg:inline">
-              · Active Algo: {activeStrategy?.name} ({tradesList.length} trades plotted)
-            </span>
           </div>
         )}
 

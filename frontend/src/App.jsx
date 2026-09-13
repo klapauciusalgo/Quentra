@@ -181,6 +181,23 @@ export default function App() {
         }
       })
       .catch(() => {});
+
+    // Periodic ticker sync (every 2.5s) to guarantee header and chart are permanently locked together
+    const tickerPollInterval = setInterval(() => {
+      fetch(`${API_BASE}/api/ticker`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && data.price) {
+            setTicker((prev) => {
+              if (prev.price !== data.price) return data;
+              return prev;
+            });
+          }
+        })
+        .catch(() => {});
+    }, 2500);
+
+    return () => clearInterval(tickerPollInterval);
   }, []);
 
   // 2. Establish WebSocket connection to backend or fallback to Binance Direct
@@ -281,6 +298,13 @@ export default function App() {
           const msg = JSON.parse(event.data);
           if (msg.type === 'TICKER') {
             setTicker(msg.data);
+          } else if (msg.type === 'SNAPSHOT') {
+            if (msg.ticker && msg.ticker.price) {
+              setTicker(msg.ticker);
+            }
+            if (msg.binance_connected !== undefined) {
+              setStatus((prev) => ({ ...prev, binance_ws_connected: msg.binance_connected }));
+            }
           } else if (msg.type === 'STATUS') {
             setStatus((prev) => ({
               ...prev,

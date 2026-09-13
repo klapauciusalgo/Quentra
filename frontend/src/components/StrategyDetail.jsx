@@ -14,8 +14,10 @@ import {
   FileText, 
   Sliders, 
   ChevronRight,
-  ArrowUpDown
+  ArrowUpDown,
+  LineChart
 } from 'lucide-react';
+import AlgoVsBtcVisualizer from './AlgoVsBtcVisualizer';
 
 export default function StrategyDetail({ 
   strategyId, 
@@ -187,27 +189,32 @@ export default function StrategyDetail({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center border-b border-black/[0.08] dark:border-white/[0.08] bg-black/[0.01] dark:bg-[#0E0F14] px-5 pt-3 gap-2">
+        <div className="flex items-center border-b border-black/[0.08] dark:border-white/[0.08] bg-black/[0.01] dark:bg-[#0E0F14] px-5 pt-3 gap-2 overflow-x-auto no-scrollbar">
           {[
             { id: 'overview', label: 'Overview & Logic' },
             { id: 'yearly', label: 'Year-by-Year (YoY)' },
             { id: 'trades', label: `Trade Logs (${trades.length})` },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => {
-                playRetroSound('blip');
-                setActiveTab(tab.id);
-              }}
-              className={`pb-3 px-3.5 border-b-2 text-xs font-medium transition-all cursor-pointer ${
-                activeTab === tab.id
-                  ? 'border-apple-blue text-apple-blue dark:text-white font-semibold'
-                  : 'border-transparent text-apple-muted hover:text-apple-text'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+            { id: 'vs-btc', label: 'Algo vs Bitcoin Price', icon: LineChart },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  playRetroSound('blip');
+                  setActiveTab(tab.id);
+                }}
+                className={`pb-3 px-3.5 border-b-2 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'border-apple-blue text-apple-blue dark:text-white font-semibold'
+                    : 'border-transparent text-apple-muted hover:text-apple-text'
+                }`}
+              >
+                {Icon && <Icon className="w-3.5 h-3.5" />}
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Modal Body */}
@@ -475,6 +482,11 @@ export default function StrategyDetail({
                     </table>
                   </div>
                 </div>
+              )}
+
+              {/* TAB 4: ALGO VS BITCOIN BENCHMARK VISUALIZER */}
+              {activeTab === 'vs-btc' && (
+                <AlgoVsBtcVisualizer strategy={strategy} />
               )}
             </>
           )}

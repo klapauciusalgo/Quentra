@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
+import LandingPage from './components/LandingPage';
 import StrategyRibbon, { StrategyDetailCard } from './components/StrategyRibbon';
 import TradingChart from './components/TradingChart';
 import AlgoExplorer from './components/AlgoExplorer';
@@ -41,6 +42,9 @@ export default function App() {
   const [selectedStrategyId, setSelectedStrategyId] = useState('pippo-1h-enhanced');
   const [timeframe, setTimeframe] = useState('1h');
   
+  // Primary View Mode: 'landing' (Product Overview) | 'dashboard' (Execution Platform)
+  const [viewMode, setViewMode] = useState('landing');
+
   // View Filter Segment: 'all' | 'chart' | 'catalog' | 'risk'
   const [activeView, setActiveView] = useState('all');
 
@@ -594,6 +598,27 @@ export default function App() {
     }
   };
 
+  const handleEnterDashboard = (stratId = null) => {
+    if (stratId) {
+      setSelectedStrategyId(stratId);
+    }
+    setViewMode('dashboard');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  if (viewMode === 'landing') {
+    return (
+      <LandingPage
+        ticker={ticker}
+        status={status}
+        floor={floor}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onEnterDashboard={handleEnterDashboard}
+      />
+    );
+  }
+
   const activeStrategyObj = strategies.find((s) => s.id === selectedStrategyId) || strategies[0];
 
   return (
@@ -612,6 +637,11 @@ export default function App() {
         onSelectStrategy={handleSelectStrategy}
         onCloseSignal={handleCloseSignal}
         onClearNotifications={() => setSignalNotifications([])}
+        onGoToLanding={() => {
+          playRetroSound('select');
+          setViewMode('landing');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
       />
 
       {/* Real-time Signal Alert Dynamic Banner */}

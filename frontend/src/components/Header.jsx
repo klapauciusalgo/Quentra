@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { formatPrice, formatPercent, playRetroSound, isAudioEnabled, toggleAudio } from '../utils/formatters';
-import { Volume2, VolumeX, Zap, Clock, Sun, Moon } from 'lucide-react';
+import { Volume2, VolumeX, Zap, Clock, Sun, Moon, Compass } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 
 export default function Header({ 
@@ -14,7 +14,8 @@ export default function Header({
   notifications = [],
   onSelectStrategy,
   onCloseSignal,
-  onClearNotifications
+  onClearNotifications,
+  onGoToLanding
 }) {
   const [audioActive, setAudioActive] = useState(true);
   const [priceFlash, setPriceFlash] = useState(null);
@@ -42,7 +43,16 @@ export default function Header({
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
         
         {/* Brand & Platform Identity */}
-        <div className="flex items-center gap-3">
+        <div 
+          onClick={() => {
+            if (onGoToLanding) {
+              playRetroSound('blip');
+              onGoToLanding();
+            }
+          }}
+          className={`flex items-center gap-3 ${onGoToLanding ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+          title="Return to Product Overview & Landing Page"
+        >
           <div className="w-8 h-8 rounded-xl bg-gradient-to-b from-black/[0.06] to-black/[0.01] dark:from-white/[0.12] dark:to-white/[0.02] border border-black/10 dark:border-white/15 flex items-center justify-center shadow-sm">
             <span className="w-3.5 h-3.5 rounded-sm bg-apple-blue flex items-center justify-center text-[9px] font-bold text-white">
               Q
@@ -140,6 +150,21 @@ export default function Header({
             onCloseSignal={onCloseSignal}
             onClearNotifications={onClearNotifications}
           />
+
+          {/* Return to Landing Page Overview */}
+          {onGoToLanding && (
+            <button
+              onClick={() => {
+                playRetroSound('blip');
+                onGoToLanding();
+              }}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-apple-muted hover:text-apple-text bg-black/[0.03] dark:bg-white/[0.04] hover:bg-black/[0.06] dark:hover:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.08] rounded-full transition-colors cursor-pointer"
+              title="Return to Product Overview Landing Page"
+            >
+              <Compass className="w-3.5 h-3.5 text-apple-blue" />
+              <span>Overview</span>
+            </button>
+          )}
 
           {/* Theme Switcher: Light / Dark Toggle */}
           <button

@@ -134,11 +134,6 @@ export default function LandingPage({
           
           {/* Hero Copy */}
           <div className="max-w-3xl space-y-4">
-            <div className="inline-flex items-center gap-2 bg-apple-blue/10 border border-apple-blue/25 text-apple-blue dark:text-apple-cyan px-3 py-1 rounded-full text-xs font-semibold">
-              <span className="w-2 h-2 rounded-full bg-apple-blue animate-pulse" />
-              <span>Institutional Precision · 2020-2026 Ground Truth Backtest</span>
-            </div>
-
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-apple-text leading-[1.12]">
               Algorithmic Bitcoin Trading Built on Empirical Proof, Not Speculation.
             </h1>

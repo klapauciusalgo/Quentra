@@ -39,11 +39,26 @@ export default function App() {
   });
   const [floor, setFloor] = useState(DEFAULT_FLOOR_STATE);
   const [strategies, setStrategies] = useState(strategiesData || []);
-  const [selectedStrategyId, setSelectedStrategyId] = useState('pippo-1h-enhanced');
+  const [selectedStrategyId, setSelectedStrategyId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlStrat = params.get('strategy') || params.get('algo');
+      if (urlStrat && (strategiesData || []).some((s) => s.id === urlStrat)) {
+        return urlStrat;
+      }
+    }
+    return 'pippo-1h-enhanced';
+  });
   const [timeframe, setTimeframe] = useState('1h');
   
   // Primary View Mode: 'landing' (Product Overview) | 'dashboard' (Execution Platform)
-  const [viewMode, setViewMode] = useState('landing');
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname;
+      if (p.startsWith('/app')) return 'dashboard';
+    }
+    return 'landing';
+  });
 
   // View Filter Segment: 'all' | 'chart' | 'catalog' | 'risk'
   const [activeView, setActiveView] = useState('all');
@@ -73,6 +88,29 @@ export default function App() {
     }
     localStorage.setItem('quentra_theme', theme);
   }, [theme]);
+
+  // Synchronize URL route with viewMode and handle browser back / forward navigation
+  useEffect(() => {
+    const syncRouteFromLocation = () => {
+      const p = window.location.pathname;
+      const params = new URLSearchParams(window.location.search);
+      const urlStrat = params.get('strategy') || params.get('algo');
+      if (urlStrat && (strategiesData || []).some((s) => s.id === urlStrat)) {
+        setSelectedStrategyId(urlStrat);
+      }
+      if (p.startsWith('/app')) {
+        setViewMode('dashboard');
+        document.title = 'Quentra Pro · Quantitative Trading Terminal';
+      } else {
+        setViewMode('landing');
+        document.title = 'Quentra Pro · Quantitative Algorithmic Platform';
+      }
+    };
+
+    syncRouteFromLocation();
+    window.addEventListener('popstate', syncRouteFromLocation);
+    return () => window.removeEventListener('popstate', syncRouteFromLocation);
+  }, []);
 
   const toggleTheme = () => {
     playRetroSound('blip');
@@ -447,6 +485,10 @@ export default function App() {
   // Switch strategy AND automatically adapt chart timeframe and live ticket
   const handleSelectStrategy = (stratId) => {
     setSelectedStrategyId(stratId);
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/app')) {
+      const newUrl = `/app?strategy=${encodeURIComponent(stratId)}`;
+      window.history.replaceState({ viewMode: 'dashboard', strategyId: stratId }, '', newUrl);
+    }
     const strat = strategies.find((s) => s.id === stratId);
     if (strat?.timeframe) {
       setTimeframe(strat.timeframe.toLowerCase());
@@ -599,10 +641,27 @@ export default function App() {
   };
 
   const handleEnterDashboard = (stratId = null) => {
+    const targetStrat = stratId || selectedStrategyId;
     if (stratId) {
       setSelectedStrategyId(stratId);
     }
+    const query = stratId ? `?strategy=${encodeURIComponent(stratId)}` : '';
+    const newUrl = `/app${query}`;
+    if (typeof window !== 'undefined' && (window.location.pathname !== '/app' || window.location.search !== query)) {
+      window.history.pushState({ viewMode: 'dashboard', strategyId: targetStrat }, '', newUrl);
+    }
+    document.title = 'Quentra Pro · Quantitative Trading Terminal';
     setViewMode('dashboard');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleGoToLanding = () => {
+    playRetroSound('select');
+    if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+      window.history.pushState({ viewMode: 'landing' }, '', '/');
+    }
+    document.title = 'Quentra Pro · Quantitative Algorithmic Platform';
+    setViewMode('landing');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -637,11 +696,7 @@ export default function App() {
         onSelectStrategy={handleSelectStrategy}
         onCloseSignal={handleCloseSignal}
         onClearNotifications={() => setSignalNotifications([])}
-        onGoToLanding={() => {
-          playRetroSound('select');
-          setViewMode('landing');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
+        onGoToLanding={handleGoToLanding}
       />
 
       {/* Real-time Signal Alert Dynamic Banner */}

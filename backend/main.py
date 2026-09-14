@@ -18,7 +18,7 @@ from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from binance_ws import binance_manager
@@ -412,6 +412,24 @@ async def websocket_endpoint(websocket: WebSocket):
         binance_manager.unregister(websocket)
     except Exception as e:
         binance_manager.unregister(websocket)
+
+# -----------------------------------------------------------------------------
+# Frontend SPA Routes (/app, /landing, etc.)
+# -----------------------------------------------------------------------------
+@app.get("/app")
+@app.get("/app/{full_path:path}")
+async def serve_app_spa(full_path: str = ""):
+    index_file = os.path.join(FRONTEND_DIST_DIR, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    raise HTTPException(status_code=404, detail="Frontend build not found")
+
+@app.get("/landing")
+async def serve_landing_spa():
+    index_file = os.path.join(FRONTEND_DIST_DIR, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    raise HTTPException(status_code=404, detail="Frontend build not found")
 
 # -----------------------------------------------------------------------------
 # Static files mount for React Production Build

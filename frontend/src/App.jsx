@@ -159,7 +159,7 @@ export default function App() {
       .then((r) => r.json())
       .then((data) => {
         if (data && Array.isArray(data.strategies)) {
-          const inPos = data.strategies.filter((s) => s.position_status === 'IN_POSITION');
+          const inPos = data.strategies.filter((s) => s.position_status === 'IN_POSITION' || s.position_status === 'OPEN');
           if (inPos.length > 0) {
             setActiveSignals(
               inPos.map((s) => ({
@@ -723,6 +723,8 @@ export default function App() {
             <StrategyDetailCard
               activeStrat={activeStrategyObj}
               currentBtcPrice={ticker.price}
+              activeSignals={activeSignals}
+              floor={floor}
               onOpenDetail={handleOpenDetail}
             />
           </section>

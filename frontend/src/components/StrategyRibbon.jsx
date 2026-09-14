@@ -165,9 +165,117 @@ export function StrategySelectorBar({
   );
 }
 
+function getStrategyExecutionRules(strat) {
+  const sid = strat?.id;
+  const p = strat?.parameters || {};
+  switch (sid) {
+    case 'pippo-4h-original':
+      return {
+        trigger: '5-Bar Breakout',
+        triggerSub: '4H Candle Close',
+        regime: '> 4H SMA 111',
+        regimeSub: 'Filter: Bearish Standby',
+        isRegimeOk: false,
+        stopLoss: '15.0%',
+        breakeven: 'Structural CHoCH',
+        takeProfit: '75.0%',
+      };
+    case 'pippo-30m-alpha':
+      return {
+        trigger: '36-Bar Breakout',
+        triggerSub: '30M Candle Close',
+        regime: 'SMA111 & EMA50',
+        regimeSub: 'Filter: Bearish Standby',
+        isRegimeOk: false,
+        stopLoss: '5.0%',
+        breakeven: '+3.0% -> BE',
+        takeProfit: '75.0%',
+      };
+    case 'pippo-1h-enhanced':
+      return {
+        trigger: '16-Bar Breakout',
+        triggerSub: '1H Candle Close',
+        regime: '> 4H SMA 111',
+        regimeSub: 'Filter: Bearish Standby',
+        isRegimeOk: false,
+        stopLoss: '8.0%',
+        breakeven: '+5.0% -> BE',
+        takeProfit: '75.0%',
+      };
+    case 'pippo-30m-scalp':
+      return {
+        trigger: '36-Bar Breakout',
+        triggerSub: '30M Candle Close',
+        regime: 'SMA111 & EMA50',
+        regimeSub: 'Filter: Bearish Standby',
+        isRegimeOk: false,
+        stopLoss: '5.0%',
+        breakeven: '+4.0% Partial & BE',
+        takeProfit: '+4% / +75%',
+      };
+    case 'pure-macro-weekly-ma55':
+      return {
+        trigger: 'Weekly Close',
+        triggerSub: 'Sunday Midnight UTC',
+        regime: '>= Weekly MA55',
+        regimeSub: 'CASH (Below MA55)',
+        isRegimeOk: false,
+        stopLoss: '< Weekly MA55',
+        breakeven: 'Macro Wave',
+        takeProfit: 'Macro Trend',
+      };
+    case 'pippo-30m-short-v2-a':
+      return {
+        trigger: '32-Bar Breakdown',
+        triggerSub: '30M Candle Close',
+        regime: '< MA55 & < SMA111',
+        regimeSub: 'Aligned Bearish',
+        isRegimeOk: true,
+        stopLoss: '5.0%',
+        breakeven: '+1.5% drop -> BE',
+        takeProfit: '12.0%',
+      };
+    case 'pippo-30m-short-v2-b':
+      return {
+        trigger: '28-Bar Breakdown',
+        triggerSub: '30M Candle Close',
+        regime: '< Weekly MA55',
+        regimeSub: 'Aligned Bearish',
+        isRegimeOk: true,
+        stopLoss: '5.0%',
+        breakeven: '+2.5% drop -> BE',
+        takeProfit: '20.0%',
+      };
+    case 'pippo-30m-short-v2-c':
+      return {
+        trigger: '32-Bar Breakdown',
+        triggerSub: '30M (16b Rapid Exit)',
+        regime: '< MA55 & < SMA111',
+        regimeSub: 'Aligned Bearish',
+        isRegimeOk: true,
+        stopLoss: '6.0%',
+        breakeven: '+2.5% drop -> BE',
+        takeProfit: '50.0%',
+      };
+    default:
+      return {
+        trigger: p.entry_swing || p.internal_swing || 'Swing Trigger',
+        triggerSub: `${strat?.timeframe?.toUpperCase() || ''} Close`,
+        regime: p.regime_filter || 'Macro Filter',
+        regimeSub: 'Standby',
+        isRegimeOk: false,
+        stopLoss: p.hard_stop_loss || '5.0%',
+        breakeven: p.breakeven_lock || 'Lock at BE',
+        takeProfit: p.take_profit || '75.0%',
+      };
+  }
+}
+
 export function StrategyDetailCard({
   activeStrat,
   currentBtcPrice = 77300,
+  activeSignals = [],
+  floor = null,
   onOpenDetail
 }) {
   if (!activeStrat) return null;
@@ -177,6 +285,12 @@ export function StrategyDetailCard({
   const totalReturn = m.total_return_pct ?? activeStrat?.total_return_pct ?? 0;
   const winRate = m.win_rate_pct ?? activeStrat?.win_rate_pct ?? 0;
   const profitFactor = m.profit_factor ?? activeStrat?.profit_factor ?? 1.0;
+
+  const activeSignal = activeSignals.find(
+    (s) => s.strategy_id === activeStrat?.id || s.id === activeStrat?.id
+  );
+  const isInPosition = !!activeSignal;
+  const stratRules = getStrategyExecutionRules(activeStrat);
 
   return (
     <div className="apple-glass rounded-3xl p-5 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -236,60 +350,109 @@ export function StrategyDetailCard({
 
       {/* Execution Targets & Strategy Action */}
       <div className="lg:col-span-6 flex flex-col justify-between space-y-4">
+        {/* Real-time Execution Status Header */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/[0.06] dark:border-white/[0.06] pb-2">
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
+              isInPosition
+                ? isLong
+                  ? 'bg-apple-green/15 text-apple-green border-apple-green/30 animate-pulse'
+                  : 'bg-apple-red/15 text-apple-red border-apple-red/30 animate-pulse'
+                : 'bg-black/[0.04] dark:bg-white/[0.06] text-apple-muted border-black/10 dark:border-white/10'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isInPosition ? (isLong ? 'bg-apple-green' : 'bg-apple-red') : 'bg-apple-dim'}`} />
+              {isInPosition ? `IN POSITION (${activeSignal.action || (isLong ? 'BUY' : 'SELL')})` : 'STANDBY / FLAT (No Active Signal)'}
+            </span>
+            {isInPosition && (
+              <span className={`text-xs font-semibold tabular-nums ${activeSignal.floating_pnl_pct >= 0 ? 'text-apple-green' : 'text-apple-red'}`}>
+                PnL: {activeSignal.floating_pnl_pct >= 0 ? '+' : ''}{activeSignal.floating_pnl_pct}%
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-apple-dim tabular-nums flex items-center gap-1.5">
+            <span>Spot BTC:</span>
+            <span className="font-semibold text-apple-text">{formatPrice(currentBtcPrice)}</span>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          {/* Entry Target */}
+          {/* Card 1: Entry Condition or Live Entry */}
           <div className="bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.06] dark:border-white/[0.06] rounded-xl p-3">
             <div className="text-[11px] text-apple-muted flex items-center gap-1">
               <Activity className="w-3.5 h-3.5 text-apple-blue" />
-              <span>Entry Target</span>
+              <span>{isInPosition ? 'Live Entry' : 'Entry Trigger'}</span>
             </div>
             <div className="font-semibold text-apple-text text-sm mt-1 truncate tabular-nums">
-              {formatPrice(currentBtcPrice)}
+              {isInPosition ? formatPrice(activeSignal.entry_price) : stratRules.trigger}
             </div>
-            <div className="text-[10px] text-apple-dim mt-0.5">Bar Confirmation</div>
+            <div className="text-[10px] text-apple-dim mt-0.5 truncate">
+              {isInPosition ? 'Confirmed Fill' : stratRules.triggerSub}
+            </div>
           </div>
 
-          {/* Stop Loss */}
+          {/* Card 2: Regime Filter or Active Stop Loss */}
           <div className="bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.06] dark:border-white/[0.06] rounded-xl p-3">
-            <div className="text-[11px] text-apple-red flex items-center gap-1">
-              <ShieldAlert className="w-3.5 h-3.5" />
-              <span>Stop Loss</span>
+            <div className="text-[11px] text-apple-muted flex items-center gap-1">
+              <ShieldAlert className={`w-3.5 h-3.5 ${isInPosition ? 'text-apple-red' : 'text-apple-purple'}`} />
+              <span>{isInPosition ? 'Active Stop Loss' : 'Regime Filter'}</span>
             </div>
-            <div className="font-semibold text-apple-red text-sm mt-1 truncate tabular-nums">
-              {params.hard_stop_loss || '5.0%'}
+            <div className={`font-semibold text-sm mt-1 truncate tabular-nums ${isInPosition ? 'text-apple-red' : 'text-apple-text'}`}>
+              {isInPosition 
+                ? (activeSignal.stop_loss ? formatPrice(activeSignal.stop_loss) : stratRules.stopLoss)
+                : stratRules.regime
+              }
             </div>
-            <div className="text-[10px] text-apple-dim mt-0.5">Capital Shield</div>
+            <div className={`text-[10px] mt-0.5 truncate ${
+              isInPosition 
+                ? 'text-apple-dim' 
+                : stratRules.isRegimeOk ? 'text-apple-green font-medium' : 'text-apple-orange font-medium'
+            }`}>
+              {isInPosition ? 'Capital Shield' : stratRules.regimeSub}
+            </div>
           </div>
 
-          {/* Breakeven Trigger */}
+          {/* Card 3: Breakeven or Stop Loss Rule */}
           <div className="bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.06] dark:border-white/[0.06] rounded-xl p-3">
             <div className="text-[11px] text-apple-orange flex items-center gap-1">
               <Zap className="w-3.5 h-3.5" />
-              <span>Breakeven</span>
+              <span>{isInPosition ? 'Breakeven' : 'Stop Loss Rule'}</span>
             </div>
             <div className="font-semibold text-apple-orange text-sm mt-1 truncate tabular-nums">
-              {params.breakeven_lock || params.fast_breakeven || 'Lock at BE'}
+              {isInPosition
+                ? (activeSignal.breakeven_trigger ? formatPrice(activeSignal.breakeven_trigger) : stratRules.breakeven)
+                : stratRules.stopLoss
+              }
             </div>
-            <div className="text-[10px] text-apple-dim mt-0.5">Zero Risk Lock</div>
+            <div className="text-[10px] text-apple-dim mt-0.5 truncate">
+              {isInPosition ? 'Zero Risk Lock' : 'Capital Shield'}
+            </div>
           </div>
 
-          {/* Take Profit Target */}
+          {/* Card 4: Take Profit Target */}
           <div className="bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.06] dark:border-white/[0.06] rounded-xl p-3">
             <div className="text-[11px] text-apple-green flex items-center gap-1">
               <Target className="w-3.5 h-3.5" />
-              <span>Target Exit</span>
+              <span>{isInPosition ? 'Take Profit' : 'Target Exit'}</span>
             </div>
             <div className="font-semibold text-apple-green text-sm mt-1 truncate tabular-nums">
-              {params.take_profit || '+75.0% Runner'}
+              {isInPosition
+                ? (activeSignal.take_profit ? formatPrice(activeSignal.take_profit) : stratRules.takeProfit)
+                : stratRules.takeProfit
+              }
             </div>
-            <div className="text-[10px] text-apple-dim mt-0.5">Trend Runner</div>
+            <div className="text-[10px] text-apple-dim mt-0.5 truncate">
+              Trend Runner
+            </div>
           </div>
         </div>
 
         {/* Action Bar */}
-        <div className="flex items-center justify-between gap-3 pt-2">
+        <div className="flex items-center justify-between gap-3 pt-1">
           <span className="text-xs text-apple-dim hidden sm:inline">
-            Mathematical parameters verified via backtesting engine
+            {isInPosition
+              ? 'Active position guarded by autonomous risk & trailing execution engine'
+              : 'Standby mode: Signal fires automatically upon confirmed candle close meeting regime criteria'
+            }
           </span>
           <button
             onClick={() => {
@@ -316,6 +479,8 @@ export default function StrategyRibbon(props) {
         <StrategyDetailCard 
           activeStrat={props.strategies?.find((s) => s.id === props.selectedStrategyId) || props.strategies?.[0]} 
           currentBtcPrice={props.currentBtcPrice}
+          activeSignals={props.activeSignals}
+          floor={props.floor}
           onOpenDetail={props.onOpenDetail}
         />
       )}

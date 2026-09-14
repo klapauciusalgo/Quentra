@@ -141,6 +141,52 @@ class LiveSignalEngine:
                     "regime": "weekly_ma55"
                 }
             ),
+            "pippo-4h-original": StrategyModel(
+                strat_id="pippo-4h-original",
+                name="Pippo 4h Original",
+                tf="4h",
+                direction="LONG",
+                config={
+                    "maj_swing": 50,
+                    "ent_swing": 5,
+                    "ex_swing": 5,
+                    "sl_pct": 0.15,
+                    "be_pct": 0.05,
+                    "tp_pct": 0.75,
+                    "regime": "4h_sma111"
+                }
+            ),
+            "pippo-30m-scalp": StrategyModel(
+                strat_id="pippo-30m-scalp",
+                name="Pippo 30m Scalp-Runner",
+                tf="30m",
+                direction="LONG",
+                config={
+                    "maj_swing": 100,
+                    "ent_swing": 36,
+                    "ex_swing": 96,
+                    "sl_pct": 0.05,
+                    "be_pct": 0.04,
+                    "tp_pct": 0.75,
+                    "partial_tp": 0.04,
+                    "regime": "4h_sma111_and_1h_ema50"
+                }
+            ),
+            "pippo-30m-short-v2-c": StrategyModel(
+                strat_id="pippo-30m-short-v2-c",
+                name="Pippo 30M Short V2 Type C (Defensive Fortress)",
+                tf="30m",
+                direction="SHORT",
+                config={
+                    "maj_swing": 64,
+                    "ent_swing": 32,
+                    "ex_swing": 16,
+                    "sl_pct": 0.06,
+                    "be_pct": 0.025,
+                    "tp_pct": 0.50,
+                    "regime": "weekly_ma55_and_4h_sma111"
+                }
+            ),
             "pure-macro-weekly-ma55": StrategyModel(
                 strat_id="pure-macro-weekly-ma55",
                 name="Pure Macro Weekly MA55",

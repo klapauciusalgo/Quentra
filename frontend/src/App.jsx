@@ -745,7 +745,12 @@ export default function App() {
         {/* Section 4: Leverage & Liquidation Safety Calculator */}
         {(activeView === 'all' || activeView === 'risk') && (
           <section>
-            <RiskCalculator currentBtcPrice={ticker.price} />
+            <RiskCalculator 
+              currentBtcPrice={ticker.price}
+              strategies={strategies}
+              selectedStrategyId={selectedStrategyId}
+              onSelectStrategy={handleSelectStrategy}
+            />
           </section>
         )}
 

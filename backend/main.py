@@ -327,27 +327,128 @@ async def get_klines(
         "candles": sliced
     }
 
+def enrich_strategy_with_live(s: dict) -> dict:
+    from live_signal_engine import live_signal_engine
+    model = live_signal_engine.strategies.get(s["id"])
+    if not model:
+        return s
+
+    s_copy = dict(s)
+    base_trades = list(s.get("trades", []))
+    base_markers = list(s.get("markers", []))
+
+    # Existing trade timestamps to avoid duplicates
+    existing_entries = {str(t.get("entry_time")) for t in base_trades}
+    last_trade_no = base_trades[-1].get("trade_no", len(base_trades)) if base_trades else 0
+
+    # 1. Inject synced recent closed trades from engine
+    for rc in getattr(model, "synced_recent_trades", []):
+        rc_entry = str(rc.get("entry_time", ""))
+        if rc_entry and rc_entry not in existing_entries:
+            last_trade_no += 1
+            new_tr = dict(rc)
+            new_tr["trade_no"] = last_trade_no
+            base_trades.append(new_tr)
+            existing_entries.add(rc_entry)
+
+            try:
+                e_ts = int(pd.to_datetime(rc["entry_time"].replace(" UTC", "")).timestamp())
+                x_ts = int(pd.to_datetime(rc["exit_time"].replace(" UTC", "")).timestamp())
+                side = rc.get("side", model.direction)
+                is_win = rc.get("net_return_pct", 0) > 0
+
+                base_markers.append({
+                    "time": e_ts,
+                    "position": "belowBar" if side == "LONG" else "aboveBar",
+                    "color": "#39FF88" if side == "LONG" else "#FF4B5C",
+                    "shape": "arrowUp" if side == "LONG" else "arrowDown",
+                    "text": f"{side} #{last_trade_no} @ ${rc['entry_price']:,.0f}",
+                    "size": 2,
+                    "entryPrice": rc["entry_price"],
+                    "tradeNo": last_trade_no,
+                    "side": side
+                })
+                base_markers.append({
+                    "time": x_ts,
+                    "position": "aboveBar" if side == "LONG" else "belowBar",
+                    "color": "#39FF88" if is_win else "#FF4B5C",
+                    "shape": "circle",
+                    "text": f"EXIT {rc['net_return_pct']:+.1f}%",
+                    "size": 1,
+                    "exitPrice": rc["exit_price"],
+                    "tradeNo": last_trade_no,
+                    "pnlPct": rc["net_return_pct"],
+                    "reason": rc.get("reason", "")
+                })
+            except Exception:
+                pass
+
+    # 2. Inject active OPEN trade & active markers
+    if model.position_status == "OPEN" and model.entry_price > 0:
+        live_price = binance_manager.ticker_data.get("price") or live_signal_engine.last_price or model.entry_price
+        if model.direction == "LONG":
+            flt_gross = ((live_price - model.entry_price) / model.entry_price) * 100.0
+        else:
+            flt_gross = ((model.entry_price - live_price) / model.entry_price) * 100.0
+        flt_net = flt_gross - 0.18 # roundtrip commission
+
+        last_trade_no += 1
+        active_trade = {
+            "trade_no": last_trade_no,
+            "side": model.direction,
+            "type": model.direction,
+            "entry_time": model.entry_time,
+            "exit_time": "RUNNING",
+            "entry_price": round(model.entry_price, 2),
+            "exit_price": round(live_price, 2),
+            "gross_return_pct": round(flt_gross, 2),
+            "net_return_pct": round(flt_net, 2),
+            "exit_reason": f"Active Signal ({'BE Locked' if model.be_active else 'Trailing'})",
+            "be_activated": model.be_active,
+            "status": "OPEN",
+            "stop_loss": model.current_sl,
+            "take_profit": model.target_tp,
+            "is_active": True
+        }
+        base_trades.append(active_trade)
+
+        # Inject active markers from model
+        if hasattr(model, "active_markers") and model.active_markers:
+            for am in model.active_markers:
+                m_copy = dict(am)
+                m_copy["tradeNo"] = last_trade_no
+                base_markers.append(m_copy)
+
+    s_copy["trades"] = base_trades
+    s_copy["markers"] = sorted(base_markers, key=lambda m: m.get("time", 0))
+    s_copy["has_active_signal"] = (model.position_status == "OPEN")
+    s_copy["active_ticket"] = model.active_ticket
+    return s_copy
+
 @app.get("/api/strategies")
 async def list_strategies():
     summaries = []
     for s in STRATEGIES_CATALOG:
+        enriched = enrich_strategy_with_live(s)
         summary = {
-            "id": s["id"],
-            "name": s["name"],
-            "short_name": s.get("short_name", s["name"]),
-            "type": s["type"],
-            "timeframe": s["timeframe"],
-            "category": s.get("category", ""),
-            "archetype": s.get("archetype", ""),
-            "risk_tier": s.get("risk_tier", "Moderate"),
-            "recommended_for": s.get("recommended_for", ""),
-            "badge": s.get("badge", ""),
-            "metrics": s.get("metrics", {}),
-            "parameters": s.get("parameters", {}),
-            "logic_summary": s.get("logic_summary", ""),
-            "yearly_stats": s.get("yearly_stats", []),
-            "markers": s.get("markers", []),
-            "trades": s.get("trades", [])
+            "id": enriched["id"],
+            "name": enriched["name"],
+            "short_name": enriched.get("short_name", enriched["name"]),
+            "type": enriched["type"],
+            "timeframe": enriched["timeframe"],
+            "category": enriched.get("category", ""),
+            "archetype": enriched.get("archetype", ""),
+            "risk_tier": enriched.get("risk_tier", "Moderate"),
+            "recommended_for": enriched.get("recommended_for", ""),
+            "badge": enriched.get("badge", ""),
+            "metrics": enriched.get("metrics", {}),
+            "parameters": enriched.get("parameters", {}),
+            "logic_summary": enriched.get("logic_summary", ""),
+            "yearly_stats": enriched.get("yearly_stats", []),
+            "markers": enriched.get("markers", []),
+            "trades": enriched.get("trades", []),
+            "has_active_signal": enriched.get("has_active_signal", False),
+            "active_ticket": enriched.get("active_ticket", None)
         }
         summaries.append(summary)
     return summaries
@@ -356,7 +457,7 @@ async def list_strategies():
 async def get_strategy_detail(strategy_id: str):
     if strategy_id not in STRATEGIES_MAP:
         raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
-    return STRATEGIES_MAP[strategy_id]
+    return enrich_strategy_with_live(STRATEGIES_MAP[strategy_id])
 
 @app.get("/api/floor")
 async def get_floor_state():

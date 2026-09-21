@@ -1827,6 +1827,30 @@
         "tradeNo": 75,
         "pnlPct": 0.10981999999999381,
         "reason": "Breakeven SL"
+      },
+      {
+        "time": 1789738200,
+        "position": "belowBar",
+        "color": "#30D158",
+        "shape": "arrowUp",
+        "text": "ACTIVE LONG @ $80,073",
+        "size": 3,
+        "entryPrice": 80073.09,
+        "side": "LONG",
+        "status": "OPEN",
+        "isActive": true,
+        "tradeNo": 76
+      },
+      {
+        "time": 1789740000,
+        "position": "aboveBar",
+        "color": "#FF9F0A",
+        "shape": "circle",
+        "text": "BE LOCKED @ $80,233 (+0.2%)",
+        "size": 2,
+        "exitPrice": 80233.24,
+        "isBreakeven": true,
+        "tradeNo": 76
       }
     ],
     "trades": [
@@ -2879,8 +2903,51 @@
         "exit_reason": "Breakeven SL",
         "be_activated": true,
         "status": "CLOSED"
+      },
+      {
+        "trade_no": 76,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 13:30:00",
+        "exit_time": "RUNNING",
+        "entry_price": 80073.09,
+        "exit_price": 85722.72,
+        "gross_return_pct": 7.06,
+        "net_return_pct": 6.88,
+        "exit_reason": "Active Signal (BE Locked)",
+        "be_activated": true,
+        "status": "OPEN",
+        "stop_loss": 80233.24,
+        "take_profit": 140127.91,
+        "is_active": true
       }
-    ]
+    ],
+    "has_active_signal": true,
+    "active_ticket": {
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "strategy_name": "Pippo 30M Alpha (Pure Runner)",
+      "strategy_id": "pippo-30m-alpha",
+      "confidence_pct": 92,
+      "confidence_blocks": 9,
+      "entry_price": 80073.09,
+      "current_price": 85722.72,
+      "stop_loss": 80233.24,
+      "stop_loss_pct": -5.0,
+      "breakeven_trigger": 82475.28,
+      "breakeven_trigger_pct": 3.0,
+      "take_profit": 140127.91,
+      "take_profit_pct": 75.0,
+      "risk_reward_ratio": "15.0x",
+      "timestamp": "2026-09-18 13:30:00",
+      "contributing_agents": [
+        "quant",
+        "trader",
+        "informan"
+      ],
+      "status": "LIVE_SIGNAL",
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+    }
   },
   {
     "id": "pippo-1h-enhanced",
@@ -4457,6 +4524,53 @@
         "tradeNo": 64,
         "pnlPct": 19.541160550902426,
         "reason": "Bearish CHoCH Exit"
+      },
+      {
+        "time": 1788444000,
+        "position": "belowBar",
+        "color": "#39FF88",
+        "shape": "arrowUp",
+        "text": "LONG #65 @ $80,550",
+        "size": 2,
+        "entryPrice": 80549.97,
+        "tradeNo": 65,
+        "side": "LONG"
+      },
+      {
+        "time": 1788843600,
+        "position": "aboveBar",
+        "color": "#FF4B5C",
+        "shape": "circle",
+        "text": "EXIT -2.6%",
+        "size": 1,
+        "exitPrice": 78578.0,
+        "tradeNo": 65,
+        "pnlPct": -2.63,
+        "reason": ""
+      },
+      {
+        "time": 1789736400,
+        "position": "belowBar",
+        "color": "#30D158",
+        "shape": "arrowUp",
+        "text": "ACTIVE LONG @ $80,073",
+        "size": 3,
+        "entryPrice": 80073.09,
+        "side": "LONG",
+        "status": "OPEN",
+        "isActive": true,
+        "tradeNo": 66
+      },
+      {
+        "time": 1789740000,
+        "position": "aboveBar",
+        "color": "#FF9F0A",
+        "shape": "circle",
+        "text": "BE LOCKED @ $80,233 (+0.2%)",
+        "size": 2,
+        "exitPrice": 80233.24,
+        "isBreakeven": true,
+        "tradeNo": 66
       }
     ],
     "trades": [
@@ -5355,8 +5469,65 @@
         "exit_reason": "Bearish CHoCH Exit",
         "be_activated": true,
         "status": "CLOSED"
+      },
+      {
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-03 14:00:00",
+        "exit_time": "2026-09-08 05:00:00",
+        "entry_price": 80549.97,
+        "exit_price": 78578.0,
+        "gross_return_pct": -2.45,
+        "net_return_pct": -2.63,
+        "exit_reason": "Bearish CHoCH Exit",
+        "be_activated": false,
+        "status": "CLOSED",
+        "trade_no": 65
+      },
+      {
+        "trade_no": 66,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 13:00:00",
+        "exit_time": "RUNNING",
+        "entry_price": 80073.09,
+        "exit_price": 85722.72,
+        "gross_return_pct": 7.06,
+        "net_return_pct": 6.88,
+        "exit_reason": "Active Signal (BE Locked)",
+        "be_activated": true,
+        "status": "OPEN",
+        "stop_loss": 80233.24,
+        "take_profit": 140127.91,
+        "is_active": true
       }
-    ]
+    ],
+    "has_active_signal": true,
+    "active_ticket": {
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "strategy_name": "Pippo 1h Enhanced",
+      "strategy_id": "pippo-1h-enhanced",
+      "confidence_pct": 92,
+      "confidence_blocks": 9,
+      "entry_price": 80073.09,
+      "current_price": 85722.72,
+      "stop_loss": 80233.24,
+      "stop_loss_pct": -8.0,
+      "breakeven_trigger": 84076.74,
+      "breakeven_trigger_pct": 5.0,
+      "take_profit": 140127.91,
+      "take_profit_pct": 75.0,
+      "risk_reward_ratio": "9.38x",
+      "timestamp": "2026-09-18 13:00:00",
+      "contributing_agents": [
+        "quant",
+        "trader",
+        "informan"
+      ],
+      "status": "LIVE_SIGNAL",
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+    }
   },
   {
     "id": "pippo-30m-scalp",
@@ -7186,6 +7357,30 @@
         "tradeNo": 75,
         "pnlPct": 0.10981999999999381,
         "reason": "Breakeven SL"
+      },
+      {
+        "time": 1789738200,
+        "position": "belowBar",
+        "color": "#30D158",
+        "shape": "arrowUp",
+        "text": "ACTIVE LONG @ $80,073",
+        "size": 3,
+        "entryPrice": 80073.09,
+        "side": "LONG",
+        "status": "OPEN",
+        "isActive": true,
+        "tradeNo": 76
+      },
+      {
+        "time": 1789740000,
+        "position": "aboveBar",
+        "color": "#FF9F0A",
+        "shape": "circle",
+        "text": "BE LOCKED @ $80,233 (+0.2%)",
+        "size": 2,
+        "exitPrice": 80233.24,
+        "isBreakeven": true,
+        "tradeNo": 76
       }
     ],
     "trades": [
@@ -8313,8 +8508,51 @@
         "partial_harvested": false,
         "be_activated": true,
         "status": "CLOSED"
+      },
+      {
+        "trade_no": 76,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 13:30:00",
+        "exit_time": "RUNNING",
+        "entry_price": 80073.09,
+        "exit_price": 85722.72,
+        "gross_return_pct": 7.06,
+        "net_return_pct": 6.88,
+        "exit_reason": "Active Signal (BE Locked)",
+        "be_activated": true,
+        "status": "OPEN",
+        "stop_loss": 80233.24,
+        "take_profit": 140127.91,
+        "is_active": true
       }
-    ]
+    ],
+    "has_active_signal": true,
+    "active_ticket": {
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "strategy_name": "Pippo 30m Scalp-Runner",
+      "strategy_id": "pippo-30m-scalp",
+      "confidence_pct": 92,
+      "confidence_blocks": 9,
+      "entry_price": 80073.09,
+      "current_price": 85722.72,
+      "stop_loss": 80233.24,
+      "stop_loss_pct": -5.0,
+      "breakeven_trigger": 83276.01,
+      "breakeven_trigger_pct": 4.0,
+      "take_profit": 140127.91,
+      "take_profit_pct": 75.0,
+      "risk_reward_ratio": "15.0x",
+      "timestamp": "2026-09-18 13:30:00",
+      "contributing_agents": [
+        "quant",
+        "trader",
+        "informan"
+      ],
+      "status": "LIVE_SIGNAL",
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+    }
   },
   {
     "id": "pure-macro-weekly-ma55",
@@ -8422,6 +8660,29 @@
     ],
     "markers": [
       {
+        "time": 1558310400,
+        "position": "belowBar",
+        "color": "#39FF88",
+        "shape": "arrowUp",
+        "text": "LONG #7 @ $8,614",
+        "size": 2,
+        "entryPrice": 8614.43,
+        "tradeNo": 7,
+        "side": "LONG"
+      },
+      {
+        "time": 1558915200,
+        "position": "aboveBar",
+        "color": "#FF4B5C",
+        "shape": "circle",
+        "text": "EXIT -5.2%",
+        "size": 1,
+        "exitPrice": 8183.71,
+        "tradeNo": 7,
+        "pnlPct": -5.18,
+        "reason": ""
+      },
+      {
         "time": 1578268800,
         "position": "belowBar",
         "color": "#39FF88",
@@ -8477,6 +8738,29 @@
         "side": "LONG"
       },
       {
+        "time": 1636329600,
+        "position": "belowBar",
+        "color": "#39FF88",
+        "shape": "arrowUp",
+        "text": "LONG #8 @ $65,519",
+        "size": 2,
+        "entryPrice": 65519.1,
+        "tradeNo": 8,
+        "side": "LONG"
+      },
+      {
+        "time": 1636934400,
+        "position": "aboveBar",
+        "color": "#FF4B5C",
+        "shape": "circle",
+        "text": "EXIT -5.2%",
+        "size": 1,
+        "exitPrice": 62243.14,
+        "tradeNo": 8,
+        "pnlPct": -5.18,
+        "reason": ""
+      },
+      {
         "time": 1641168000,
         "position": "aboveBar",
         "color": "#39FF88",
@@ -8519,6 +8803,29 @@
         "entryPrice": 27972.87,
         "tradeNo": 5,
         "side": "LONG"
+      },
+      {
+        "time": 1730678400,
+        "position": "belowBar",
+        "color": "#39FF88",
+        "shape": "arrowUp",
+        "text": "LONG #9 @ $80,370",
+        "size": 2,
+        "entryPrice": 80370.01,
+        "tradeNo": 9,
+        "side": "LONG"
+      },
+      {
+        "time": 1731283200,
+        "position": "aboveBar",
+        "color": "#39FF88",
+        "shape": "circle",
+        "text": "EXIT +0.0%",
+        "size": 1,
+        "exitPrice": 80530.75,
+        "tradeNo": 9,
+        "pnlPct": 0.02,
+        "reason": ""
       },
       {
         "time": 1762732800,
@@ -8615,8 +8922,52 @@
         "net_return_pct": 17.8,
         "exit_reason": "Weekly Close >= MA55",
         "status": "OPEN (RUNNING)"
+      },
+      {
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2019-05-20 00:00:00",
+        "exit_time": "2019-05-27 00:00:00",
+        "entry_price": 8614.43,
+        "exit_price": 8183.71,
+        "gross_return_pct": -5.0,
+        "net_return_pct": -5.18,
+        "exit_reason": "Stop Loss",
+        "be_activated": false,
+        "status": "CLOSED",
+        "trade_no": 7
+      },
+      {
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2021-11-08 00:00:00",
+        "exit_time": "2021-11-15 00:00:00",
+        "entry_price": 65519.1,
+        "exit_price": 62243.14,
+        "gross_return_pct": -5.0,
+        "net_return_pct": -5.18,
+        "exit_reason": "Stop Loss",
+        "be_activated": false,
+        "status": "CLOSED",
+        "trade_no": 8
+      },
+      {
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2024-11-04 00:00:00",
+        "exit_time": "2024-11-11 00:00:00",
+        "entry_price": 80370.01,
+        "exit_price": 80530.75,
+        "gross_return_pct": 0.2,
+        "net_return_pct": 0.02,
+        "exit_reason": "Breakeven SL",
+        "be_activated": true,
+        "status": "CLOSED",
+        "trade_no": 9
       }
-    ]
+    ],
+    "has_active_signal": false,
+    "active_ticket": null
   },
   {
     "id": "pippo-4h-original",
@@ -12101,6 +12452,30 @@
         "tradeNo": 147,
         "pnlPct": -2.4851601108816346,
         "reason": "Bearish CHoCH/BOS Exit"
+      },
+      {
+        "time": 1789732800,
+        "position": "belowBar",
+        "color": "#30D158",
+        "shape": "arrowUp",
+        "text": "ACTIVE LONG @ $80,726",
+        "size": 3,
+        "entryPrice": 80725.6,
+        "side": "LONG",
+        "status": "OPEN",
+        "isActive": true,
+        "tradeNo": 148
+      },
+      {
+        "time": 1789747200,
+        "position": "aboveBar",
+        "color": "#FF9F0A",
+        "shape": "circle",
+        "text": "BE LOCKED @ $80,887 (+0.2%)",
+        "size": 2,
+        "exitPrice": 80887.05,
+        "isBreakeven": true,
+        "tradeNo": 148
       }
     ],
     "trades": [
@@ -14014,8 +14389,51 @@
         "net_return_pct": -2.49,
         "exit_reason": "Bearish CHoCH/BOS Exit",
         "status": "CLOSED"
+      },
+      {
+        "trade_no": 148,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 12:00:00",
+        "exit_time": "RUNNING",
+        "entry_price": 80725.6,
+        "exit_price": 85722.72,
+        "gross_return_pct": 6.19,
+        "net_return_pct": 6.01,
+        "exit_reason": "Active Signal (BE Locked)",
+        "be_activated": true,
+        "status": "OPEN",
+        "stop_loss": 80887.05,
+        "take_profit": 141269.8,
+        "is_active": true
       }
-    ]
+    ],
+    "has_active_signal": true,
+    "active_ticket": {
+      "symbol": "BTC/USDT",
+      "direction": "LONG",
+      "strategy_name": "Pippo 4h Original",
+      "strategy_id": "pippo-4h-original",
+      "confidence_pct": 92,
+      "confidence_blocks": 9,
+      "entry_price": 80725.6,
+      "current_price": 85722.72,
+      "stop_loss": 80887.05,
+      "stop_loss_pct": -15.0,
+      "breakeven_trigger": 84761.88,
+      "breakeven_trigger_pct": 5.0,
+      "take_profit": 141269.8,
+      "take_profit_pct": 75.0,
+      "risk_reward_ratio": "5.0x",
+      "timestamp": "2026-09-18 12:00:00",
+      "contributing_agents": [
+        "quant",
+        "trader",
+        "informan"
+      ],
+      "status": "LIVE_SIGNAL",
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+    }
   },
   {
     "id": "pippo-30m-short-v2-a",
@@ -16846,7 +17264,9 @@
         "exit_reason": "Fast_Breakeven",
         "status": "CLOSED"
       }
-    ]
+    ],
+    "has_active_signal": false,
+    "active_ticket": null
   },
   {
     "id": "pippo-30m-short-v2-b",
@@ -19307,6 +19727,29 @@
         "tradeNo": 103,
         "pnlPct": 0.020180000000003785,
         "reason": "Fast_Breakeven"
+      },
+      {
+        "time": 1789288200,
+        "position": "aboveBar",
+        "color": "#FF4B5C",
+        "shape": "arrowDown",
+        "text": "SHORT #104 @ $76,814",
+        "size": 2,
+        "entryPrice": 76813.71,
+        "tradeNo": 104,
+        "side": "SHORT"
+      },
+      {
+        "time": 1789351200,
+        "position": "belowBar",
+        "color": "#FF4B5C",
+        "shape": "circle",
+        "text": "EXIT -1.1%",
+        "size": 1,
+        "exitPrice": 77533.99,
+        "tradeNo": 104,
+        "pnlPct": -1.12,
+        "reason": ""
       }
     ],
     "trades": [
@@ -20648,8 +21091,24 @@
         "net_return_pct": 0.02,
         "exit_reason": "Fast_Breakeven",
         "status": "CLOSED"
+      },
+      {
+        "side": "SHORT",
+        "type": "SHORT",
+        "entry_time": "2026-09-13 08:30:00",
+        "exit_time": "2026-09-14 02:00:00",
+        "entry_price": 76813.71,
+        "exit_price": 77533.99,
+        "gross_return_pct": -0.94,
+        "net_return_pct": -1.12,
+        "exit_reason": "Structure_Exit",
+        "be_activated": false,
+        "status": "CLOSED",
+        "trade_no": 104
       }
-    ]
+    ],
+    "has_active_signal": false,
+    "active_ticket": null
   },
   {
     "id": "pippo-30m-short-v2-c",
@@ -23876,6 +24335,8 @@
         "exit_reason": "Structure_Exit",
         "status": "CLOSED"
       }
-    ]
+    ],
+    "has_active_signal": false,
+    "active_ticket": null
   }
 ]

@@ -798,6 +798,7 @@ export default function App() {
               theme={theme}
               floor={floor}
               onPriceSync={handlePriceSyncFromChart}
+              activeSignals={activeSignals}
             />
           </section>
         )}

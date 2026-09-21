@@ -70,6 +70,7 @@ export default function TradingChart({
   theme = 'light',
   floor = null,
   onPriceSync = null,
+  activeSignals = [],
 }) {
   const isDark = theme === 'dark';
   const chartContainerRef = useRef(null);
@@ -204,12 +205,20 @@ export default function TradingChart({
 
     tradesList.forEach((tr, idx) => {
       try {
-        const entrySec = Math.floor(new Date(tr.entry_time).getTime() / 1000);
-        map.set(entrySec, { ...tr, eventType: 'ENTRY', tradeIndex: idx });
+        const cleanEntry = String(tr.entry_time).replace(' UTC', '').trim();
+        const entryIso = cleanEntry.includes('T') ? cleanEntry : cleanEntry.replace(' ', 'T') + (cleanEntry.endsWith('Z') ? '' : 'Z');
+        const entrySec = Math.floor(new Date(entryIso).getTime() / 1000);
+        if (!isNaN(entrySec)) {
+          map.set(entrySec, { ...tr, eventType: 'ENTRY', tradeIndex: idx });
+        }
 
         if (tr.exit_time && !String(tr.exit_time).includes('RUNNING')) {
-          const exitSec = Math.floor(new Date(tr.exit_time).getTime() / 1000);
-          map.set(exitSec, { ...tr, eventType: 'EXIT', tradeIndex: idx });
+          const cleanExit = String(tr.exit_time).replace(' UTC', '').trim();
+          const exitIso = cleanExit.includes('T') ? cleanExit : cleanExit.replace(' ', 'T') + (cleanExit.endsWith('Z') ? '' : 'Z');
+          const exitSec = Math.floor(new Date(exitIso).getTime() / 1000);
+          if (!isNaN(exitSec)) {
+            map.set(exitSec, { ...tr, eventType: 'EXIT', tradeIndex: idx });
+          }
         }
       } catch (e) {}
     });
@@ -392,22 +401,25 @@ export default function TradingChart({
     const side = trade.side || trade.type || activeStrategy?.type || 'LONG';
     const isLong = side === 'LONG';
     const isWin = (trade.net_return_pct || 0) > 0;
+    const isRunning = trade.status === 'OPEN' || trade.is_active || String(trade.exit_time).includes('RUNNING');
 
     // 1. Entry Line
     if (trade.entry_price) {
       const entryLine = candleSeriesRef.current.createPriceLine({
         price: trade.entry_price,
-        color: '#4FE0FF',
+        color: isRunning ? '#30D158' : '#4FE0FF',
         lineWidth: 2,
         lineStyle: 2, // Dashed
         axisLabelVisible: true,
-        title: `ENTRY #${trade.trade_no} ($${trade.entry_price.toLocaleString()})`,
+        title: isRunning 
+          ? `ACTIVE ENTRY #${trade.trade_no} ($${trade.entry_price.toLocaleString()})`
+          : `ENTRY #${trade.trade_no} ($${trade.entry_price.toLocaleString()})`,
       });
       priceLinesRef.current.push(entryLine);
     }
 
     // 2. Exit Line if closed
-    if (trade.exit_price) {
+    if (trade.exit_price && !isRunning) {
       const exitLine = candleSeriesRef.current.createPriceLine({
         price: trade.exit_price,
         color: isWin ? '#39FF88' : '#FF4B5C',
@@ -419,45 +431,74 @@ export default function TradingChart({
       priceLinesRef.current.push(exitLine);
     }
 
-    // 3. Stop Loss Line (if hard_stop_loss is numeric)
-    const slParam = activeStrategy?.parameters?.hard_stop_loss || '';
-    const slMatch = String(slParam).match(/(\d+(\.\d+)?)/);
-    if (slMatch && trade.entry_price) {
-      const slPct = parseFloat(slMatch[1]);
-      if (!isNaN(slPct) && slPct > 0 && slPct <= 30) {
-        const slPrice = isLong 
-          ? trade.entry_price * (1 - slPct / 100) 
-          : trade.entry_price * (1 + slPct / 100);
-        const slLine = candleSeriesRef.current.createPriceLine({
-          price: slPrice,
-          color: '#FF4B5C',
-          lineWidth: 1.5,
-          lineStyle: 2,
-          axisLabelVisible: true,
-          title: `SL (${slPct}%) @ $${Math.round(slPrice).toLocaleString()}`,
-        });
-        priceLinesRef.current.push(slLine);
+    // 3. Stop Loss / Breakeven Line
+    const explicitSl = trade.stop_loss || (trade.be_activated ? (isLong ? trade.entry_price * 1.002 : trade.entry_price * 0.998) : null);
+    if (explicitSl) {
+      const isBe = trade.be_activated || (isLong ? explicitSl > trade.entry_price : explicitSl < trade.entry_price);
+      const slLine = candleSeriesRef.current.createPriceLine({
+        price: explicitSl,
+        color: isBe ? '#FF9F0A' : '#FF4B5C',
+        lineWidth: isBe ? 2 : 1.5,
+        lineStyle: isBe ? 0 : 2, // Solid if BE locked, Dashed if normal SL
+        axisLabelVisible: true,
+        title: isBe 
+          ? `BE LOCKED SL (+0.2%) @ $${Math.round(explicitSl).toLocaleString()}`
+          : `STOP LOSS @ $${Math.round(explicitSl).toLocaleString()}`,
+      });
+      priceLinesRef.current.push(slLine);
+    } else {
+      const slParam = activeStrategy?.parameters?.hard_stop_loss || '';
+      const slMatch = String(slParam).match(/(\d+(\.\d+)?)/);
+      if (slMatch && trade.entry_price) {
+        const slPct = parseFloat(slMatch[1]);
+        if (!isNaN(slPct) && slPct > 0 && slPct <= 30) {
+          const slPrice = isLong 
+            ? trade.entry_price * (1 - slPct / 100) 
+            : trade.entry_price * (1 + slPct / 100);
+          const slLine = candleSeriesRef.current.createPriceLine({
+            price: slPrice,
+            color: '#FF4B5C',
+            lineWidth: 1.5,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: `SL (${slPct}%) @ $${Math.round(slPrice).toLocaleString()}`,
+          });
+          priceLinesRef.current.push(slLine);
+        }
       }
     }
 
-    // 4. Take Profit Line (if take_profit is numeric)
-    const tpParam = activeStrategy?.parameters?.take_profit || '';
-    const tpMatch = String(tpParam).match(/(\d+(\.\d+)?)/);
-    if (tpMatch && trade.entry_price) {
-      const tpPct = parseFloat(tpMatch[1]);
-      if (!isNaN(tpPct) && tpPct > 0 && tpPct <= 100) {
-        const tpPrice = isLong 
-          ? trade.entry_price * (1 + tpPct / 100) 
-          : trade.entry_price * (1 - tpPct / 100);
-        const tpLine = candleSeriesRef.current.createPriceLine({
-          price: tpPrice,
-          color: '#39FF88',
-          lineWidth: 1.5,
-          lineStyle: 2,
-          axisLabelVisible: true,
-          title: `TP (${tpPct}%) @ $${Math.round(tpPrice).toLocaleString()}`,
-        });
-        priceLinesRef.current.push(tpLine);
+    // 4. Take Profit Line
+    const explicitTp = trade.take_profit;
+    if (explicitTp) {
+      const tpLine = candleSeriesRef.current.createPriceLine({
+        price: explicitTp,
+        color: '#39FF88',
+        lineWidth: 1.5,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: `TAKE PROFIT @ $${Math.round(explicitTp).toLocaleString()}`,
+      });
+      priceLinesRef.current.push(tpLine);
+    } else {
+      const tpParam = activeStrategy?.parameters?.take_profit || '';
+      const tpMatch = String(tpParam).match(/(\d+(\.\d+)?)/);
+      if (tpMatch && trade.entry_price) {
+        const tpPct = parseFloat(tpMatch[1]);
+        if (!isNaN(tpPct) && tpPct > 0 && tpPct <= 100) {
+          const tpPrice = isLong 
+            ? trade.entry_price * (1 + tpPct / 100) 
+            : trade.entry_price * (1 - tpPct / 100);
+          const tpLine = candleSeriesRef.current.createPriceLine({
+            price: tpPrice,
+            color: '#39FF88',
+            lineWidth: 1.5,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: `TP (${tpPct}%) @ $${Math.round(tpPrice).toLocaleString()}`,
+          });
+          priceLinesRef.current.push(tpLine);
+        }
       }
     }
   };
@@ -468,17 +509,22 @@ export default function TradingChart({
       let text = '';
       const isEntry = m.shape === 'arrowUp' || m.shape === 'arrowDown';
       const isLong = m.side === 'LONG' || m.shape === 'arrowUp';
+      const isActive = m.isActive || m.status === 'OPEN';
 
       if (mode === 'minimal') {
-        text = ''; // Zero clutter: clean arrows and circles only!
+        text = isActive ? (isLong ? 'BUY' : 'SELL') : '';
       } else if (mode === 'prices') {
         if (isEntry && m.entryPrice) text = `$${Math.round(m.entryPrice).toLocaleString()}`;
         else if (!isEntry && m.exitPrice) text = `$${Math.round(m.exitPrice).toLocaleString()}`;
       } else if (mode === 'full') {
         text = m.text || '';
       } else {
-        // 'compact' - Default anti-slop mode (concise, clear, no candle overlap)
-        if (isEntry) {
+        // 'compact' - Default anti-slop mode
+        if (isActive && isEntry) {
+          text = isLong ? `ACTIVE BUY #${m.tradeNo || ''}` : `ACTIVE SELL #${m.tradeNo || ''}`;
+        } else if (m.isBreakeven) {
+          text = 'BE LOCKED';
+        } else if (isEntry) {
           text = isLong ? `BUY #${m.tradeNo || ''}` : `SELL #${m.tradeNo || ''}`;
         } else {
           const pnl = m.pnlPct !== undefined ? m.pnlPct : null;
@@ -489,9 +535,62 @@ export default function TradingChart({
       return {
         ...m,
         text,
-        size: isEntry ? 2 : 1.5,
+        size: isActive ? 3 : (isEntry ? 2 : 1.5),
+        color: isActive ? (isLong ? '#30D158' : '#FF453A') : (m.isBreakeven ? '#FF9F0A' : m.color),
       };
     });
+  };
+
+  // Snaps marker timestamps to candle bar timestamps so markers NEVER drop across timeframes
+  const getProcessedMarkers = (rawMarkers, candleArr, mode) => {
+    if (!rawMarkers || rawMarkers.length === 0 || !candleArr || candleArr.length === 0) return [];
+
+    const cTimes = candleArr.map((c) => c.time);
+    const minTime = cTimes[0];
+    const maxTime = cTimes[cTimes.length - 1];
+    const avgInterval = cTimes.length > 1 ? (cTimes[cTimes.length - 1] - cTimes[0]) / (cTimes.length - 1) : 1800;
+
+    // Filter markers within candle timeframe span
+    const inRange = rawMarkers.filter((m) => m.time >= minTime - avgInterval && m.time <= maxTime + avgInterval * 2);
+    if (inRange.length === 0) return [];
+
+    const mapped = inRange.map((m) => {
+      let low = 0, high = cTimes.length - 1, bestIdx = 0;
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        if (cTimes[mid] <= m.time) {
+          bestIdx = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      return {
+        ...m,
+        time: cTimes[bestIdx],
+        originalTime: m.time,
+      };
+    });
+
+    mapped.sort((a, b) => {
+      if (a.time !== b.time) return a.time - b.time;
+      if (a.isActive && !b.isActive) return 1;
+      if (!a.isActive && b.isActive) return -1;
+      return (a.tradeNo || 0) - (b.tradeNo || 0);
+    });
+
+    const deduplicated = [];
+    const seenTimes = new Set();
+    mapped.forEach((m) => {
+      let mTime = m.time;
+      while (seenTimes.has(mTime)) {
+        mTime += 1;
+      }
+      seenTimes.add(mTime);
+      deduplicated.push({ ...m, time: mTime });
+    });
+
+    return formatMarkersForDisplay(deduplicated, mode);
   };
 
   // Initialize and Render Lightweight Charts Canvas
@@ -667,27 +766,8 @@ export default function TradingChart({
 
       // Plot Strategy Markers
       if (showMarkers && activeStrategy?.markers && activeStrategy.markers.length > 0) {
-        const candleTimes = new Set(formattedCandles.map((c) => c.time));
-        const validMarkers = activeStrategy.markers.filter((m) => candleTimes.has(m.time));
-
-        if (validMarkers.length > 0) {
-          const sortedMarkers = [...validMarkers].sort((a, b) => {
-            if (a.time !== b.time) return a.time - b.time;
-            return (a.tradeNo || 0) - (b.tradeNo || 0);
-          });
-
-          const deduplicatedMarkers = [];
-          const seenTimes = new Set();
-          sortedMarkers.forEach((m) => {
-            let mTime = m.time;
-            while (seenTimes.has(mTime)) {
-              mTime += 1;
-            }
-            seenTimes.add(mTime);
-            deduplicatedMarkers.push({ ...m, time: mTime });
-          });
-
-          const formatted = formatMarkersForDisplay(deduplicatedMarkers, markerLabelMode);
+        const formatted = getProcessedMarkers(activeStrategy.markers, formattedCandles, markerLabelMode);
+        if (formatted.length > 0) {
           try {
             markersPrimitiveRef.current = createSeriesMarkers(candleSeries, formatted);
           } catch (markerErr) {
@@ -798,35 +878,16 @@ export default function TradingChart({
     if (tradesList.length > 0) {
       setFocusedTradeIndex(tradesList.length - 1);
     }
-  }, [activeStrategy?.id]);
+  }, [activeStrategy?.id, tradesList.length]);
 
   // Update Markers dynamically when activeStrategy, showMarkers, or markerLabelMode changes
   useEffect(() => {
     if (!candleSeriesRef.current || candles.length === 0) return;
 
     if (showMarkers && activeStrategy?.markers && activeStrategy.markers.length > 0) {
-      const candleTimes = new Set(candles.map((c) => c.time));
-      const validMarkers = activeStrategy.markers.filter((m) => candleTimes.has(m.time));
+      const formatted = getProcessedMarkers(activeStrategy.markers, candles, markerLabelMode);
 
-      if (validMarkers.length > 0) {
-        const sortedMarkers = [...validMarkers].sort((a, b) => {
-          if (a.time !== b.time) return a.time - b.time;
-          return (a.tradeNo || 0) - (b.tradeNo || 0);
-        });
-
-        const deduplicatedMarkers = [];
-        const seenTimes = new Set();
-        sortedMarkers.forEach((m) => {
-          let mTime = m.time;
-          while (seenTimes.has(mTime)) {
-            mTime += 1;
-          }
-          seenTimes.add(mTime);
-          deduplicatedMarkers.push({ ...m, time: mTime });
-        });
-
-        const formatted = formatMarkersForDisplay(deduplicatedMarkers, markerLabelMode);
-
+      if (formatted.length > 0) {
         try {
           if (markersPrimitiveRef.current) {
             markersPrimitiveRef.current.setMarkers(formatted);
@@ -1395,12 +1456,17 @@ export default function TradingChart({
                         {activeTrade.side || activeTrade.type} #{activeTrade.trade_no}
                       </span>
                       <span className={`text-[11px] px-2 py-0.5 rounded-full border ${
-                        activeTrade.status === 'CLOSED'
-                          ? 'border-black/[0.08] dark:border-white/[0.08] bg-black/[0.04] dark:bg-white/[0.04] text-apple-muted'
-                          : 'border-apple-blue/40 bg-apple-blue/15 text-apple-cyan font-medium'
+                        activeTrade.status === 'OPEN' || String(activeTrade.exit_time).includes('RUNNING')
+                          ? 'border-apple-green/50 bg-apple-green/20 text-apple-green font-semibold animate-pulse'
+                          : 'border-black/[0.08] dark:border-white/[0.08] bg-black/[0.04] dark:bg-white/[0.04] text-apple-muted'
                       }`}>
-                        {activeTrade.status || 'CLOSED'}
+                        {activeTrade.status === 'OPEN' || String(activeTrade.exit_time).includes('RUNNING') ? 'LIVE RUNNING' : 'CLOSED'}
                       </span>
+                      {activeTrade.be_activated && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-apple-orange/20 text-apple-orange border border-apple-orange/40 font-bold">
+                          BE LOCKED
+                        </span>
+                      )}
                     </div>
 
                     <div className={`text-sm font-semibold font-mono tabular-nums ${
@@ -1424,15 +1490,15 @@ export default function TradingChart({
 
                     <div>
                       <div className="text-[10px] text-apple-dim uppercase tracking-wider">
-                        {activeTrade.status === 'CLOSED' ? 'Exit Price' : 'Current Mark'}
+                        {activeTrade.status === 'OPEN' || String(activeTrade.exit_time).includes('RUNNING') ? 'Current Price' : 'Exit Price'}
                       </div>
                       <div className="font-semibold text-apple-text mt-0.5 font-mono tabular-nums">
-                        {formatPrice(activeTrade.exit_price || liveTicker?.price)}
+                        {formatPrice(activeTrade.status === 'OPEN' ? (liveTicker?.price || activeTrade.exit_price) : activeTrade.exit_price)}
                       </div>
                       <div className="text-[10px] text-apple-muted truncate">
-                        {activeTrade.exit_time && !String(activeTrade.exit_time).includes('RUNNING')
-                          ? String(activeTrade.exit_time).substring(0, 10)
-                          : 'Active Candle'}
+                        {activeTrade.status === 'OPEN' || String(activeTrade.exit_time).includes('RUNNING')
+                          ? 'Live Position'
+                          : String(activeTrade.exit_time).substring(0, 10)}
                       </div>
                     </div>
 
@@ -1444,9 +1510,13 @@ export default function TradingChart({
                         </span>
                       </div>
                       <div>
-                        <span className="text-[10px] text-apple-dim uppercase mr-1.5">Exit:</span>
-                        <span className="text-apple-cyan truncate max-w-[110px] inline-block align-bottom font-medium" title={activeTrade.exit_reason}>
-                          {activeTrade.exit_reason || 'Structural'}
+                        <span className="text-[10px] text-apple-dim uppercase mr-1.5">
+                          {activeTrade.status === 'OPEN' ? 'Protection:' : 'Exit:'}
+                        </span>
+                        <span className="text-apple-cyan truncate max-w-[120px] inline-block align-bottom font-medium" title={activeTrade.exit_reason}>
+                          {activeTrade.status === 'OPEN' 
+                            ? (activeTrade.be_activated ? 'BE Locked (+0.2%)' : 'Trailing Floor')
+                            : (activeTrade.exit_reason || 'Structural')}
                         </span>
                       </div>
                     </div>
@@ -1597,6 +1667,7 @@ export default function TradingChart({
               const actualIdx = tradesList.findIndex((t) => t.trade_no === tr.trade_no);
               const isWin = (tr.net_return_pct || 0) > 0;
               const isCurrent = focusedTradeIndex === actualIdx;
+              const isRunning = tr.status === 'OPEN' || tr.is_active || String(tr.exit_time).includes('RUNNING');
               const side = tr.side || tr.type || activeStrategy.type;
               const isLong = side === 'LONG';
 
@@ -1606,15 +1677,23 @@ export default function TradingChart({
                   onClick={() => handleJumpToTrade(tr, actualIdx)}
                   className={`px-3 py-1.5 rounded-xl border text-xs whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
                     isCurrent
-                      ? 'bg-black/10 dark:bg-white/15 text-apple-text border-black/20 dark:border-white/30 shadow-md font-semibold ring-1 ring-apple-blue/50 scale-[1.03] z-10'
+                      ? (isRunning
+                          ? 'bg-apple-green/25 text-apple-text border-apple-green shadow-lg ring-2 ring-apple-green/60 font-semibold scale-[1.03] z-10 animate-pulse'
+                          : 'bg-black/10 dark:bg-white/15 text-apple-text border-black/20 dark:border-white/30 shadow-md font-semibold ring-1 ring-apple-blue/50 scale-[1.03] z-10')
+                      : isRunning
+                      ? 'bg-apple-green/15 text-apple-green border-apple-green/50 shadow-sm font-semibold animate-pulse'
                       : isWin
                       ? 'bg-apple-green/5 text-apple-green border-apple-green/20 hover:border-apple-green/50 hover:bg-apple-green/10'
                       : 'bg-apple-red/5 text-apple-red border-apple-red/20 hover:border-apple-red/50 hover:bg-apple-red/10'
                   }`}
-                  title={`Trade #${tr.trade_no}: ${side} @ $${tr.entry_price?.toLocaleString()} -> ${formatPercent(tr.net_return_pct || 0)}`}
+                  title={`Trade #${tr.trade_no}: ${side} @ $${tr.entry_price?.toLocaleString()} -> ${isRunning ? 'RUNNING' : formatPercent(tr.net_return_pct || 0)}`}
                 >
-                  <span className="opacity-70 font-sans">{isLong ? '▲' : '▼'}</span>
-                  <span className="font-mono">#{tr.trade_no}</span>
+                  {isRunning ? (
+                    <span className="w-2 h-2 rounded-full bg-apple-green animate-ping" />
+                  ) : (
+                    <span className="opacity-70 font-sans">{isLong ? '▲' : '▼'}</span>
+                  )}
+                  <span className="font-mono">{isRunning ? `ACTIVE #${tr.trade_no}` : `#${tr.trade_no}`}</span>
                   <span className="font-semibold font-mono tabular-nums">{formatPercent(tr.net_return_pct || 0)}</span>
                 </button>
               );

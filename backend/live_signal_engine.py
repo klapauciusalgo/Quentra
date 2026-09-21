@@ -87,6 +87,8 @@ class StrategyModel:
         
         # Recent executed trades log in this session
         self.recent_trades: List[dict] = []
+        self.synced_recent_trades: List[dict] = []
+        self.active_markers: List[dict] = []
         self.active_ticket: Optional[dict] = None
 
 class LiveSignalEngine:
@@ -356,7 +358,8 @@ class LiveSignalEngine:
                 btm_y = 0.0
                 ibtm_cross = True
 
-                start_bar = max(1, n - 300)
+                start_bar = max(1, n - 600)
+                replayed_closed = []
                 for i in range(start_bar, n):
                     prev_itop = itop_y
                     prev_ibtm = ibtm_y
@@ -373,6 +376,8 @@ class LiveSignalEngine:
                     elif "weekly_ma55" in reg_rule and weekly_ma55 > 0:
                         reg_ok = closes[i] < weekly_ma55
 
+                    cur_dt = str(df["datetime"].iloc[i]) if "datetime" in df.columns else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
                     if direction == "LONG":
                         crossover = (closes[i] > itop_y) and (closes[i - 1] <= prev_itop)
                         ex_floor = [b for b in btm_ex[:i + 1] if b > 0][-1] if any(btm_ex[:i + 1] > 0) else lows[i]
@@ -381,7 +386,7 @@ class LiveSignalEngine:
                             if crossover and itop_cross and (top_y != itop_y) and reg_ok:
                                 in_pos = True
                                 entry_p = float(closes[i])
-                                entry_time = str(df["datetime"].iloc[i]) if "datetime" in df.columns else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                                entry_time = cur_dt
                                 peak_p = float(highs[i])
                                 curr_sl = round(entry_p * (1.0 - sl_pct), 2)
                                 be_active = False
@@ -391,11 +396,29 @@ class LiveSignalEngine:
                             if be_pct > 0 and not be_active and closes[i] >= entry_p * (1.0 + be_pct):
                                 be_active = True
                                 curr_sl = round(entry_p * 1.002, 2)
-                            if lows[i] <= curr_sl:
-                                in_pos = False
-                            elif highs[i] >= entry_p * (1.0 + tp_pct):
-                                in_pos = False
-                            elif closes[i] < ex_floor:
+                            
+                            hit_sl = lows[i] <= curr_sl
+                            hit_tp = highs[i] >= entry_p * (1.0 + tp_pct)
+                            struct_exit = closes[i] < ex_floor
+
+                            if hit_sl or hit_tp or struct_exit:
+                                exit_p = curr_sl if hit_sl else (entry_p * (1.0 + tp_pct) if hit_tp else float(closes[i]))
+                                reason = "Breakeven SL" if (hit_sl and be_active) else ("Stop Loss" if hit_sl else ("Take Profit" if hit_tp else "Bearish CHoCH Exit"))
+                                raw_ret = (exit_p - entry_p) / entry_p
+                                net_ret = (raw_ret - 0.0018) * 100.0
+                                replayed_closed.append({
+                                    "side": direction,
+                                    "type": direction,
+                                    "entry_time": entry_time,
+                                    "exit_time": cur_dt,
+                                    "entry_price": entry_p,
+                                    "exit_price": exit_p,
+                                    "gross_return_pct": round(raw_ret * 100.0, 2),
+                                    "net_return_pct": round(net_ret, 2),
+                                    "exit_reason": reason,
+                                    "be_activated": be_active,
+                                    "status": "CLOSED"
+                                })
                                 in_pos = False
                     else: # SHORT
                         crossunder = (closes[i] < ibtm_y) and (closes[i - 1] >= prev_ibtm)
@@ -405,7 +428,7 @@ class LiveSignalEngine:
                             if crossunder and ibtm_cross and (btm_y != ibtm_y) and reg_ok:
                                 in_pos = True
                                 entry_p = float(closes[i])
-                                entry_time = str(df["datetime"].iloc[i]) if "datetime" in df.columns else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                                entry_time = cur_dt
                                 trough_p = float(lows[i])
                                 curr_sl = round(entry_p * (1.0 + sl_pct), 2)
                                 be_active = False
@@ -415,12 +438,32 @@ class LiveSignalEngine:
                             if be_pct > 0 and not be_active and closes[i] <= entry_p * (1.0 - be_pct):
                                 be_active = True
                                 curr_sl = round(entry_p * 0.998, 2)
-                            if highs[i] >= curr_sl:
+                            
+                            hit_sl = highs[i] >= curr_sl
+                            hit_tp = lows[i] <= entry_p * (1.0 - tp_pct)
+                            struct_exit = closes[i] > ex_ceil
+
+                            if hit_sl or hit_tp or struct_exit:
+                                exit_p = curr_sl if hit_sl else (entry_p * (1.0 - tp_pct) if hit_tp else float(closes[i]))
+                                reason = "Breakeven SL" if (hit_sl and be_active) else ("Stop Loss" if hit_sl else ("Take Profit" if hit_tp else "Structure_Exit"))
+                                raw_ret = (entry_p - exit_p) / entry_p
+                                net_ret = (raw_ret - 0.0018) * 100.0
+                                replayed_closed.append({
+                                    "side": direction,
+                                    "type": direction,
+                                    "entry_time": entry_time,
+                                    "exit_time": cur_dt,
+                                    "entry_price": entry_p,
+                                    "exit_price": exit_p,
+                                    "gross_return_pct": round(raw_ret * 100.0, 2),
+                                    "net_return_pct": round(net_ret, 2),
+                                    "exit_reason": reason,
+                                    "be_activated": be_active,
+                                    "status": "CLOSED"
+                                })
                                 in_pos = False
-                            elif lows[i] <= entry_p * (1.0 - tp_pct):
-                                in_pos = False
-                            elif closes[i] > ex_ceil:
-                                in_pos = False
+
+                model.synced_recent_trades = replayed_closed
 
                 if in_pos:
                     model.position_status = "OPEN"
@@ -441,6 +484,7 @@ class LiveSignalEngine:
                     model.position_status = "FLAT"
                     model.entry_price = 0.0
                     model.active_ticket = None
+                    model.active_markers = []
 
         except Exception as e:
             logger.warning(f"Error in sync_active_positions: {e}", exc_info=True)
@@ -539,6 +583,17 @@ class LiveSignalEngine:
                             model.current_sl = round(model.entry_price * 0.998, 2)
                         if model.active_ticket:
                             model.active_ticket["stop_loss"] = model.current_sl
+                        now_ts = int(time.time())
+                        model.active_markers.append({
+                            "time": now_ts,
+                            "position": "aboveBar" if model.direction == "LONG" else "belowBar",
+                            "color": "#FF9F0A",
+                            "shape": "circle",
+                            "text": f"BE LOCKED @ ${model.current_sl:,.0f} (+0.2%)",
+                            "size": 2,
+                            "exitPrice": model.current_sl,
+                            "isBreakeven": True
+                        })
                         logger.info(f"⚡ [BREAKEVEN ACTIVATED] {model.name} locked BE stop at ${model.current_sl:,.2f}")
                         events.append({
                             "type": "BREAKEVEN_LOCKED",
@@ -752,6 +807,42 @@ class LiveSignalEngine:
             "execution_mode": "AUTONOMOUS_ON_THE_FLY"
         }
         model.active_ticket = ticket
+
+        # Build chart active markers
+        try:
+            clean_time = str(model.entry_time).replace(" UTC", "")
+            e_ts = int(pd.to_datetime(clean_time).timestamp())
+        except Exception:
+            e_ts = int(time.time())
+
+        markers = [
+            {
+                "time": e_ts,
+                "position": "belowBar" if model.direction == "LONG" else "aboveBar",
+                "color": "#30D158" if model.direction == "LONG" else "#FF453A",
+                "shape": "arrowUp" if model.direction == "LONG" else "arrowDown",
+                "text": f"ACTIVE {model.direction} @ ${entry_p:,.0f}",
+                "size": 3,
+                "entryPrice": entry_p,
+                "side": model.direction,
+                "status": "OPEN",
+                "isActive": True
+            }
+        ]
+        if getattr(model, "be_active", False):
+            tf_sec = {"30m": 1800, "1h": 3600, "4h": 14400, "1w": 604800}.get(model.timeframe, 3600)
+            markers.append({
+                "time": e_ts + tf_sec,
+                "position": "aboveBar" if model.direction == "LONG" else "belowBar",
+                "color": "#FF9F0A",
+                "shape": "circle",
+                "text": f"BE LOCKED @ ${model.current_sl:,.0f} (+0.2%)",
+                "size": 2,
+                "exitPrice": model.current_sl,
+                "isBreakeven": True
+            })
+        model.active_markers = markers
+
         return ticket
 
 
@@ -786,6 +877,7 @@ class LiveSignalEngine:
         model.entry_time = None
         model.be_active = False
         model.active_ticket = None
+        model.active_markers = []
 
         return trade_record
 

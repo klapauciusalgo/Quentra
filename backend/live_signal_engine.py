@@ -132,6 +132,22 @@ class LiveSignalEngine:
                     "regime": "4h_sma111_and_1h_ema50"
                 }
             ),
+            "pippo-30m-new-gen": StrategyModel(
+                strat_id="pippo-30m-new-gen",
+                name="Pippo 30m New Gen",
+                tf="30m",
+                direction="LONG",
+                config={
+                    "sl_pct": 0.02,
+                    "tp_pct": 0.20,
+                    "fc_dist": 0.005,
+                    "entry_dist": 0.008,
+                    "regime_dist_1h": 0.015,
+                    "spread_max": 0.0015,
+                    "atr_max": 0.01,
+                    "regime": "pippo_new_gen_ma_squeeze"
+                }
+            ),
             "pippo-30m-short-v2-a": StrategyModel(
                 strat_id="pippo-30m-short-v2-a",
                 name="Pippo 30M Short V2 Type A (Active TP)",
@@ -315,6 +331,10 @@ class LiveSignalEngine:
         """
         try:
             for strat_id, model in self.strategies.items():
+                if strat_id == "pippo-30m-new-gen":
+                    self._sync_pippo_new_gen(model)
+                    continue
+
                 tf = model.timeframe
                 if tf not in self.candle_buffers or self.candle_buffers[tf].empty:
                     continue
@@ -489,6 +509,138 @@ class LiveSignalEngine:
         except Exception as e:
             logger.warning(f"Error in sync_active_positions: {e}", exc_info=True)
 
+    def _sync_pippo_new_gen(self, model: StrategyModel):
+        """
+        Replays Pippo 30m New Gen MA squeeze & multi-timeframe rules across recent bars:
+        - 1H Regime: price > MA25 & MA50, dist < 1.5%
+        - 4H Regime: price > MA111
+        - 30M Entry: price > MA25 & MA50, dist < 0.8%, MA25/50 spread < 0.15%, ATR < 1.0%
+        - Force Close: price < MA25 & MA50 and 0.5% below each
+        - SL: -2%, TP: +20%
+        """
+        try:
+            if "30m" not in self.candle_buffers or self.candle_buffers["30m"].empty:
+                return
+
+            d30 = self.candle_buffers["30m"].copy()
+            if len(d30) < 50:
+                return
+
+            d1h = self.candle_buffers.get("1h", pd.DataFrame()).copy()
+            d4h = self.candle_buffers.get("4h", pd.DataFrame()).copy()
+
+            if not d1h.empty:
+                d1h["ma25"] = d1h["close"].rolling(25).mean()
+                d1h["ma50"] = d1h["close"].rolling(50).mean()
+                d1h["d25h"] = (d1h["close"] - d1h["ma25"]) / d1h["ma25"] * 100
+                d1h["d50h"] = (d1h["close"] - d1h["ma50"]) / d1h["ma50"] * 100
+                d1h["ts"] = d1h["timestamp"] + 3600000 if "timestamp" in d1h else d1h["time"] * 1000 + 3600000
+
+            if not d4h.empty:
+                d4h["ma111"] = d4h["close"].rolling(111).mean()
+                d4h["ts4"] = d4h["timestamp"] + 4 * 3600 * 1000 if "timestamp" in d4h else d4h["time"] * 1000 + 4 * 3600 * 1000
+
+            d30["ma25"] = d30["close"].rolling(25).mean()
+            d30["ma50"] = d30["close"].rolling(50).mean()
+            d30["d25"] = (d30["close"] - d30["ma25"]) / d30["ma25"] * 100
+            d30["d50"] = (d30["close"] - d30["ma50"]) / d30["ma50"] * 100
+            d30["spread"] = (d30["ma25"] - d30["ma50"]) / d30["ma50"] * 100
+            tr = np.maximum(d30["high"] - d30["low"], np.maximum((d30["high"] - d30["close"].shift()).abs(), (d30["low"] - d30["close"].shift()).abs()))
+            d30["atr"] = tr.rolling(14).mean() / d30["close"] * 100
+
+            df = d30
+            if not d1h.empty and "ts" in d1h:
+                df = pd.merge_asof(df, d1h[["ts", "close", "ma25", "ma50", "d25h", "d50h"]].rename(columns={"close": "c1h", "ma25": "m25h", "ma50": "m50h"}), left_on="timestamp" if "timestamp" in df else "time", right_on="ts" if "timestamp" in df else "time", direction="backward")
+            if not d4h.empty and "ts4" in d4h:
+                df = pd.merge_asof(df, d4h[["ts4", "close", "ma111"]].rename(columns={"close": "c4h", "ma111": "ma111_4h"}), left_on="timestamp" if "timestamp" in df else "time", right_on="ts4" if "timestamp" in df else "time", direction="backward")
+
+            in_pos = False
+            ep = 0.0
+            entry_time = ""
+            replayed_closed = []
+
+            for i in range(len(df)):
+                c = float(df["close"].iloc[i])
+                h = float(df["high"].iloc[i])
+                l = float(df["low"].iloc[i])
+                cur_dt = str(df["datetime"].iloc[i]) if "datetime" in df else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+                if in_pos:
+                    slp = ep * 0.98
+                    tpp = ep * 1.20
+                    m25 = float(df["ma25"].iloc[i]) if not pd.isna(df["ma25"].iloc[i]) else c
+                    m50 = float(df["ma50"].iloc[i]) if not pd.isna(df["ma50"].iloc[i]) else c
+                    fc = (c < m25) and (c < m50) and ((m25 - c) / m25 >= 0.005) and ((m50 - c) / m50 >= 0.005)
+
+                    hit_sl = l <= slp
+                    hit_tp = h >= tpp
+
+                    if hit_sl or hit_tp or fc:
+                        xp = slp if hit_sl else (tpp if hit_tp else c)
+                        rs = "Stop Loss (-2%)" if hit_sl else ("Take Profit (+20%)" if hit_tp else "Force Close MA (-0.5%)")
+                        raw_ret = (xp - ep) / ep
+                        net_ret = (raw_ret - 0.0018) * 100.0
+                        replayed_closed.append({
+                            "side": "LONG",
+                            "type": "LONG",
+                            "entry_time": entry_time,
+                            "exit_time": cur_dt,
+                            "entry_price": ep,
+                            "exit_price": xp,
+                            "gross_return_pct": round(raw_ret * 100.0, 2),
+                            "net_return_pct": round(net_ret, 2),
+                            "exit_reason": rs,
+                            "be_activated": False,
+                            "status": "CLOSED"
+                        })
+                        in_pos = False
+
+                if not in_pos:
+                    m25 = float(df["ma25"].iloc[i]) if not pd.isna(df["ma25"].iloc[i]) else c
+                    m50 = float(df["ma50"].iloc[i]) if not pd.isna(df["ma50"].iloc[i]) else c
+                    c1h = float(df["c1h"].iloc[i]) if "c1h" in df and not pd.isna(df["c1h"].iloc[i]) else c
+                    m25h = float(df["m25h"].iloc[i]) if "m25h" in df and not pd.isna(df["m25h"].iloc[i]) else m25
+                    m50h = float(df["m50h"].iloc[i]) if "m50h" in df and not pd.isna(df["m50h"].iloc[i]) else m50
+                    c4h = float(df["c4h"].iloc[i]) if "c4h" in df and not pd.isna(df["c4h"].iloc[i]) else c
+                    m111_4h = float(df["ma111_4h"].iloc[i]) if "ma111_4h" in df and not pd.isna(df["ma111_4h"].iloc[i]) else (m25 * 0.95)
+
+                    a1h = (c1h > m25h) and (c1h > m50h) and ((c1h - m25h) / m25h < 0.015) and ((c1h - m50h) / m50h < 0.015)
+                    a4h = c4h > m111_4h
+                    a30 = (c > m25) and (c > m50) and ((c - m25) / m25 < 0.008) and ((c - m50) / m50 < 0.008)
+                    sp = abs(m25 - m50) / m50 < 0.0015 if m50 > 0 else False
+                    atr_val = float(df["atr"].iloc[i]) if "atr" in df and not pd.isna(df["atr"].iloc[i]) else 0.5
+                    at = atr_val <= 1.0
+
+                    if a1h and a4h and a30 and sp and at:
+                        in_pos = True
+                        ep = c
+                        entry_time = cur_dt
+
+            model.synced_recent_trades = replayed_closed
+            if in_pos:
+                model.position_status = "OPEN"
+                model.entry_price = ep
+                model.entry_time = entry_time
+                model.peak_price = ep
+                model.trough_price = ep
+                model.current_sl = round(ep * 0.98, 2)
+                model.target_tp = round(ep * 1.20, 2)
+                model.be_active = False
+                self._open_position(model, ep, entry_time)
+                model.current_sl = round(ep * 0.98, 2)
+                model.target_tp = round(ep * 1.20, 2)
+                if model.active_ticket:
+                    model.active_ticket["stop_loss"] = model.current_sl
+                    model.active_ticket["take_profit"] = model.target_tp
+                logger.info(f"🚀 [STATE SYNC] Restored active {model.direction} trade for {model.name}: Entry ${ep:,.2f} at {entry_time} (SL: ${model.current_sl:,.2f}, TP: ${model.target_tp:,.2f})")
+            else:
+                model.position_status = "FLAT"
+                model.entry_price = 0.0
+                model.active_ticket = None
+                model.active_markers = []
+        except Exception as e:
+            logger.warning(f"Error syncing {model.strat_id}: {e}", exc_info=True)
+
     def _evaluate_all_models_initial(self):
         """Compute swing levels and set initial telemetry for all strategies."""
         for strat_id, model in self.strategies.items():
@@ -506,6 +658,29 @@ class LiveSignalEngine:
         closes = df["close"].values
         n = len(closes)
         if n < 50:
+            return
+
+        if model.strat_id == "pippo-30m-new-gen":
+            ma25_30 = float(df["MA25"].iloc[-1]) if ("MA25" in df and not pd.isna(df["MA25"].iloc[-1])) else float(df["close"].rolling(25).mean().iloc[-1])
+            ma50_30 = float(df["MA50"].iloc[-1]) if ("MA50" in df and not pd.isna(df["MA50"].iloc[-1])) else float(df["close"].rolling(50).mean().iloc[-1])
+
+            reg_1h_ok = False
+            if "1h" in self.candle_buffers and not self.candle_buffers["1h"].empty:
+                df1h = self.candle_buffers["1h"]
+                c1h = float(df1h["close"].iloc[-1])
+                m25h = float(df1h["MA25"].iloc[-1]) if ("MA25" in df1h and not pd.isna(df1h["MA25"].iloc[-1])) else float(df1h["close"].rolling(25).mean().iloc[-1])
+                m50h = float(df1h["MA50"].iloc[-1]) if ("MA50" in df1h and not pd.isna(df1h["MA50"].iloc[-1])) else float(df1h["close"].rolling(50).mean().iloc[-1])
+                if c1h > m25h and c1h > m50h and ((c1h - m25h) / m25h < 0.015) and ((c1h - m50h) / m50h < 0.015):
+                    reg_1h_ok = True
+
+            reg_4h_ok = self.macro_state.get("is_4h_bullish", False)
+            model.regime_ok = reg_1h_ok and reg_4h_ok
+
+            curr_p = self.last_price if self.last_price > 0 else float(closes[-1])
+            model.next_entry_trigger = round(max(ma25_30, ma50_30) * 1.001, 2)
+            model.structural_floor = round(min(ma25_30, ma50_30) * 0.995, 2)
+            dist_pct = ((model.next_entry_trigger - curr_p) / curr_p) * 100.0 if curr_p > 0 else 0.0
+            model.distance_to_trigger_pct = round(dist_pct, 2)
             return
 
         cfg = model.config
@@ -695,6 +870,53 @@ class LiveSignalEngine:
 
             prev_close = closes[-2]
             curr_close = closes[-1]
+
+            if model.strat_id == "pippo-30m-new-gen":
+                df_cur = self.candle_buffers[tf]
+                m25_30 = float(df_cur["MA25"].iloc[-1]) if ("MA25" in df_cur and not pd.isna(df_cur["MA25"].iloc[-1])) else float(curr_close)
+                m50_30 = float(df_cur["MA50"].iloc[-1]) if ("MA50" in df_cur and not pd.isna(df_cur["MA50"].iloc[-1])) else float(curr_close)
+
+                if model.position_status == "FLAT":
+                    a30 = (curr_close > m25_30) and (curr_close > m50_30) and ((curr_close - m25_30) / m25_30 < 0.008) and ((curr_close - m50_30) / m50_30 < 0.008)
+                    sp = abs(m25_30 - m50_30) / m50_30 < 0.0015 if m50_30 > 0 else False
+                    tr = np.maximum(df_cur["high"] - df_cur["low"], np.maximum((df_cur["high"] - df_cur["close"].shift()).abs(), (df_cur["low"] - df_cur["close"].shift()).abs()))
+                    atr_val = tr.rolling(14).mean().iloc[-1] / curr_close
+                    at = atr_val <= 0.01
+
+                    if a30 and sp and at and model.regime_ok:
+                        ticket = self._open_position(model, curr_close)
+                        logger.info(f"🚀 [AUTONOMOUS SIGNAL TRIGGERED] {model.direction} {model.name} @ ${curr_close:,.2f}")
+                        try:
+                            from supabase_client import record_live_signal
+                            record_live_signal({
+                                "strategy_id": model.strat_id,
+                                "symbol": "BTCUSDT",
+                                "type": model.direction,
+                                "price": curr_close,
+                                "confidence": ticket["confidence_pct"],
+                                "ticket": ticket
+                            })
+                        except Exception as e:
+                            logger.warning(f"Supabase signal log error: {e}")
+
+                        await binance_manager.broadcast({
+                            "type": "NEW_SIGNAL",
+                            "ticket": ticket,
+                            "autonomous": True
+                        })
+                elif model.position_status == "OPEN":
+                    fc = (curr_close < m25_30) and (curr_close < m50_30) and ((m25_30 - curr_close) / m25_30 >= 0.005) and ((m50_30 - curr_close) / m50_30 >= 0.005)
+                    if fc:
+                        exit_trade = self._close_position(model, curr_close, "Force_Close_MA")
+                        logger.info(f"⏹️ [AUTONOMOUS SIGNAL EXIT] {model.name} closed by Force Close MA @ ${curr_close:,.2f}")
+                        await binance_manager.broadcast({
+                            "type": "SIGNAL_EXIT",
+                            "strategy_id": model.strat_id,
+                            "strategy_name": model.name,
+                            "trade": exit_trade,
+                            "autonomous": True
+                        })
+                continue
 
             # A. Evaluate Entry Breakout (When FLAT)
             if model.position_status == "FLAT":

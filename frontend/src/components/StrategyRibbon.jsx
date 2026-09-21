@@ -191,6 +191,17 @@ function getStrategyExecutionRules(strat) {
         breakeven: '+3.0% -> BE',
         takeProfit: '75.0%',
       };
+    case 'pippo-30m-new-gen':
+      return {
+        trigger: 'MA Squeeze & Dist < 0.8%',
+        triggerSub: '30M Candle Close',
+        regime: '1H MA25/50 + 4H MA111',
+        regimeSub: 'Regime: Bullish Squeeze',
+        isRegimeOk: true,
+        stopLoss: '2.0%',
+        breakeven: 'Force Close -0.5% MAs',
+        takeProfit: '20.0%',
+      };
     case 'pippo-1h-enhanced':
       return {
         trigger: '16-Bar Breakout',

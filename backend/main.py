@@ -46,29 +46,75 @@ def load_data_into_memory():
     global KLINES_CACHE, STRATEGIES_CATALOG, STRATEGIES_MAP, PARQUET_DFS, PARQUET_TIMESTAMPS
     
     # 1. Load Parquets for full historical coverage (2020-2026)
+    new_analysis_dir = "/home/ubuntu/new-btc-analysis/data"
     analysis_dir = "/home/ubuntu/BTC-analysis/data"
     for tf in ["30m", "1h", "4h", "1d", "1w"]:
         p = os.path.join(DATA_DIR, f"BTCUSDT_{tf}.parquet")
+        if not os.path.exists(p):
+            p = os.path.join(new_analysis_dir, f"BTCUSDT_{tf}.parquet")
         if not os.path.exists(p):
             p = os.path.join(analysis_dir, f"BTCUSDT_{tf}.parquet")
         if os.path.exists(p):
             try:
                 df = pd.read_parquet(p)
+                
+                # Auto-backfill any missing closed bars from Binance REST API
+                try:
+                    import time
+                    from binance_ws import fetch_binance_klines_rest
+                    now_ms = int(time.time() * 1000)
+                    last_ts = int(df["timestamp"].iloc[-1]) if "timestamp" in df.columns else (int(df["time"].iloc[-1]) * 1000)
+                    gap_thresholds = {"30m": 1800000, "1h": 3600000, "4h": 14400000, "1d": 86400000, "1w": 604800000}
+                    if now_ms - last_ts > gap_thresholds.get(tf, 1800000):
+                        new_bars = fetch_binance_klines_rest("BTCUSDT", tf, limit=1000, start_time=last_ts + 1)
+                        closed_bars = [b for b in new_bars if b.get("close_time", 0) < now_ms]
+                        if closed_bars:
+                            df_new = pd.DataFrame(closed_bars)
+                            df = pd.concat([df, df_new], ignore_index=True).drop_duplicates(subset=["timestamp"]).reset_index(drop=True)
+                            for w in [8, 25, 50, 55, 111]:
+                                if len(df) >= w:
+                                    df[f"MA{w}"] = df["close"].rolling(w).mean()
+                            logger.info(f"Backfilled {len(closed_bars)} live candles for {tf} up to {df['datetime'].iloc[-1]}")
+                except Exception as ex_bf:
+                    logger.debug(f"Backfill gap skipped for {tf}: {ex_bf}")
+
                 PARQUET_DFS[tf] = df
                 if "timestamp" in df.columns:
                     PARQUET_TIMESTAMPS[tf] = (df["timestamp"] // 1000).values
+                elif "time" in df.columns:
+                    PARQUET_TIMESTAMPS[tf] = df["time"].values
                 logger.info(f"Loaded {len(df)} historical bars for timeframe {tf}")
             except Exception as e:
                 logger.warning(f"Could not load parquet for {tf}: {e}")
 
-    # 2. Load JSON cache
+    # 2. Load JSON cache or serialize directly from updated data
     klines_path = os.path.join(DATA_DIR, "klines_cache.json")
     if os.path.exists(klines_path):
         with open(klines_path, "r") as f:
             KLINES_CACHE = json.load(f)
-        logger.info(f"Loaded klines cache for timeframes: {list(KLINES_CACHE.keys())}")
-    else:
-        logger.warning("klines_cache.json not found! Run generate_data.py first.")
+
+    # Refresh KLINES_CACHE with latest closed bars from PARQUET_DFS
+    for tf, df_p in PARQUET_DFS.items():
+        sub = df_p.tail(5000)
+        c_list = []
+        for _, r in sub.iterrows():
+            ts_sec = int(r["timestamp"] / 1000) if "timestamp" in r and r["timestamp"] > 1e11 else int(r.get("time", r.get("timestamp", 0)))
+            c_list.append({
+                "time": ts_sec,
+                "datetime": str(r.get("datetime", "")),
+                "open": float(r["open"]),
+                "high": float(r["high"]),
+                "low": float(r["low"]),
+                "close": float(r["close"]),
+                "volume": float(r.get("volume", 0.0)),
+                "ma8": float(r["MA8"]) if "MA8" in r and not pd.isna(r["MA8"]) else None,
+                "ma25": float(r["MA25"]) if "MA25" in r and not pd.isna(r["MA25"]) else None,
+                "ma50": float(r["MA50"]) if "MA50" in r and not pd.isna(r["MA50"]) else None,
+                "ma55": float(r["MA55"]) if "MA55" in r and not pd.isna(r["MA55"]) else None,
+                "ma111": float(r["MA111"]) if "MA111" in r and not pd.isna(r["MA111"]) else None,
+            })
+        KLINES_CACHE[tf] = c_list
+    logger.info(f"Synchronized live klines cache for timeframes: {list(KLINES_CACHE.keys())}")
 
     # 3. Load strategy catalog (load local strategies.json with full rich data & markers, enrich with Supabase)
     strat_path = os.path.join(DATA_DIR, "strategies.json")
@@ -145,7 +191,10 @@ def load_data_into_memory():
     try:
         from live_signal_engine import live_signal_engine
         live_signal_engine.initialize_with_parquets(PARQUET_DFS)
-        logger.info("Autonomous Live Signal Engine initialized with historical buffers.")
+        if live_signal_engine.last_price > 0:
+            binance_manager.ticker_data["price"] = live_signal_engine.last_price
+            binance_manager.ticker_data["status"] = "READY"
+        logger.info(f"Autonomous Live Signal Engine initialized with historical buffers. Latest price: ${live_signal_engine.last_price:,.2f}")
     except Exception as e:
         logger.warning(f"Could not warm up live signal engine: {e}")
 
@@ -262,9 +311,9 @@ async def get_klines(
     data = KLINES_CACHE[tf]
     sliced = data[-limit:] if limit < len(data) else data
 
-    # If live price exists, inject or update the latest unfinished bar close
+    # If live price exists from active WebSocket, inject or update the latest unfinished bar close
     live_price = binance_manager.ticker_data.get("price")
-    if sliced and live_price and live_price > 0:
+    if sliced and live_price and live_price > 0 and binance_manager.is_connected:
         last_candle = dict(sliced[-1])
         last_candle["close"] = float(live_price)
         last_candle["high"] = max(last_candle["high"], float(live_price))

@@ -41,6 +41,25 @@ def compute_swings_arr(high_arr: np.ndarray, low_arr: np.ndarray, len_p: int):
             btm[i] = ll
     return top, btm
 
+def standardize_candle_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure candle dataframe has consistent time, timestamp, datetime, and MA columns."""
+    if df is None or df.empty:
+        return df
+    df = df.copy()
+    if "timestamp" in df.columns and "time" not in df.columns:
+        df["time"] = (df["timestamp"] // 1000).astype(int)
+    elif "time" in df.columns and "timestamp" not in df.columns:
+        df["timestamp"] = (df["time"] * 1000).astype(int)
+    if "datetime" not in df.columns and "time" in df.columns:
+        df["datetime"] = pd.to_datetime(df["time"], unit="s", utc=True).dt.strftime("%Y-%m-%d %H:%M:%S")
+    for col in ["open", "high", "low", "close", "volume"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    for w in [8, 25, 50, 55, 111]:
+        if f"MA{w}" not in df.columns and len(df) >= w:
+            df[f"MA{w}"] = df["close"].rolling(w).mean()
+    return df
+
 class StrategyModel:
     def __init__(self, strat_id: str, name: str, tf: str, direction: str, config: dict):
         self.strat_id = strat_id
@@ -73,7 +92,7 @@ class StrategyModel:
 class LiveSignalEngine:
     def __init__(self):
         self.is_initialized = False
-        self.last_price = 77300.0
+        self.last_price = 0.0
         self.last_eval_timestamp = 0
         
         # Rolling candle history (last 500-1000 bars per timeframe)
@@ -218,21 +237,30 @@ class LiveSignalEngine:
         try:
             for tf, df in parquet_dfs.items():
                 if df is not None and not df.empty:
-                    # Keep the last 1,000 bars for fast rolling calculations
-                    self.candle_buffers[tf] = df.tail(1000).copy().reset_index(drop=True)
+                    std_df = standardize_candle_df(df.tail(1000))
+                    self.candle_buffers[tf] = std_df.reset_index(drop=True)
             
+            # Initialize last_price from the latest available closed bar
+            for tf_pref in ["30m", "1h", "4h", "1d", "1w"]:
+                if tf_pref in self.candle_buffers and not self.candle_buffers[tf_pref].empty:
+                    self.last_price = float(self.candle_buffers[tf_pref]["close"].iloc[-1])
+                    break
+
             # Recalculate macro state
             self._update_macro_indicators()
             
+            # Synchronize active open trades from recent history
+            self.sync_active_positions()
+
             # Evaluate current market state across all strategies
             self._evaluate_all_models_initial()
             self.is_initialized = True
-            logger.info("Autonomous Live Signal Engine initialized successfully with historical buffers!")
+            logger.info("Autonomous Live Signal Engine initialized successfully with historical buffers and active trade sync!")
         except Exception as e:
             logger.error(f"Failed to initialize Live Signal Engine: {e}", exc_info=True)
 
     def _update_macro_indicators(self):
-        """Update Weekly MA55, 4H SMA111, and 1H EMA50 from rolling buffers."""
+        """Update Weekly MA55, 4H SMA111, and 1H EMA50 dynamically from rolling buffers."""
         try:
             # 1. Weekly MA55
             if "1w" in self.candle_buffers and not self.candle_buffers["1w"].empty:
@@ -242,7 +270,8 @@ class LiveSignalEngine:
                 else:
                     self.macro_state["weekly_ma55"] = float(df_w["close"].rolling(55).mean().iloc[-1])
                 self.macro_state["weekly_close"] = float(df_w["close"].iloc[-1])
-                self.macro_state["is_weekly_bullish"] = self.macro_state["weekly_close"] >= self.macro_state["weekly_ma55"]
+                effective_weekly_p = self.last_price if self.last_price > 0 else self.macro_state["weekly_close"]
+                self.macro_state["is_weekly_bullish"] = effective_weekly_p >= self.macro_state["weekly_ma55"]
 
             # 2. 4H SMA111
             if "4h" in self.candle_buffers and not self.candle_buffers["4h"].empty:
@@ -252,18 +281,21 @@ class LiveSignalEngine:
                 else:
                     self.macro_state["sma111_4h"] = float(df_4h["close"].rolling(111).mean().iloc[-1])
                 self.macro_state["close_4h"] = float(df_4h["close"].iloc[-1])
-                self.macro_state["is_4h_bullish"] = self.macro_state["close_4h"] >= self.macro_state["sma111_4h"]
+                effective_4h_p = self.last_price if self.last_price > 0 else self.macro_state["close_4h"]
+                self.macro_state["is_4h_bullish"] = effective_4h_p >= self.macro_state["sma111_4h"]
 
             # 3. 1H EMA50
             if "1h" in self.candle_buffers and not self.candle_buffers["1h"].empty:
                 df_1h = self.candle_buffers["1h"]
                 self.macro_state["ema50_1h"] = float(df_1h["close"].ewm(span=50, adjust=False).mean().iloc[-1])
                 self.macro_state["close_1h"] = float(df_1h["close"].iloc[-1])
-                self.macro_state["is_1h_bullish"] = self.macro_state["close_1h"] >= self.macro_state["ema50_1h"]
+                effective_1h_p = self.last_price if self.last_price > 0 else self.macro_state["close_1h"]
+                self.macro_state["is_1h_bullish"] = effective_1h_p >= self.macro_state["ema50_1h"]
 
             # Macro regime summary
             ma55 = self.macro_state["weekly_ma55"]
-            diff_pct = ((self.last_price - ma55) / ma55) * 100.0 if ma55 > 0 else 0.0
+            effective_p = self.last_price if self.last_price > 0 else self.macro_state["weekly_close"]
+            diff_pct = ((effective_p - ma55) / ma55) * 100.0 if ma55 > 0 else 0.0
             self.macro_state["distance_weekly_ma55_pct"] = round(diff_pct, 2)
             if self.macro_state["is_weekly_bullish"]:
                 self.macro_state["regime_description"] = f"BULLISH EXPANSION (+{diff_pct:.1f}% vs Weekly MA55)"
@@ -272,6 +304,146 @@ class LiveSignalEngine:
 
         except Exception as ex:
             logger.warning(f"Error calculating macro indicators: {ex}")
+
+
+    def sync_active_positions(self):
+        """
+        Replays recent market bars for each strategy to restore active OPEN positions,
+        exact entry prices, breakeven status, and trailing stops.
+        """
+        try:
+            for strat_id, model in self.strategies.items():
+                tf = model.timeframe
+                if tf not in self.candle_buffers or self.candle_buffers[tf].empty:
+                    continue
+
+                df = self.candle_buffers[tf]
+                highs = df["high"].values
+                lows = df["low"].values
+                closes = df["close"].values
+                n = len(closes)
+                if n < 50:
+                    continue
+
+                cfg = model.config
+                maj_len = cfg.get("maj_swing", 50)
+                ent_len = cfg.get("ent_swing", 16)
+                ex_len = cfg.get("ex_swing", 48)
+                sl_pct = cfg.get("sl_pct", 0.05)
+                be_pct = cfg.get("be_pct", 0.03)
+                tp_pct = cfg.get("tp_pct", 0.75)
+                direction = model.direction
+
+                top_maj, btm_maj = compute_swings_arr(highs, lows, min(maj_len, n - 1))
+                top_ent, btm_ent = compute_swings_arr(highs, lows, min(ent_len, n - 1))
+                top_ex, btm_ex = compute_swings_arr(highs, lows, min(ex_len, n - 1))
+
+                sma111_4h = self.macro_state.get("sma111_4h", 0.0)
+                weekly_ma55 = self.macro_state.get("weekly_ma55", 0.0)
+
+                in_pos = False
+                entry_p = 0.0
+                entry_time = ""
+                curr_sl = 0.0
+                be_active = False
+                peak_p = 0.0
+                trough_p = 0.0
+
+                top_y = 0.0
+                itop_y = 0.0
+                itop_cross = True
+                ibtm_y = 0.0
+                btm_y = 0.0
+                ibtm_cross = True
+
+                start_bar = max(1, n - 300)
+                for i in range(start_bar, n):
+                    prev_itop = itop_y
+                    prev_ibtm = ibtm_y
+
+                    if top_maj[i] > 0: top_y = top_maj[i]
+                    if btm_maj[i] > 0: btm_y = btm_maj[i]
+                    if top_ent[i] > 0: itop_y = top_ent[i]; itop_cross = True
+                    if btm_ent[i] > 0: ibtm_y = btm_ent[i]; ibtm_cross = True
+
+                    reg_rule = cfg.get("regime", "")
+                    reg_ok = True
+                    if "4h_sma111" in reg_rule and sma111_4h > 0:
+                        reg_ok = closes[i] >= sma111_4h
+                    elif "weekly_ma55" in reg_rule and weekly_ma55 > 0:
+                        reg_ok = closes[i] < weekly_ma55
+
+                    if direction == "LONG":
+                        crossover = (closes[i] > itop_y) and (closes[i - 1] <= prev_itop)
+                        ex_floor = [b for b in btm_ex[:i + 1] if b > 0][-1] if any(btm_ex[:i + 1] > 0) else lows[i]
+
+                        if not in_pos:
+                            if crossover and itop_cross and (top_y != itop_y) and reg_ok:
+                                in_pos = True
+                                entry_p = float(closes[i])
+                                entry_time = str(df["datetime"].iloc[i]) if "datetime" in df.columns else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                                peak_p = float(highs[i])
+                                curr_sl = round(entry_p * (1.0 - sl_pct), 2)
+                                be_active = False
+                                itop_cross = False
+                        else:
+                            peak_p = max(peak_p, float(highs[i]))
+                            if be_pct > 0 and not be_active and closes[i] >= entry_p * (1.0 + be_pct):
+                                be_active = True
+                                curr_sl = round(entry_p * 1.002, 2)
+                            if lows[i] <= curr_sl:
+                                in_pos = False
+                            elif highs[i] >= entry_p * (1.0 + tp_pct):
+                                in_pos = False
+                            elif closes[i] < ex_floor:
+                                in_pos = False
+                    else: # SHORT
+                        crossunder = (closes[i] < ibtm_y) and (closes[i - 1] >= prev_ibtm)
+                        ex_ceil = [t for t in top_ex[:i + 1] if t > 0][-1] if any(top_ex[:i + 1] > 0) else highs[i]
+
+                        if not in_pos:
+                            if crossunder and ibtm_cross and (btm_y != ibtm_y) and reg_ok:
+                                in_pos = True
+                                entry_p = float(closes[i])
+                                entry_time = str(df["datetime"].iloc[i]) if "datetime" in df.columns else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                                trough_p = float(lows[i])
+                                curr_sl = round(entry_p * (1.0 + sl_pct), 2)
+                                be_active = False
+                                ibtm_cross = False
+                        else:
+                            trough_p = min(trough_p, float(lows[i]))
+                            if be_pct > 0 and not be_active and closes[i] <= entry_p * (1.0 - be_pct):
+                                be_active = True
+                                curr_sl = round(entry_p * 0.998, 2)
+                            if highs[i] >= curr_sl:
+                                in_pos = False
+                            elif lows[i] <= entry_p * (1.0 - tp_pct):
+                                in_pos = False
+                            elif closes[i] > ex_ceil:
+                                in_pos = False
+
+                if in_pos:
+                    model.position_status = "OPEN"
+                    model.entry_price = entry_p
+                    model.entry_time = entry_time
+                    model.peak_price = peak_p
+                    model.trough_price = trough_p
+                    model.current_sl = curr_sl
+                    model.be_active = be_active
+                    model.target_tp = round(entry_p * (1.0 + tp_pct if direction == "LONG" else 1.0 - tp_pct), 2)
+                    self._open_position(model, entry_p, entry_time)
+                    model.current_sl = curr_sl
+                    model.be_active = be_active
+                    if model.active_ticket:
+                        model.active_ticket["stop_loss"] = curr_sl
+                    logger.info(f"🚀 [STATE SYNC] Restored active {direction} trade for {model.name}: Entry ${entry_p:,.2f} at {entry_time} (SL: ${curr_sl:,.2f}, BE: {be_active})")
+                else:
+                    model.position_status = "FLAT"
+                    model.entry_price = 0.0
+                    model.active_ticket = None
+
+        except Exception as e:
+            logger.warning(f"Error in sync_active_positions: {e}", exc_info=True)
 
     def _evaluate_all_models_initial(self):
         """Compute swing levels and set initial telemetry for all strategies."""
@@ -309,7 +481,7 @@ class LiveSignalEngine:
         last_top_ex = [t for t in top_ex if t > 0][-1] if any(top_ex > 0) else float(highs[-1])
         last_btm_ex = [b for b in btm_ex if b > 0][-1] if any(btm_ex > 0) else float(lows[-1])
 
-        curr_p = self.last_price
+        curr_p = self.last_price if self.last_price > 0 else float(closes[-1])
 
         # Check regime alignment
         regime_rule = cfg.get("regime", "")
@@ -365,6 +537,8 @@ class LiveSignalEngine:
                             model.current_sl = round(model.entry_price * 1.002, 2)
                         else:
                             model.current_sl = round(model.entry_price * 0.998, 2)
+                        if model.active_ticket:
+                            model.active_ticket["stop_loss"] = model.current_sl
                         logger.info(f"⚡ [BREAKEVEN ACTIVATED] {model.name} locked BE stop at ${model.current_sl:,.2f}")
                         events.append({
                             "type": "BREAKEVEN_LOCKED",
@@ -400,6 +574,13 @@ class LiveSignalEngine:
                         "strategy_name": model.name,
                         "trade": exit_trade
                     })
+            else:
+                # Update distance to trigger dynamically for flat models
+                if model.next_entry_trigger > 0 and price > 0:
+                    if model.direction == "LONG":
+                        model.distance_to_trigger_pct = round(((model.next_entry_trigger - price) / price) * 100.0, 2)
+                    else:
+                        model.distance_to_trigger_pct = round(((price - model.next_entry_trigger) / price) * 100.0, 2)
 
         return events
 
@@ -409,26 +590,37 @@ class LiveSignalEngine:
         Evaluates structural entries and structural exits without human intervention.
         """
         tf = timeframe.lower()
+        t_sec = candle.get("time") or (candle.get("timestamp", 0) // 1000)
+        ts_ms = candle.get("timestamp") or (t_sec * 1000)
+        self.last_price = float(candle["close"])
+
         new_bar = {
-            "time": candle["time"],
-            "datetime": datetime.fromtimestamp(candle["time"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-            "open": candle["open"],
-            "high": candle["high"],
-            "low": candle["low"],
-            "close": candle["close"],
-            "volume": candle["volume"]
+            "time": t_sec,
+            "timestamp": ts_ms,
+            "datetime": datetime.fromtimestamp(t_sec, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+            "open": float(candle["open"]),
+            "high": float(candle["high"]),
+            "low": float(candle["low"]),
+            "close": float(candle["close"]),
+            "volume": float(candle["volume"])
         }
 
-        # 1. Update candle buffer
+        # 1. Update candle buffer safely
         if tf in self.candle_buffers:
             df = self.candle_buffers[tf]
-            # Avoid duplicate bar appending
-            if not df.empty and df["time"].iloc[-1] == candle["time"]:
-                df.iloc[-1] = new_bar
+            last_t = df["time"].iloc[-1] if "time" in df.columns else (df["timestamp"].iloc[-1] // 1000)
+            if not df.empty and last_t == t_sec:
+                for col, val in new_bar.items():
+                    df.at[df.index[-1], col] = val
             else:
                 self.candle_buffers[tf] = pd.concat([df, pd.DataFrame([new_bar])], ignore_index=True).tail(1000).reset_index(drop=True)
         else:
             self.candle_buffers[tf] = pd.DataFrame([new_bar])
+
+        # Recompute moving averages
+        for w in [8, 25, 50, 55, 111]:
+            if len(self.candle_buffers[tf]) >= w:
+                self.candle_buffers[tf][f"MA{w}"] = self.candle_buffers[tf]["close"].rolling(w).mean()
 
         # 2. Update rolling macro indicators
         self._update_macro_indicators()
@@ -515,7 +707,7 @@ class LiveSignalEngine:
                         "autonomous": True
                     })
 
-    def _open_position(self, model: StrategyModel, entry_p: float) -> dict:
+    def _open_position(self, model: StrategyModel, entry_p: float, entry_time: Optional[str] = None) -> dict:
         """Helper to open a position and construct the official live ticket."""
         cfg = model.config
         sl_pct = cfg.get("sl_pct", 0.05)
@@ -524,19 +716,19 @@ class LiveSignalEngine:
 
         model.position_status = "OPEN"
         model.entry_price = entry_p
-        model.entry_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        model.entry_time = entry_time or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         model.peak_price = entry_p
         model.trough_price = entry_p
-        model.be_active = False
+        model.be_active = getattr(model, "be_active", False)
 
-        if model.direction == "LONG":
-            model.current_sl = round(entry_p * (1.0 - sl_pct), 2)
-            model.target_tp = round(entry_p * (1.0 + tp_pct), 2)
-            be_trigger_val = round(entry_p * (1.0 + be_pct), 2)
-        else: # SHORT
-            model.current_sl = round(entry_p * (1.0 + sl_pct), 2)
-            model.target_tp = round(entry_p * (1.0 - tp_pct), 2)
-            be_trigger_val = round(entry_p * (1.0 - be_pct), 2)
+        if not getattr(model, "current_sl", 0.0) or model.current_sl == 0.0:
+            if model.direction == "LONG":
+                model.current_sl = round(entry_p * (1.0 - sl_pct), 2)
+            else:
+                model.current_sl = round(entry_p * (1.0 + sl_pct), 2)
+
+        model.target_tp = round(entry_p * (1.0 + tp_pct if model.direction == "LONG" else 1.0 - tp_pct), 2)
+        be_trigger_val = round(entry_p * (1.0 + be_pct if model.direction == "LONG" else 1.0 - be_pct), 2)
 
         ticket = {
             "symbol": "BTC/USDT",
@@ -546,7 +738,7 @@ class LiveSignalEngine:
             "confidence_pct": 92 if model.direction == "LONG" else 88,
             "confidence_blocks": 9 if model.direction == "LONG" else 8,
             "entry_price": entry_p,
-            "current_price": entry_p,
+            "current_price": self.last_price or entry_p,
             "stop_loss": model.current_sl,
             "stop_loss_pct": -round(sl_pct * 100, 1) if model.direction == "LONG" else round(sl_pct * 100, 1),
             "breakeven_trigger": be_trigger_val,
@@ -561,6 +753,7 @@ class LiveSignalEngine:
         }
         model.active_ticket = ticket
         return ticket
+
 
     def _close_position(self, model: StrategyModel, exit_p: float, reason: str) -> dict:
         """Helper to close a position and calculate finalized trade metrics."""

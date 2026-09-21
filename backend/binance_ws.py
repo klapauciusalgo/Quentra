@@ -27,12 +27,12 @@ class BinanceManager:
         self.last_error = None
         self.ticker_data = {
             "symbol": "BTCUSDT",
-            "price": 77300.0,
+            "price": 0.0,
             "change_24h_pct": 0.0,
-            "high_24h": 78500.0,
-            "low_24h": 76200.0,
-            "volume_24h": 24500.0,
-            "quote_volume_24h": 1890000000.0,
+            "high_24h": 0.0,
+            "low_24h": 0.0,
+            "volume_24h": 0.0,
+            "quote_volume_24h": 0.0,
             "timestamp": int(time.time() * 1000),
             "status": "INITIALIZING"
         }
@@ -148,8 +148,8 @@ class BinanceManager:
                 retry_delay = min(retry_delay * 1.5, 30)
 
     async def start_kline_stream(self):
-        """Dual-stream (30m and 1h) kline listener for real-time bar close and autonomous signal triggering"""
-        combined_kline_url = "wss://stream.binance.com:9443/stream?streams=btcusdt@kline_30m/btcusdt@kline_1h"
+        """Multi-timeframe (30m, 1h, 4h, 1d, 1w) kline listener for real-time bar close and autonomous signal triggering"""
+        combined_kline_url = "wss://stream.binance.com:9443/stream?streams=btcusdt@kline_30m/btcusdt@kline_1h/btcusdt@kline_4h/btcusdt@kline_1d/btcusdt@kline_1w"
         retry_delay = 5
         while True:
             try:
@@ -158,12 +158,20 @@ class BinanceManager:
                     async for raw_msg in ws:
                         msg = json.loads(raw_msg)
                         stream = msg.get("stream", "")
-                        tf = "1h" if "1h" in stream else "30m"
+                        tf = None
+                        for candidate in ["30m", "1h", "4h", "1d", "1w"]:
+                            if f"kline_{candidate}" in stream:
+                                tf = candidate
+                                break
+                        if not tf:
+                            continue
+
                         data = msg.get("data", {})
                         k = data.get("k", {})
                         if k:
                             candle = {
                                 "time": int(k["t"] / 1000),
+                                "timestamp": int(k["t"]),
                                 "open": float(k["o"]),
                                 "high": float(k["h"]),
                                 "low": float(k["l"]),
@@ -193,4 +201,49 @@ class BinanceManager:
                 await asyncio.sleep(retry_delay)
                 retry_delay = min(retry_delay * 1.5, 30)
 
+def fetch_binance_klines_rest(symbol: str = "BTCUSDT", interval: str = "30m", limit: int = 1000, start_time: int = None):
+    """
+    Fetch historical closed klines from Binance public REST APIs.
+    Fallback across official endpoints if needed.
+    """
+    import urllib.request
+    from datetime import datetime, timezone
+
+    urls = [
+        "https://api.binance.com/api/v3/klines",
+        "https://data-api.binance.vision/api/v3/klines",
+        "https://api1.binance.com/api/v3/klines"
+    ]
+    params = f"?symbol={symbol}&interval={interval}&limit={limit}"
+    if start_time:
+        params += f"&startTime={start_time}"
+
+    for base in urls:
+        try:
+            req = urllib.request.Request(base + params, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                raw = json.loads(resp.read().decode())
+                candles = []
+                for b in raw:
+                    ts_ms = int(b[0])
+                    candles.append({
+                        "timestamp": ts_ms,
+                        "time": ts_ms // 1000,
+                        "datetime": datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                        "open": float(b[1]),
+                        "high": float(b[2]),
+                        "low": float(b[3]),
+                        "close": float(b[4]),
+                        "volume": float(b[5]),
+                        "quote_volume": float(b[7]),
+                        "trades": int(b[8]),
+                        "close_time": int(b[6])
+                    })
+                return candles
+        except Exception as err:
+            logger.debug(f"REST klines error on {base}: {err}")
+            continue
+    return []
+
 binance_manager = BinanceManager()
+

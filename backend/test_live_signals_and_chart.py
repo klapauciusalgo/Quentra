@@ -75,7 +75,7 @@ def test_strategy_catalog_enrichment(client):
     assert "BE LOCKED" in be_markers[0]["text"]
 
 def test_individual_strategy_detail_endpoint(client):
-    for sid in ["pippo-30m-alpha", "pippo-1h-enhanced", "pippo-4h-original", "pippo-30m-new-gen"]:
+    for sid in ["pippo-30m-alpha", "pippo-1h-enhanced", "pippo-4h-original", "pippo-30m-new-gen", "pippo-30m-grd"]:
         res = client.get(f"/api/strategies/{sid}")
         assert res.status_code == 200
         data = res.json()
@@ -100,6 +100,26 @@ def test_pippo_30m_new_gen_details(client):
     assert all(y["total_return_pct"] > 0 for y in data["yearly_stats"])
     
     # Verify active running trade #443
+    active_trade = data["trades"][-1]
+    assert active_trade["status"] == "OPEN"
+    assert active_trade["entry_price"] == 81177.32
+    assert active_trade["stop_loss"] == 79553.77
+    assert active_trade["take_profit"] == 97412.78
+
+def test_pippo_30m_grd_details(client):
+    res = client.get("/api/strategies/pippo-30m-grd")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["name"] == "Pippo 30m Grd"
+    assert data["timeframe"] == "30m"
+    assert data["type"] == "LONG"
+    assert data["metrics"]["total_trades"] == 724
+    assert data["metrics"]["win_rate_pct"] == 32.87
+    assert data["metrics"]["profit_factor"] == 1.43
+    assert data["metrics"]["max_drawdown_pct"] == -21.44
+    assert len(data["yearly_stats"]) == 7
+    
+    # Verify active running trade #725
     active_trade = data["trades"][-1]
     assert active_trade["status"] == "OPEN"
     assert active_trade["entry_price"] == 81177.32

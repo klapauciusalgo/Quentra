@@ -148,6 +148,22 @@ class LiveSignalEngine:
                     "regime": "pippo_new_gen_ma_squeeze"
                 }
             ),
+            "pippo-30m-grd": StrategyModel(
+                strat_id="pippo-30m-grd",
+                name="Pippo 30m Grd",
+                tf="30m",
+                direction="LONG",
+                config={
+                    "sl_pct": 0.02,
+                    "tp_pct": 0.20,
+                    "fc_dist": 0.005,
+                    "entry_dist": 0.008,
+                    "regime_dist_1h": 0.015,
+                    "spread_max": 0.0015,
+                    "atr_max": 0.01,
+                    "regime": "pippo_grd_ma_squeeze"
+                }
+            ),
             "pippo-30m-short-v2-a": StrategyModel(
                 strat_id="pippo-30m-short-v2-a",
                 name="Pippo 30M Short V2 Type A (Active TP)",
@@ -331,7 +347,7 @@ class LiveSignalEngine:
         """
         try:
             for strat_id, model in self.strategies.items():
-                if strat_id == "pippo-30m-new-gen":
+                if strat_id in ["pippo-30m-new-gen", "pippo-30m-grd"]:
                     self._sync_pippo_new_gen(model)
                     continue
 
@@ -605,7 +621,7 @@ class LiveSignalEngine:
                     m111_4h = float(df["ma111_4h"].iloc[i]) if "ma111_4h" in df and not pd.isna(df["ma111_4h"].iloc[i]) else (m25 * 0.95)
 
                     a1h = (c1h > m25h) and (c1h > m50h) and ((c1h - m25h) / m25h < 0.015) and ((c1h - m50h) / m50h < 0.015)
-                    a4h = c4h > m111_4h
+                    a4h = (c4h > m111_4h) if model.strat_id == "pippo-30m-new-gen" else True
                     a30 = (c > m25) and (c > m50) and ((c - m25) / m25 < 0.008) and ((c - m50) / m50 < 0.008)
                     sp = abs(m25 - m50) / m50 < 0.0015 if m50 > 0 else False
                     atr_val = float(df["atr"].iloc[i]) if "atr" in df and not pd.isna(df["atr"].iloc[i]) else 0.5
@@ -660,7 +676,7 @@ class LiveSignalEngine:
         if n < 50:
             return
 
-        if model.strat_id == "pippo-30m-new-gen":
+        if model.strat_id in ["pippo-30m-new-gen", "pippo-30m-grd"]:
             ma25_30 = float(df["MA25"].iloc[-1]) if ("MA25" in df and not pd.isna(df["MA25"].iloc[-1])) else float(df["close"].rolling(25).mean().iloc[-1])
             ma50_30 = float(df["MA50"].iloc[-1]) if ("MA50" in df and not pd.isna(df["MA50"].iloc[-1])) else float(df["close"].rolling(50).mean().iloc[-1])
 
@@ -673,8 +689,11 @@ class LiveSignalEngine:
                 if c1h > m25h and c1h > m50h and ((c1h - m25h) / m25h < 0.015) and ((c1h - m50h) / m50h < 0.015):
                     reg_1h_ok = True
 
-            reg_4h_ok = self.macro_state.get("is_4h_bullish", False)
-            model.regime_ok = reg_1h_ok and reg_4h_ok
+            if model.strat_id == "pippo-30m-new-gen":
+                reg_4h_ok = self.macro_state.get("is_4h_bullish", False)
+                model.regime_ok = reg_1h_ok and reg_4h_ok
+            else:
+                model.regime_ok = reg_1h_ok
 
             curr_p = self.last_price if self.last_price > 0 else float(closes[-1])
             model.next_entry_trigger = round(max(ma25_30, ma50_30) * 1.001, 2)
@@ -871,7 +890,7 @@ class LiveSignalEngine:
             prev_close = closes[-2]
             curr_close = closes[-1]
 
-            if model.strat_id == "pippo-30m-new-gen":
+            if model.strat_id in ["pippo-30m-new-gen", "pippo-30m-grd"]:
                 df_cur = self.candle_buffers[tf]
                 m25_30 = float(df_cur["MA25"].iloc[-1]) if ("MA25" in df_cur and not pd.isna(df_cur["MA25"].iloc[-1])) else float(curr_close)
                 m50_30 = float(df_cur["MA50"].iloc[-1]) if ("MA50" in df_cur and not pd.isna(df_cur["MA50"].iloc[-1])) else float(curr_close)

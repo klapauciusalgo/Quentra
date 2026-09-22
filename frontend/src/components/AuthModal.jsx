@@ -12,7 +12,6 @@ import {
   AlertCircle, 
   CheckCircle2, 
   ArrowRight, 
-  ExternalLink,
   Shield,
   Sparkles
 } from 'lucide-react';
@@ -49,6 +48,19 @@ export default function AuthModal({ onSuccess }) {
       setIsLoading(false);
     }
   }, [isAuthModalOpen, mode]);
+
+  // Keyboard accessibility: ESC key closes modal
+  useEffect(() => {
+    if (!isAuthModalOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        playRetroSound('blip');
+        closeAuthModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAuthModalOpen, closeAuthModal]);
 
   if (!isAuthModalOpen) return null;
 
@@ -92,7 +104,7 @@ export default function AuthModal({ onSuccess }) {
 
     try {
       if (mode === 'signup') {
-        const res = await registerWithEmail(email, password, fullName);
+        await registerWithEmail(email, password, fullName);
         setSuccessMessage('Akun berhasil dibuat! Mengalihkan ke terminal...');
         setTimeout(() => {
           if (onSuccess) onSuccess(authRedirectTarget);
@@ -126,33 +138,39 @@ export default function AuthModal({ onSuccess }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-      {/* Backdrop */}
+    <div 
+      className="fixed inset-0 z-50 bg-black/40 dark:bg-black/80 flex items-center justify-center p-3.5 sm:p-6 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
+      {/* Modal Dialog Card - Solid Web Theme Design (No Translucent Glass Blur) */}
       <div 
-        onClick={handleClose}
-        className="fixed inset-0 bg-black/60 backdrop-blur-md transition-opacity animate-in fade-in duration-200" 
-      />
-
-      {/* Modal Dialog Card */}
-      <div className="relative w-full max-w-md bg-apple-canvas/95 dark:bg-[#161618]/95 border border-apple-border rounded-3xl shadow-2xl p-6 sm:p-8 backdrop-blur-2xl text-apple-text animate-in zoom-in-95 duration-200 z-10 space-y-5">
-        
+        className="relative w-full max-w-md bg-white dark:bg-[#0C0D12] border border-black/10 dark:border-white/[0.12] rounded-3xl shadow-2xl p-6 sm:p-7 text-apple-text animate-in zoom-in-95 duration-200 z-10 space-y-5"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header Strip with Brand Logo & Close Button */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-apple-blue flex items-center justify-center shadow-md shadow-blue-500/20">
-              <span className="text-white text-xs font-bold">Q</span>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-b from-black/[0.06] to-black/[0.01] dark:from-white/[0.12] dark:to-white/[0.02] border border-black/10 dark:border-white/15 flex items-center justify-center shadow-sm">
+              <span className="w-3.5 h-3.5 rounded-sm bg-apple-blue flex items-center justify-center text-[9px] font-bold text-white">
+                Q
+              </span>
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-sm tracking-tight text-apple-text">Quentra Pro</span>
-                <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase bg-apple-blue/15 text-apple-blue rounded-md">
-                  Terminal Gate
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm tracking-tight text-apple-text">
+                  Quentra
+                </span>
+                <span className="px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase rounded-full bg-apple-blue/15 text-apple-cyan border border-apple-blue/30">
+                  Pro
                 </span>
               </div>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={handleClose}
             className="w-8 h-8 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.1] active:scale-95 flex items-center justify-center text-apple-muted hover:text-apple-text transition-all cursor-pointer"
             title="Tutup"
@@ -161,7 +179,7 @@ export default function AuthModal({ onSuccess }) {
           </button>
         </div>
 
-        {/* Title & Requirement Explanation */}
+        {/* Title & Explanation */}
         <div className="space-y-1">
           <h2 className="text-xl font-bold tracking-tight text-apple-text">
             {mode === 'signin' ? 'Masuk ke Trading Terminal' : 'Buat Akun Quentra'}
@@ -189,7 +207,7 @@ export default function AuthModal({ onSuccess }) {
           type="button"
           disabled={isLoading}
           onClick={handleGoogleLogin}
-          className="w-full py-2.5 px-4 bg-white dark:bg-[#242426] hover:bg-gray-50 dark:hover:bg-[#2c2c2e] active:scale-[0.98] border border-black/15 dark:border-white/15 rounded-2xl flex items-center justify-center gap-3 text-xs font-semibold text-gray-800 dark:text-white transition-all shadow-sm cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+          className="w-full py-2.5 px-4 bg-white dark:bg-[#161720] hover:bg-gray-50 dark:hover:bg-[#1D1F2B] active:scale-[0.98] border border-gray-300 dark:border-white/15 rounded-2xl flex items-center justify-center gap-3 text-xs font-semibold text-gray-800 dark:text-white transition-all shadow-sm cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
         >
           {isLoading ? (
             <div className="w-4 h-4 border-2 border-apple-blue border-t-transparent rounded-full animate-spin" />
@@ -204,10 +222,10 @@ export default function AuthModal({ onSuccess }) {
           <span>Lanjutkan dengan Google</span>
         </button>
 
-        {/* Divider: "atau masuk dengan email" (FR-08) */}
+        {/* Divider: "atau dengan email" (FR-08) */}
         <div className="relative flex items-center justify-center">
-          <div className="border-t border-apple-border w-full" />
-          <span className="bg-apple-canvas dark:bg-[#161618] px-3 text-[11px] font-medium text-apple-dim uppercase tracking-wider shrink-0">
+          <div className="border-t border-black/[0.08] dark:border-white/[0.08] w-full" />
+          <span className="bg-white dark:bg-[#0C0D12] px-3 text-[11px] font-medium text-apple-dim uppercase tracking-wider shrink-0">
             atau dengan email
           </span>
         </div>
@@ -222,7 +240,7 @@ export default function AuthModal({ onSuccess }) {
             }}
             className={`flex-1 py-1.5 rounded-lg transition-all ${
               mode === 'signin' 
-                ? 'bg-white dark:bg-[#242426] text-apple-text shadow-sm font-semibold' 
+                ? 'bg-white dark:bg-[#1E202B] text-apple-text shadow-sm font-semibold' 
                 : 'text-apple-muted hover:text-apple-text'
             }`}
           >
@@ -236,7 +254,7 @@ export default function AuthModal({ onSuccess }) {
             }}
             className={`flex-1 py-1.5 rounded-lg transition-all ${
               mode === 'signup' 
-                ? 'bg-white dark:bg-[#242426] text-apple-text shadow-sm font-semibold' 
+                ? 'bg-white dark:bg-[#1E202B] text-apple-text shadow-sm font-semibold' 
                 : 'text-apple-muted hover:text-apple-text'
             }`}
           >
@@ -286,7 +304,7 @@ export default function AuthModal({ onSuccess }) {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Nama trader Anda"
-                  className="w-full pl-10 pr-4 py-2.5 text-xs bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] focus:border-apple-blue rounded-xl outline-none text-apple-text placeholder:text-apple-dim transition-colors"
+                  className="w-full pl-10 pr-4 py-2.5 text-xs bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.09] dark:border-white/[0.1] focus:border-apple-blue focus:bg-white dark:focus:bg-[#161720] rounded-xl outline-none text-apple-text placeholder:text-apple-dim transition-colors"
                 />
               </div>
             </div>
@@ -304,7 +322,7 @@ export default function AuthModal({ onSuccess }) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="nama@email.com"
-                className="w-full pl-10 pr-4 py-2.5 text-xs bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] focus:border-apple-blue rounded-xl outline-none text-apple-text placeholder:text-apple-dim transition-colors"
+                className="w-full pl-10 pr-4 py-2.5 text-xs bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.09] dark:border-white/[0.1] focus:border-apple-blue focus:bg-white dark:focus:bg-[#161720] rounded-xl outline-none text-apple-text placeholder:text-apple-dim transition-colors"
               />
             </div>
           </div>
@@ -321,7 +339,7 @@ export default function AuthModal({ onSuccess }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Minimal 6 karakter"
-                className="w-full pl-10 pr-10 py-2.5 text-xs bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] focus:border-apple-blue rounded-xl outline-none text-apple-text placeholder:text-apple-dim transition-colors"
+                className="w-full pl-10 pr-10 py-2.5 text-xs bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.09] dark:border-white/[0.1] focus:border-apple-blue focus:bg-white dark:focus:bg-[#161720] rounded-xl outline-none text-apple-text placeholder:text-apple-dim transition-colors"
               />
               <button
                 type="button"
@@ -351,7 +369,7 @@ export default function AuthModal({ onSuccess }) {
         </form>
 
         {/* Quick Demo Access Option */}
-        <div className="pt-2 text-center border-t border-apple-border/50">
+        <div className="pt-2 text-center border-t border-black/[0.06] dark:border-white/[0.08]">
           <button
             type="button"
             onClick={handleDemoLogin}

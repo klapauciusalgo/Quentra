@@ -236,8 +236,8 @@ export default function Header({
 
                 {/* Dropdown Card */}
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-64 p-3 bg-apple-canvas/95 dark:bg-[#1c1c1e]/95 border border-apple-border rounded-2xl shadow-xl backdrop-blur-2xl text-xs space-y-3 z-50 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="p-2 bg-black/[0.02] dark:bg-white/[0.03] rounded-xl border border-black/[0.06] dark:border-white/[0.06] space-y-1">
+                  <div className="absolute right-0 mt-2 w-64 p-3 bg-white dark:bg-[#0C0D12] border border-black/10 dark:border-white/[0.12] rounded-2xl shadow-2xl text-xs space-y-3 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="p-2 bg-black/[0.03] dark:bg-white/[0.04] rounded-xl border border-black/[0.06] dark:border-white/[0.06] space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-apple-text truncate">{user?.full_name}</span>
                         <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-apple-blue/15 text-apple-blue">

@@ -71,6 +71,7 @@ export default function TradingChart({
   floor = null,
   onPriceSync = null,
   activeSignals = [],
+  symbol = 'BTCUSDT',
 }) {
   const isDark = theme === 'dark';
   const chartContainerRef = useRef(null);
@@ -260,16 +261,18 @@ export default function TradingChart({
   useEffect(() => {
     let isMounted = true;
 
-    // 0. Instantly populate baseline candles for zero-latency initial paint
-    if (klinesBaseline[timeframe] && klinesBaseline[timeframe].length > 0) {
+    // 0. Instantly populate baseline candles for zero-latency initial paint (if BTC)
+    if (symbol === 'BTCUSDT' && klinesBaseline[timeframe] && klinesBaseline[timeframe].length > 0) {
       setCandles(klinesBaseline[timeframe]);
       setLoading(false);
+    } else {
+      setLoading(true);
     }
 
     async function loadKlines() {
       // Tier 1: Try configured backend API (validating JSON content-type)
       try {
-        const res = await fetch(`${API_BASE}/api/klines?timeframe=${timeframe}&limit=5000`);
+        const res = await fetch(`${API_BASE}/api/klines?symbol=${symbol}&timeframe=${timeframe}&limit=5000`);
         const contentType = res.headers.get('content-type') || '';
         if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
@@ -289,7 +292,7 @@ export default function TradingChart({
       try {
         const bybitTfMap = { '30m': '30', '1h': '60', '4h': '240', '1d': 'D', '1w': 'W' };
         const bybitInterval = bybitTfMap[timeframe] || '60';
-        const res = await fetch(`https://api.bybit.com/v5/market/kline?category=spot&symbol=BTCUSDT&interval=${bybitInterval}&limit=1000`);
+        const res = await fetch(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${symbol}&interval=${bybitInterval}&limit=1000`);
         if (res.ok) {
           const data = await res.json();
           if (data?.result?.list && Array.isArray(data.result.list) && data.result.list.length > 0) {
@@ -332,7 +335,7 @@ export default function TradingChart({
       // Tier 3: Binance official public REST API
       try {
         const binanceInterval = timeframe.toLowerCase();
-        const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${binanceInterval}&limit=1000`);
+        const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=1000`);
         if (res.ok) {
           const raw = await res.json();
           if (Array.isArray(raw) && raw.length > 0) {
@@ -379,7 +382,7 @@ export default function TradingChart({
     return () => {
       isMounted = false;
     };
-  }, [timeframe]);
+  }, [timeframe, symbol]);
 
   // Clean and remove price lines
   const clearPriceLines = () => {
@@ -970,7 +973,7 @@ export default function TradingChart({
 
       if (entrySec < minCandleTime || entrySec > maxCandleTime) {
         setLoading(true);
-        fetch(`${API_BASE}/api/klines?timeframe=${timeframe}&around_time=${entrySec}&limit=3000`)
+        fetch(`${API_BASE}/api/klines?symbol=${symbol}&timeframe=${timeframe}&around_time=${entrySec}&limit=3000`)
           .then((res) => res.json())
           .then((data) => {
             if (data && data.candles && data.candles.length > 0) {
@@ -1043,7 +1046,9 @@ export default function TradingChart({
         {/* Left: Symbol, Live Price & Timeframe Switcher */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm text-apple-text tracking-tight">BTC/USDT</span>
+            <span className="font-semibold text-sm text-apple-text tracking-tight">
+              {symbol === 'ETHUSDT' ? 'ETH/USDT' : 'BTC/USDT'}
+            </span>
             <span className="text-[10px] font-medium tracking-wide uppercase px-2 py-0.5 rounded-full bg-apple-blue/15 text-apple-cyan border border-apple-blue/30">
               Binance
             </span>
@@ -1238,7 +1243,7 @@ export default function TradingChart({
             {hoveredData.volume && (
               <div>
                 <span className="text-apple-dim">VOL:</span>{' '}
-                <span className="text-apple-text tabular-nums">{Number(hoveredData.volume).toFixed(2)} BTC</span>
+                <span className="text-apple-text tabular-nums">{Number(hoveredData.volume).toFixed(2)} {symbol === 'ETHUSDT' ? 'ETH' : 'BTC'}</span>
               </div>
             )}
             {hoveredData.ma55 && visibleMAs.ma55 && (

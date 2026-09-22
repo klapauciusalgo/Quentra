@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { formatPrice, formatPercent, formatDateTime, playRetroSound } from '../utils/formatters';
 import strategiesData from '../data/strategiesData.json';
+import strategiesDataEth from '../data/strategiesData_eth.json';
 import { 
   X, 
   TrendingUp, 
@@ -23,7 +24,8 @@ export default function StrategyDetail({
   strategyId, 
   isOpen, 
   onClose, 
-  onSelectStrategy 
+  onSelectStrategy,
+  selectedAsset = 'BTCUSDT'
 }) {
   const [strategy, setStrategy] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -51,12 +53,13 @@ export default function StrategyDetail({
     setLoading(true);
 
     // Immediate baseline fallback
-    const localStrat = strategiesData.find((s) => s.id === strategyId);
+    const catalog = selectedAsset === 'ETHUSDT' ? strategiesDataEth : strategiesData;
+    const localStrat = catalog.find((s) => s.id === strategyId);
     if (localStrat) {
       setStrategy(localStrat);
     }
 
-    fetch(`/api/strategies/${strategyId}`)
+    fetch(`/api/strategies/${strategyId}?symbol=${selectedAsset}`)
       .then((res) => res.json())
       .then((data) => {
         if (data && data.id) {
@@ -67,7 +70,7 @@ export default function StrategyDetail({
       .catch(() => {
         setLoading(false);
       });
-  }, [strategyId, isOpen]);
+  }, [strategyId, isOpen, selectedAsset]);
 
   const isLong = strategy?.type === 'LONG';
   const m = strategy?.metrics || {};
@@ -194,7 +197,7 @@ export default function StrategyDetail({
             { id: 'overview', label: 'Overview & Logic' },
             { id: 'yearly', label: 'Year-by-Year (YoY)' },
             { id: 'trades', label: `Trade Logs (${trades.length})` },
-            { id: 'vs-btc', label: 'Algo vs Bitcoin Price' },
+            { id: 'vs-btc', label: `Algo vs ${selectedAsset === 'ETHUSDT' ? 'Ethereum' : 'Bitcoin'} Price` },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
             return (

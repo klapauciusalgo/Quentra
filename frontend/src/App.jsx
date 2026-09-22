@@ -10,6 +10,7 @@ import { playRetroSound } from './utils/formatters';
 import { Bell, BarChart3, Compass, ShieldCheck, Grid } from 'lucide-react';
 import { API_BASE, getWsUrl } from './config';
 import strategiesData from './data/strategiesData.json';
+import strategiesDataEth from './data/strategiesData_eth.json';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AuthModal from './components/AuthModal';
 
@@ -30,11 +31,37 @@ const DEFAULT_FLOOR_STATE = {
 function TradingApp() {
   const { isAuthenticated, isLoading, openAuthModal } = useAuth();
 
+  const [selectedAsset, setSelectedAsset] = useState('BTCUSDT');
+  const selectedAssetRef = useRef('BTCUSDT');
+  useEffect(() => {
+    selectedAssetRef.current = selectedAsset;
+  }, [selectedAsset]);
+
+  const [tickersMap, setTickersMap] = useState({
+    BTCUSDT: {
+      symbol: 'BTCUSDT',
+      price: 77379.6,
+      change_24h_pct: 0.12,
+      high_24h: 79890.0,
+      low_24h: 76046.58,
+      volume_24h: 18905.45,
+    },
+    ETHUSDT: {
+      symbol: 'ETHUSDT',
+      price: 2740.05,
+      change_24h_pct: 1.25,
+      high_24h: 2850.0,
+      low_24h: 2680.0,
+      volume_24h: 84520.10,
+    }
+  });
+
   const [status, setStatus] = useState({
     binance_ws_connected: false,
     ticker_status: 'INITIALIZING',
   });
   const [ticker, setTicker] = useState({
+    symbol: 'BTCUSDT',
     price: 77379.6,
     change_24h_pct: 0.12,
     high_24h: 79890.0,
@@ -253,7 +280,8 @@ function TradingApp() {
       if (Date.now() - lastWsTickTimeRef.current < 4000) {
         return; // WebSocket is actively streaming real-time ticks
       }
-      fetch(`${API_BASE}/api/ticker`)
+      const curAsset = selectedAssetRef.current;
+      fetch(`${API_BASE}/api/ticker?symbol=${curAsset}`)
         .then((r) => r.json())
         .then((data) => {
           if (data && data.price && typeof data.price === 'number') {
@@ -261,6 +289,7 @@ function TradingApp() {
               if (prev.price !== data.price) return { ...prev, ...data };
               return prev;
             });
+            setTickersMap((prev) => ({ ...prev, [curAsset]: data }));
           }
         })
         .catch(() => {});
@@ -368,10 +397,23 @@ function TradingApp() {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'TICKER') {
-            lastWsTickTimeRef.current = Date.now();
-            setTicker(msg.data);
+            const sym = msg.symbol || msg.data?.symbol || 'BTCUSDT';
+            if (msg.data) {
+              setTickersMap((prev) => ({ ...prev, [sym]: msg.data }));
+            }
+            if (sym === selectedAssetRef.current) {
+              lastWsTickTimeRef.current = Date.now();
+              setTicker(msg.data);
+            }
           } else if (msg.type === 'SNAPSHOT') {
-            if (msg.ticker && msg.ticker.price) {
+            if (msg.tickers) {
+              setTickersMap((prev) => ({ ...prev, ...msg.tickers }));
+              const curSym = selectedAssetRef.current;
+              if (msg.tickers[curSym] && msg.tickers[curSym].price) {
+                lastWsTickTimeRef.current = Date.now();
+                setTicker(msg.tickers[curSym]);
+              }
+            } else if (msg.ticker && msg.ticker.price && selectedAssetRef.current === 'BTCUSDT') {
               lastWsTickTimeRef.current = Date.now();
               setTicker(msg.ticker);
             }
@@ -504,6 +546,58 @@ function TradingApp() {
       if (directBinanceWsRef.current) directBinanceWsRef.current.close();
     };
   }, []);
+
+  // 1-Click Asset Switcher (BTC / ETH)
+  const handleSelectAsset = (newAsset) => {
+    if (newAsset === selectedAsset) return;
+    playRetroSound('select');
+    setSelectedAsset(newAsset);
+    selectedAssetRef.current = newAsset;
+
+    // Instantly update active ticker from map to eliminate lag
+    if (tickersMap[newAsset]) {
+      setTicker(tickersMap[newAsset]);
+    }
+
+    const fallbackStrats = newAsset === 'ETHUSDT' ? strategiesDataEth : strategiesData;
+
+    // Fetch live enriched strategies for this asset
+    fetch(`${API_BASE}/api/strategies?symbol=${newAsset}`)
+      .then((r) => {
+        const ct = r.headers.get('content-type') || '';
+        if (r.ok && ct.includes('application/json')) return r.json();
+        throw new Error('Not JSON');
+      })
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setStrategies(data);
+          const exists = data.some((s) => s.id === selectedStrategyId);
+          if (!exists) {
+            setSelectedStrategyId(data[0].id);
+            if (data[0].timeframe) setTimeframe(data[0].timeframe.toLowerCase());
+          } else {
+            const cur = data.find((s) => s.id === selectedStrategyId);
+            if (cur?.timeframe) setTimeframe(cur.timeframe.toLowerCase());
+          }
+        } else {
+          setStrategies(fallbackStrats);
+        }
+      })
+      .catch(() => {
+        setStrategies(fallbackStrats);
+      });
+
+    // Fetch latest ticker for this asset
+    fetch(`${API_BASE}/api/ticker?symbol=${newAsset}`)
+      .then((r) => r.json())
+      .then((t) => {
+        if (t && t.price) {
+          setTicker(t);
+          setTickersMap((prev) => ({ ...prev, [newAsset]: t }));
+        }
+      })
+      .catch(() => {});
+  };
 
   // Switch strategy AND automatically adapt chart timeframe and live ticket
   const handleSelectStrategy = (stratId) => {
@@ -749,6 +843,8 @@ function TradingApp() {
         onCloseSignal={handleCloseSignal}
         onClearNotifications={() => setSignalNotifications([])}
         onGoToLanding={handleGoToLanding}
+        selectedAsset={selectedAsset}
+        onSelectAsset={handleSelectAsset}
       />
 
       {/* Real-time Signal Alert Dynamic Banner */}
@@ -820,7 +916,7 @@ function TradingApp() {
           </div>
 
           <div className="text-xs text-apple-dim hidden sm:block">
-            Ground truth BTC backtest data: 2020-2026
+            Ground truth {selectedAsset === 'ETHUSDT' ? 'ETH' : 'BTC'} backtest data: 2020-2026
           </div>
         </div>
 
@@ -839,7 +935,7 @@ function TradingApp() {
           </section>
         )}
 
-        {/* Section 2: Interactive Candlestick Chart BTCUSDT with Strategy Markers Overlay */}
+        {/* Section 2: Interactive Candlestick Chart with Strategy Markers Overlay */}
         {(activeView === 'all' || activeView === 'chart') && (
           <section>
             <TradingChart
@@ -851,6 +947,7 @@ function TradingApp() {
               floor={floor}
               onPriceSync={handlePriceSyncFromChart}
               activeSignals={activeSignals}
+              symbol={selectedAsset}
             />
           </section>
         )}
@@ -864,6 +961,7 @@ function TradingApp() {
               activeSignals={activeSignals}
               floor={floor}
               onOpenDetail={handleOpenDetail}
+              selectedAsset={selectedAsset}
             />
           </section>
         )}
@@ -900,6 +998,7 @@ function TradingApp() {
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
         onSelectStrategy={handleSelectStrategy}
+        selectedAsset={selectedAsset}
       />
 
       {/* Footer */}

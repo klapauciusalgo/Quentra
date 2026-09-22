@@ -16,7 +16,7 @@ from fastapi import WebSocket
 logger = logging.getLogger("binance_ws")
 logger.setLevel(logging.INFO)
 
-BINANCE_WS_TICKER_URL = "wss://stream.binance.com:9443/ws/btcusdt@ticker"
+BINANCE_WS_TICKER_URL = "wss://stream.binance.com:9443/stream?streams=btcusdt@ticker/ethusdt@ticker"
 BINANCE_WS_KLINE_30M_URL = "wss://stream.binance.com:9443/ws/btcusdt@kline_30m"
 
 class BinanceManager:
@@ -25,17 +25,31 @@ class BinanceManager:
         self.is_connected = False
         self.last_tick_time = 0
         self.last_error = None
-        self.ticker_data = {
-            "symbol": "BTCUSDT",
-            "price": 0.0,
-            "change_24h_pct": 0.0,
-            "high_24h": 0.0,
-            "low_24h": 0.0,
-            "volume_24h": 0.0,
-            "quote_volume_24h": 0.0,
-            "timestamp": int(time.time() * 1000),
-            "status": "INITIALIZING"
+        self.ticker_data_map = {
+            "BTCUSDT": {
+                "symbol": "BTCUSDT",
+                "price": 0.0,
+                "change_24h_pct": 0.0,
+                "high_24h": 0.0,
+                "low_24h": 0.0,
+                "volume_24h": 0.0,
+                "quote_volume_24h": 0.0,
+                "timestamp": int(time.time() * 1000),
+                "status": "INITIALIZING"
+            },
+            "ETHUSDT": {
+                "symbol": "ETHUSDT",
+                "price": 0.0,
+                "change_24h_pct": 0.0,
+                "high_24h": 0.0,
+                "low_24h": 0.0,
+                "volume_24h": 0.0,
+                "quote_volume_24h": 0.0,
+                "timestamp": int(time.time() * 1000),
+                "status": "INITIALIZING"
+            }
         }
+        self.ticker_data = self.ticker_data_map["BTCUSDT"]
         self.latest_candles = {
             "30m": None,
             "1h": None,
@@ -43,6 +57,9 @@ class BinanceManager:
             "1d": None,
             "1w": None
         }
+
+    def get_ticker(self, symbol: str = "BTCUSDT"):
+        return self.ticker_data_map.get(symbol.upper(), self.ticker_data)
 
     async def register(self, websocket: WebSocket):
         await websocket.accept()
@@ -52,6 +69,7 @@ class BinanceManager:
             await websocket.send_json({
                 "type": "SNAPSHOT",
                 "ticker": self.ticker_data,
+                "tickers": self.ticker_data_map,
                 "binance_connected": self.is_connected,
                 "timestamp": int(time.time() * 1000)
             })
@@ -80,10 +98,11 @@ class BinanceManager:
                 logger.info(f"Connecting to Binance Ticker WS: {BINANCE_WS_TICKER_URL}")
                 async with websockets.connect(BINANCE_WS_TICKER_URL, ping_interval=20, ping_timeout=10) as ws:
                     self.is_connected = True
-                    self.ticker_data["status"] = "LIVE"
+                    for t in self.ticker_data_map.values():
+                        t["status"] = "LIVE"
                     self.last_error = None
                     retry_delay = 2
-                    logger.info("Connected to Binance Ticker WebSocket successfully!")
+                    logger.info("Connected to Binance Multi-Ticker WebSocket successfully!")
 
                     # Broadcast connected status
                     await self.broadcast({
@@ -93,7 +112,12 @@ class BinanceManager:
                     })
 
                     async for raw_msg in ws:
-                        data = json.loads(raw_msg)
+                        msg = json.loads(raw_msg)
+                        data = msg.get("data", msg)
+                        sym = str(data.get("s", "BTCUSDT")).upper()
+                        if sym not in self.ticker_data_map:
+                            continue
+
                         price = float(data.get("c", 0))
                         change_pct = float(data.get("P", 0))
                         high_24h = float(data.get("h", 0))
@@ -103,8 +127,8 @@ class BinanceManager:
                         event_time = int(data.get("E", time.time() * 1000))
 
                         self.last_tick_time = event_time
-                        self.ticker_data.update({
-                            "symbol": "BTCUSDT",
+                        self.ticker_data_map[sym].update({
+                            "symbol": sym,
                             "price": price,
                             "change_24h_pct": change_pct,
                             "high_24h": high_24h,
@@ -115,20 +139,25 @@ class BinanceManager:
                             "status": "LIVE"
                         })
 
-                        # Broadcast ticker update to all active frontend clients
+                        if sym == "BTCUSDT":
+                            self.ticker_data = self.ticker_data_map["BTCUSDT"]
+
+                        # Broadcast ticker update with symbol to all active frontend clients
                         await self.broadcast({
                             "type": "TICKER",
-                            "data": self.ticker_data
+                            "symbol": sym,
+                            "data": self.ticker_data_map[sym]
                         })
 
-                        # On-the-fly live signal ticker evaluation (dynamic breakeven & intra-bar SL/TP)
-                        try:
-                            from live_signal_engine import live_signal_engine
-                            events = live_signal_engine.on_ticker_tick(price, event_time)
-                            for ev in events:
-                                await self.broadcast(ev)
-                        except Exception as ex:
-                            logger.debug(f"Ticker signal eval: {ex}")
+                        # On-the-fly live signal ticker evaluation for BTC
+                        if sym == "BTCUSDT":
+                            try:
+                                from live_signal_engine import live_signal_engine
+                                events = live_signal_engine.on_ticker_tick(price, event_time)
+                                for ev in events:
+                                    await self.broadcast(ev)
+                            except Exception as ex:
+                                logger.debug(f"Ticker signal eval: {ex}")
 
             except asyncio.CancelledError:
                 logger.info("Binance WS stream cancelled.")

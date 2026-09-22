@@ -16,7 +16,9 @@ export default function Header({
   onSelectStrategy,
   onCloseSignal,
   onClearNotifications,
-  onGoToLanding
+  onGoToLanding,
+  selectedAsset = 'BTCUSDT',
+  onSelectAsset
 }) {
   const { user, isAuthenticated, logout, openAuthModal } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -88,41 +90,88 @@ export default function Header({
           </div>
         </div>
 
-        {/* Live BTC Ticker Telemetry */}
-        <div className="flex items-center gap-3 bg-black/[0.03] dark:bg-white/[0.04] hover:bg-black/[0.05] dark:hover:bg-white/[0.06] border border-black/[0.08] dark:border-white/[0.08] rounded-2xl px-3.5 py-1.5 transition-colors">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-apple-muted tracking-wide">BTC/USDT</span>
-            <span
-              className={`font-mono text-sm md:text-base font-bold tabular-nums transition-colors duration-200 ${
-                priceFlash === 'up'
-                  ? 'text-apple-green'
-                  : priceFlash === 'down'
-                  ? 'text-apple-red'
-                  : 'text-apple-text'
+        {/* Asset Switcher & Live Ticker Telemetry */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* 1-Click Asset Switcher (BTC / ETH) */}
+          <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.06] p-1 rounded-2xl border border-black/[0.08] dark:border-white/[0.08] shadow-inner">
+            <button
+              onClick={() => {
+                if (selectedAsset !== 'BTCUSDT' && onSelectAsset) {
+                  playRetroSound('select');
+                  onSelectAsset('BTCUSDT');
+                }
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer ${
+                selectedAsset === 'BTCUSDT'
+                  ? 'bg-apple-blue text-white shadow-md scale-[1.02]'
+                  : 'text-apple-muted hover:text-apple-text hover:bg-black/[0.03] dark:hover:bg-white/[0.04]'
+              }`}
+              title="Switch to Bitcoin (BTC/USDT)"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+              <span>BTC</span>
+            </button>
+            <button
+              onClick={() => {
+                if (selectedAsset !== 'ETHUSDT' && onSelectAsset) {
+                  playRetroSound('select');
+                  onSelectAsset('ETHUSDT');
+                }
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer ${
+                selectedAsset === 'ETHUSDT'
+                  ? 'bg-apple-blue text-white shadow-md scale-[1.02]'
+                  : 'text-apple-muted hover:text-apple-text hover:bg-black/[0.03] dark:hover:bg-white/[0.04]'
+              }`}
+              title="Switch to Ethereum (ETH/USDT)"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+              <span>ETH</span>
+            </button>
+          </div>
+
+          {/* Live Ticker Telemetry */}
+          <div className="flex items-center gap-3 bg-black/[0.03] dark:bg-white/[0.04] hover:bg-black/[0.05] dark:hover:bg-white/[0.06] border border-black/[0.08] dark:border-white/[0.08] rounded-2xl px-3.5 py-1.5 transition-colors">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-apple-muted tracking-wide">
+                {selectedAsset === 'ETHUSDT' ? 'ETH/USDT' : 'BTC/USDT'}
+              </span>
+              <span
+                className={`font-mono text-sm md:text-base font-bold tabular-nums transition-colors duration-200 ${
+                  priceFlash === 'up'
+                    ? 'text-apple-green'
+                    : priceFlash === 'down'
+                    ? 'text-apple-red'
+                    : 'text-apple-text'
+                }`}
+              >
+                {formatPrice(ticker?.price || (selectedAsset === 'ETHUSDT' ? 2750 : 77300))}
+              </span>
+            </div>
+
+            <div
+              className={`text-xs font-medium px-2 py-0.5 rounded-full border tabular-nums ${
+                isPositive
+                  ? 'text-apple-green bg-apple-green/10 border-apple-green/20'
+                  : 'text-apple-red bg-apple-red/10 border-apple-red/20'
               }`}
             >
-              {formatPrice(ticker?.price || 77300)}
-            </span>
-          </div>
-
-          <div
-            className={`text-xs font-medium px-2 py-0.5 rounded-full border tabular-nums ${
-              isPositive
-                ? 'text-apple-green bg-apple-green/10 border-apple-green/20'
-                : 'text-apple-red bg-apple-red/10 border-apple-red/20'
-            }`}
-          >
-            {formatPercent(ticker?.change_24h_pct || 0)}
-          </div>
-
-          <div className="hidden xl:flex items-center gap-3 text-xs text-apple-muted border-l border-black/10 dark:border-white/10 pl-3">
-            <div>
-              <span className="text-apple-dim">High: </span>
-              <span className="text-apple-text font-mono tabular-nums">{formatPrice(ticker?.high_24h || 79800)}</span>
+              {formatPercent(ticker?.change_24h_pct || 0)}
             </div>
-            <div>
-              <span className="text-apple-dim">Low: </span>
-              <span className="text-apple-text font-mono tabular-nums">{formatPrice(ticker?.low_24h || 76100)}</span>
+
+            <div className="hidden xl:flex items-center gap-3 text-xs text-apple-muted border-l border-black/10 dark:border-white/10 pl-3">
+              <div>
+                <span className="text-apple-dim">High: </span>
+                <span className="text-apple-text font-mono tabular-nums">
+                  {formatPrice(ticker?.high_24h || (selectedAsset === 'ETHUSDT' ? 2850 : 79800))}
+                </span>
+              </div>
+              <div>
+                <span className="text-apple-dim">Low: </span>
+                <span className="text-apple-text font-mono tabular-nums">
+                  {formatPrice(ticker?.low_24h || (selectedAsset === 'ETHUSDT' ? 2680 : 76100))}
+                </span>
+              </div>
             </div>
           </div>
         </div>

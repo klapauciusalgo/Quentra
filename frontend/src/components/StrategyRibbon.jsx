@@ -290,7 +290,8 @@ export function StrategyDetailCard({
   currentBtcPrice = 77300,
   activeSignals = [],
   floor = null,
-  onOpenDetail
+  onOpenDetail,
+  selectedAsset = 'BTCUSDT'
 }) {
   if (!activeStrat) return null;
   const isLong = activeStrat?.type === 'LONG';
@@ -384,7 +385,7 @@ export function StrategyDetailCard({
             )}
           </div>
           <div className="text-[11px] text-apple-dim tabular-nums flex items-center gap-1.5">
-            <span>Spot BTC:</span>
+            <span>Spot {selectedAsset === 'ETHUSDT' ? 'ETH' : 'BTC'}:</span>
             <span className="font-semibold text-apple-text">{formatPrice(currentBtcPrice)}</span>
           </div>
         </div>

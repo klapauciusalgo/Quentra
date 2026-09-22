@@ -37,13 +37,19 @@ import bisect
 
 # In-memory datasets cache
 KLINES_CACHE = {}
+KLINES_CACHE_ETH = {}
 STRATEGIES_CATALOG = []
 STRATEGIES_MAP = {}
+STRATEGIES_CATALOG_ETH = []
+STRATEGIES_MAP_ETH = {}
 PARQUET_DFS = {}
 PARQUET_TIMESTAMPS = {}
+PARQUET_DFS_ETH = {}
+PARQUET_TIMESTAMPS_ETH = {}
 
 def load_data_into_memory():
-    global KLINES_CACHE, STRATEGIES_CATALOG, STRATEGIES_MAP, PARQUET_DFS, PARQUET_TIMESTAMPS
+    global KLINES_CACHE, KLINES_CACHE_ETH, STRATEGIES_CATALOG, STRATEGIES_MAP, STRATEGIES_CATALOG_ETH, STRATEGIES_MAP_ETH
+    global PARQUET_DFS, PARQUET_TIMESTAMPS, PARQUET_DFS_ETH, PARQUET_TIMESTAMPS_ETH
     
     # 1. Load Parquets for full historical coverage (2020-2026)
     new_analysis_dir = "/home/ubuntu/new-btc-analysis/data"
@@ -187,7 +193,64 @@ def load_data_into_memory():
         STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
         logger.info(f"Loaded {len(STRATEGIES_CATALOG)} strategies from local cache")
 
-    # 4. Warm up autonomous live signal engine
+    # 4. Load ETH Datasets (Parquets, Klines Cache, Strategy Catalog)
+    for tf in ["30m", "1h", "4h", "1d", "1w"]:
+        p = os.path.join(DATA_DIR, f"ETHUSDT_{tf}.parquet")
+        if os.path.exists(p):
+            try:
+                df_eth = pd.read_parquet(p)
+                PARQUET_DFS_ETH[tf] = df_eth
+                if "timestamp" in df_eth.columns:
+                    PARQUET_TIMESTAMPS_ETH[tf] = (df_eth["timestamp"] // 1000).values
+                elif "time" in df_eth.columns:
+                    PARQUET_TIMESTAMPS_ETH[tf] = df_eth["time"].values
+                logger.info(f"Loaded {len(df_eth)} ETH bars for timeframe {tf}")
+            except Exception as e:
+                logger.warning(f"Could not load ETH parquet for {tf}: {e}")
+
+    klines_eth_path = os.path.join(DATA_DIR, "klines_cache_eth.json")
+    if os.path.exists(klines_eth_path):
+        with open(klines_eth_path, "r") as f:
+            KLINES_CACHE_ETH = json.load(f)
+
+    # Refresh KLINES_CACHE_ETH from PARQUET_DFS_ETH
+    for tf, df_p in PARQUET_DFS_ETH.items():
+        sub = df_p.tail(5000)
+        c_list = []
+        for _, r in sub.iterrows():
+            ts_sec = int(r["timestamp"] / 1000) if "timestamp" in r and r["timestamp"] > 1e11 else int(r.get("time", r.get("timestamp", 0)))
+            c_list.append({
+                "time": ts_sec,
+                "datetime": str(r.get("datetime", "")),
+                "open": float(r["open"]),
+                "high": float(r["high"]),
+                "low": float(r["low"]),
+                "close": float(r["close"]),
+                "volume": float(r.get("volume", 0.0)),
+                "ma8": float(r["MA8"]) if "MA8" in r and not pd.isna(r["MA8"]) else None,
+                "ma25": float(r["MA25"]) if "MA25" in r and not pd.isna(r["MA25"]) else None,
+                "ma50": float(r["MA50"]) if "MA50" in r and not pd.isna(r["MA50"]) else None,
+                "ma55": float(r["MA55"]) if "MA55" in r and not pd.isna(r["MA55"]) else None,
+                "ma111": float(r["MA111"]) if "MA111" in r and not pd.isna(r["MA111"]) else None,
+            })
+        KLINES_CACHE_ETH[tf] = c_list
+    logger.info(f"Synchronized live ETH klines cache for timeframes: {list(KLINES_CACHE_ETH.keys())}")
+
+    strat_eth_path = os.path.join(DATA_DIR, "strategies_eth.json")
+    if os.path.exists(strat_eth_path):
+        with open(strat_eth_path, "r") as f:
+            STRATEGIES_CATALOG_ETH = json.load(f)
+        STRATEGIES_MAP_ETH = {s["id"]: s for s in STRATEGIES_CATALOG_ETH}
+        logger.info(f"Loaded {len(STRATEGIES_CATALOG_ETH)} ETH strategies from local storage!")
+
+    # Set initial ETH ticker price from latest candle if not yet live
+    if "30m" in PARQUET_DFS_ETH and len(PARQUET_DFS_ETH["30m"]) > 0:
+        eth_last_close = float(PARQUET_DFS_ETH["30m"]["close"].iloc[-1])
+        if binance_manager.ticker_data_map["ETHUSDT"]["price"] <= 0:
+            binance_manager.ticker_data_map["ETHUSDT"]["price"] = eth_last_close
+            binance_manager.ticker_data_map["ETHUSDT"]["status"] = "READY"
+
+    # 5. Warm up autonomous live signal engine
     try:
         from live_signal_engine import live_signal_engine
         live_signal_engine.initialize_with_parquets(PARQUET_DFS)
@@ -234,42 +297,54 @@ app.add_middleware(
 @app.get("/api/status")
 async def get_status():
     from live_signal_engine import live_signal_engine
+    btc_ticker = binance_manager.get_ticker("BTCUSDT")
+    eth_ticker = binance_manager.get_ticker("ETHUSDT")
     return {
         "status": "ONLINE",
         "service": "Quentra Platform",
         "binance_ws_connected": binance_manager.is_connected,
-        "ticker_status": binance_manager.ticker_data.get("status"),
-        "latest_btc_price": binance_manager.ticker_data.get("price"),
+        "ticker_status": btc_ticker.get("status"),
+        "supported_assets": ["BTCUSDT", "ETHUSDT"],
+        "latest_btc_price": btc_ticker.get("price"),
+        "latest_eth_price": eth_ticker.get("price"),
+        "tickers": binance_manager.ticker_data_map,
         "active_clients": len(binance_manager.connected_clients),
         "available_timeframes": list(KLINES_CACHE.keys()) if KLINES_CACHE else list(PARQUET_DFS.keys()),
         "strategies_count": len(STRATEGIES_CATALOG),
+        "strategies_count_eth": len(STRATEGIES_CATALOG_ETH),
         "live_signal_engine": "AUTONOMOUS_ONLINE",
         "macro_regime": live_signal_engine.macro_state.get("regime_description", "MACRO_DISCOUNT")
     }
 
 @app.get("/api/ticker")
-async def get_ticker():
-    return binance_manager.ticker_data
+async def get_ticker(symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")):
+    return binance_manager.get_ticker(symbol)
 
 @app.get("/api/klines")
 async def get_klines(
+    symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT"),
     timeframe: str = Query(default="30m", description="Timeframe: 30m, 1h, 4h, 1d, 1w"),
     limit: int = Query(default=5000, le=20000, description="Number of bars to return"),
     around_time: Optional[int] = Query(default=None, description="Center klines around this unix timestamp")
 ):
+    sym = symbol.upper()
     tf = timeframe.lower()
+
+    target_dfs = PARQUET_DFS_ETH if sym == "ETHUSDT" else PARQUET_DFS
+    target_ts = PARQUET_TIMESTAMPS_ETH if sym == "ETHUSDT" else PARQUET_TIMESTAMPS
+    target_cache = KLINES_CACHE_ETH if sym == "ETHUSDT" else KLINES_CACHE
     
     # If around_time is passed and parquet is in memory, slice around that exact timestamp!
-    if around_time and tf in PARQUET_DFS and tf in PARQUET_TIMESTAMPS:
-        df = PARQUET_DFS[tf]
-        timestamps = PARQUET_TIMESTAMPS[tf]
+    if around_time and tf in target_dfs and tf in target_ts:
+        df = target_dfs[tf]
+        timestamps = target_ts[tf]
         idx = bisect.bisect_left(timestamps, around_time)
         half = limit // 2
         start_idx = max(0, idx - half)
         end_idx = min(len(df), idx + half)
         slice_df = df.iloc[start_idx:end_idx]
 
-        time_arr = (slice_df['timestamp'] // 1000).values
+        time_arr = (slice_df['timestamp'] // 1000).values if 'timestamp' in slice_df.columns else slice_df['time'].values
         open_arr = slice_df['open'].values
         high_arr = slice_df['high'].values
         low_arr = slice_df['low'].values
@@ -298,21 +373,22 @@ async def get_klines(
             for i in range(len(time_arr))
         ]
         return {
-            "symbol": "BTCUSDT",
+            "symbol": sym,
             "timeframe": tf,
             "count": len(candles),
             "candles": candles
         }
 
     # Standard path: use klines cache
-    if tf not in KLINES_CACHE:
-        raise HTTPException(status_code=400, detail=f"Unsupported timeframe '{timeframe}'. Choose from: {list(KLINES_CACHE.keys())}")
+    if tf not in target_cache:
+        raise HTTPException(status_code=400, detail=f"Unsupported timeframe '{timeframe}' for {sym}. Choose from: {list(target_cache.keys())}")
     
-    data = KLINES_CACHE[tf]
+    data = target_cache[tf]
     sliced = data[-limit:] if limit < len(data) else data
 
     # If live price exists from active WebSocket, inject or update the latest unfinished bar close
-    live_price = binance_manager.ticker_data.get("price")
+    ticker_obj = binance_manager.get_ticker(sym)
+    live_price = ticker_obj.get("price")
     if sliced and live_price and live_price > 0 and binance_manager.is_connected:
         last_candle = dict(sliced[-1])
         last_candle["close"] = float(live_price)
@@ -321,7 +397,7 @@ async def get_klines(
         sliced = sliced[:-1] + [last_candle]
 
     return {
-        "symbol": "BTCUSDT",
+        "symbol": sym,
         "timeframe": tf,
         "count": len(sliced),
         "candles": sliced
@@ -426,7 +502,11 @@ def enrich_strategy_with_live(s: dict) -> dict:
     return s_copy
 
 @app.get("/api/strategies")
-async def list_strategies():
+async def list_strategies(symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")):
+    sym = symbol.upper()
+    if sym == "ETHUSDT":
+        return STRATEGIES_CATALOG_ETH
+
     summaries = []
     for s in STRATEGIES_CATALOG:
         enriched = enrich_strategy_with_live(s)
@@ -454,7 +534,13 @@ async def list_strategies():
     return summaries
 
 @app.get("/api/strategies/{strategy_id}")
-async def get_strategy_detail(strategy_id: str):
+async def get_strategy_detail(strategy_id: str, symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")):
+    sym = symbol.upper()
+    if sym == "ETHUSDT":
+        if strategy_id not in STRATEGIES_MAP_ETH:
+            raise HTTPException(status_code=404, detail=f"ETH Strategy '{strategy_id}' not found")
+        return STRATEGIES_MAP_ETH[strategy_id]
+
     if strategy_id not in STRATEGIES_MAP:
         raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
     return enrich_strategy_with_live(STRATEGIES_MAP[strategy_id])
@@ -530,7 +616,8 @@ async def get_db_status():
     return {
         "database": "Supabase (PostgreSQL)" if sb else "Local JSON Fallback",
         "supabase_connected": sb is not None,
-        "strategies_loaded": len(STRATEGIES_CATALOG)
+        "strategies_loaded": len(STRATEGIES_CATALOG),
+        "strategies_loaded_eth": len(STRATEGIES_CATALOG_ETH)
     }
 
 # -----------------------------------------------------------------------------

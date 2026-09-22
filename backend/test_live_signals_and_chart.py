@@ -134,3 +134,72 @@ def test_klines_endpoint(client):
         assert len(data["candles"]) == 100
         assert data["candles"][-1]["close"] > 50000.0
 
+def test_eth_system_status(client):
+    res = client.get("/api/status")
+    assert res.status_code == 200
+    data = res.json()
+    assert "ETHUSDT" in data["supported_assets"]
+    assert "BTCUSDT" in data["supported_assets"]
+    assert data["strategies_count_eth"] == 10
+    assert data["latest_eth_price"] > 1000.0
+
+def test_eth_ticker(client):
+    res = client.get("/api/ticker?symbol=ETHUSDT")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["symbol"] == "ETHUSDT"
+    assert data["price"] > 1000.0
+
+def test_eth_klines_endpoint(client):
+    for tf in ["30m", "1h", "4h", "1d", "1w"]:
+        res = client.get(f"/api/klines?symbol=ETHUSDT&timeframe={tf}&limit=50")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["symbol"] == "ETHUSDT"
+        assert len(data["candles"]) == 50
+        assert 500.0 < data["candles"][-1]["close"] < 10000.0
+        # Check MA indicators are present
+        assert "ma25" in data["candles"][-1]
+        assert "ma50" in data["candles"][-1]
+
+def test_eth_strategies_catalog(client):
+    res = client.get("/api/strategies?symbol=ETHUSDT")
+    assert res.status_code == 200
+    strats = res.json()
+    assert len(strats) == 10
+    
+    # Check Pippo 30M Alpha on ETH
+    alpha = next((s for s in strats if s["id"] == "pippo-30m-alpha"), None)
+    assert alpha is not None
+    assert alpha["metrics"]["total_trades"] == 123
+    assert alpha["metrics"]["win_rate_pct"] > 60.0
+    assert alpha["metrics"]["total_return_pct"] > 400.0
+    assert len(alpha["trades"]) == 124
+    assert len(alpha["markers"]) > 200
+
+    # Check Pippo 30m Grd on ETH
+    grd = next((s for s in strats if s["id"] == "pippo-30m-grd"), None)
+    assert grd is not None
+    assert grd["metrics"]["total_trades"] == 507
+    assert len(grd["trades"]) == 507
+
+    # Check Pippo 1h Enhanced on ETH
+    p1h = next((s for s in strats if s["id"] == "pippo-1h-enhanced"), None)
+    assert p1h is not None
+    assert p1h["metrics"]["total_trades"] == 89
+    assert len(p1h["trades"]) == 90
+    assert p1h["metrics"]["total_return_pct"] > 500.0
+
+def test_eth_strategy_detail_endpoint(client):
+    res = client.get("/api/strategies/pippo-30m-alpha?symbol=ETHUSDT")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["id"] == "pippo-30m-alpha"
+    assert data["metrics"]["total_trades"] == 123
+    assert len(data["trades"]) == 124
+
+    # Non-existent strategy
+    res404 = client.get("/api/strategies/non-existent-strat?symbol=ETHUSDT")
+    assert res404.status_code == 404
+
+

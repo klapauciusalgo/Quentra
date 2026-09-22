@@ -29,6 +29,7 @@ import {
   X
 } from 'lucide-react';
 import strategiesData from '../data/strategiesData.json';
+import { useAuth } from '../context/AuthContext';
 
 export default function LandingPage({ 
   ticker = { price: 77300, change_24h_pct: 0.5 }, 
@@ -38,6 +39,7 @@ export default function LandingPage({
   onToggleTheme,
   onEnterDashboard
 }) {
+  const { isAuthenticated, user, openAuthModal } = useAuth();
   const [activeCategory, setActiveCategory] = useState('ALL'); // ALL, LONG, SHORT, MACRO
   const [heroTab, setHeroTab] = useState('motion'); // 'motion' | 'chart' | 'alpha' | 'risk'
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
@@ -68,6 +70,11 @@ export default function LandingPage({
 
   const handleLaunch = (stratId = null) => {
     playRetroSound('select');
+    if (!isAuthenticated) {
+      // User must create or have an account to enter the terminal
+      openAuthModal(stratId ? `/app?strategy=${stratId}` : '/app');
+      return;
+    }
     if (onEnterDashboard) {
       onEnterDashboard(stratId);
     }
@@ -137,14 +144,47 @@ export default function LandingPage({
               )}
             </button>
 
-            {/* Main Terminal CTA Button */}
-            <button
-              onClick={() => handleLaunch()}
-              className="px-4 py-2 bg-apple-blue hover:bg-blue-600 active:scale-[0.98] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:shadow-md"
-            >
-              <span>Launch Terminal</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            {/* Authentication Status & Terminal CTA */}
+            {isAuthenticated ? (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-black/[0.04] dark:bg-white/[0.06] border border-black/[0.08] dark:border-white/[0.08] rounded-full text-xs">
+                  {user?.avatar_url ? (
+                    <img src={user.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full bg-apple-blue/20 text-apple-blue flex items-center justify-center text-[10px] font-bold">
+                      {user?.full_name?.charAt(0) || 'T'}
+                    </div>
+                  )}
+                  <span className="hidden sm:inline font-medium text-apple-text max-w-[110px] truncate">
+                    {user?.full_name}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleLaunch()}
+                  className="px-4 py-2 bg-apple-blue hover:bg-blue-600 active:scale-[0.98] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:shadow-md"
+                >
+                  <span>Launch Terminal</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('/app')}
+                  className="hidden sm:block px-3 py-1.5 text-xs font-medium text-apple-muted hover:text-apple-text transition-colors cursor-pointer"
+                >
+                  Masuk
+                </button>
+                <button
+                  onClick={() => handleLaunch()}
+                  className="px-4 py-2 bg-apple-blue hover:bg-blue-600 active:scale-[0.98] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:shadow-md"
+                >
+                  <span>Launch Terminal</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
         </div>

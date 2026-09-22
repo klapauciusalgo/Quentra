@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { formatPrice, formatPercent, playRetroSound, isAudioEnabled, toggleAudio } from '../utils/formatters';
-import { Volume2, VolumeX, Zap, Clock, Sun, Moon, Compass } from 'lucide-react';
+import { Volume2, VolumeX, Zap, Clock, Sun, Moon, Compass, LogOut, User, ChevronDown, ShieldCheck } from 'lucide-react';
 import NotificationBell from './NotificationBell';
+import { useAuth } from '../context/AuthContext';
 
 export default function Header({ 
   ticker, 
@@ -17,9 +18,22 @@ export default function Header({
   onClearNotifications,
   onGoToLanding
 }) {
+  const { user, isAuthenticated, logout, openAuthModal } = useAuth();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef(null);
   const [audioActive, setAudioActive] = useState(true);
   const [priceFlash, setPriceFlash] = useState(null);
   const [prevPrice, setPrevPrice] = useState(ticker?.price || 0);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setShowUserMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (ticker?.price && ticker.price !== prevPrice) {
@@ -193,6 +207,74 @@ export default function Header({
               <VolumeX className="w-4 h-4 text-apple-dim" />
             )}
           </button>
+
+          {/* User Account / Profile Menu (US-05, FR-21) */}
+          <div className="relative" ref={userMenuRef}>
+            {isAuthenticated ? (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playRetroSound('blip');
+                    setShowUserMenu((prev) => !prev);
+                  }}
+                  className="flex items-center gap-2 p-1 pl-2 pr-2.5 bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.1] active:scale-[0.98] border border-black/[0.08] dark:border-white/[0.08] rounded-full text-xs transition-all cursor-pointer"
+                  title="Menu Profil Trader"
+                >
+                  {user?.avatar_url ? (
+                    <img src={user.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full bg-apple-blue/20 text-apple-blue flex items-center justify-center text-[10px] font-bold">
+                      {user?.full_name?.charAt(0) || 'T'}
+                    </div>
+                  )}
+                  <span className="hidden md:inline font-medium text-apple-text max-w-[100px] truncate">
+                    {user?.full_name}
+                  </span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-apple-dim transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Dropdown Card */}
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-64 p-3 bg-apple-canvas/95 dark:bg-[#1c1c1e]/95 border border-apple-border rounded-2xl shadow-xl backdrop-blur-2xl text-xs space-y-3 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="p-2 bg-black/[0.02] dark:bg-white/[0.03] rounded-xl border border-black/[0.06] dark:border-white/[0.06] space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-apple-text truncate">{user?.full_name}</span>
+                        <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-apple-blue/15 text-apple-blue">
+                          {user?.provider === 'google' ? 'Google' : user?.provider === 'demo' ? 'Demo' : 'Email'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-apple-muted truncate">{user?.email}</p>
+                    </div>
+
+                    <div className="border-t border-apple-border/60 pt-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          playRetroSound('select');
+                          setShowUserMenu(false);
+                          await logout();
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-apple-red hover:bg-apple-red/10 transition-colors font-medium cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Keluar / Sign Out</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => openAuthModal('/app')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-apple-blue hover:bg-blue-600 text-white rounded-full text-xs font-medium transition-colors cursor-pointer"
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Masuk</span>
+              </button>
+            )}
+          </div>
         </div>
 
       </div>

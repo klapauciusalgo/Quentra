@@ -10,6 +10,8 @@ import { playRetroSound } from './utils/formatters';
 import { Bell, BarChart3, Compass, ShieldCheck, Grid } from 'lucide-react';
 import { API_BASE, getWsUrl } from './config';
 import strategiesData from './data/strategiesData.json';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import AuthModal from './components/AuthModal';
 
 // Minimal market regime and session state
 const DEFAULT_FLOOR_STATE = {
@@ -25,7 +27,9 @@ const DEFAULT_FLOOR_STATE = {
   },
 };
 
-export default function App() {
+function TradingApp() {
+  const { isAuthenticated, isLoading, openAuthModal } = useAuth();
+
   const [status, setStatus] = useState({
     binance_ws_connected: false,
     ticker_status: 'INITIALIZING',
@@ -99,6 +103,14 @@ export default function App() {
         setSelectedStrategyId(urlStrat);
       }
       if (p.startsWith('/app')) {
+        if (!isLoading && !isAuthenticated) {
+          setViewMode('landing');
+          if (window.location.pathname !== '/') {
+            window.history.replaceState({ viewMode: 'landing' }, '', '/');
+          }
+          openAuthModal('/app');
+          return;
+        }
         setViewMode('dashboard');
         document.title = 'Quentra Pro · Quantitative Trading Terminal';
       } else {
@@ -110,7 +122,18 @@ export default function App() {
     syncRouteFromLocation();
     window.addEventListener('popstate', syncRouteFromLocation);
     return () => window.removeEventListener('popstate', syncRouteFromLocation);
-  }, []);
+  }, [isLoading, isAuthenticated, openAuthModal]);
+
+  // Route Protection: Prevent unauthorized terminal access if unauthenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated && viewMode === 'dashboard') {
+      setViewMode('landing');
+      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/app')) {
+        window.history.replaceState({ viewMode: 'landing' }, '', '/');
+      }
+      openAuthModal('/app');
+    }
+  }, [isLoading, isAuthenticated, viewMode, openAuthModal]);
 
   const toggleTheme = () => {
     playRetroSound('blip');
@@ -640,7 +663,16 @@ export default function App() {
     }
   };
 
-  const handleEnterDashboard = (stratId = null) => {
+  const handleEnterDashboard = (stratIdOrTarget = null) => {
+    let stratId = null;
+    if (typeof stratIdOrTarget === 'string') {
+      if (stratIdOrTarget.includes('strategy=')) {
+        const match = stratIdOrTarget.match(/strategy=([^&]+)/);
+        if (match) stratId = decodeURIComponent(match[1]);
+      } else if (!stratIdOrTarget.startsWith('/')) {
+        stratId = stratIdOrTarget;
+      }
+    }
     const targetStrat = stratId || selectedStrategyId;
     if (stratId) {
       setSelectedStrategyId(stratId);
@@ -665,16 +697,36 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Loading state when user directly loads /app while session is validating
+  if (viewMode === 'dashboard' && isLoading) {
+    return (
+      <div className="min-h-screen bg-apple-canvas flex flex-col items-center justify-center text-apple-text">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 rounded-2xl bg-apple-blue/15 border border-apple-blue/30 flex items-center justify-center animate-pulse">
+            <span className="text-apple-blue font-bold text-sm">Q</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-apple-muted font-medium">
+            <span className="w-2 h-2 rounded-full bg-apple-blue animate-ping" />
+            <span>Memverifikasi sesi trading...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (viewMode === 'landing') {
     return (
-      <LandingPage
-        ticker={ticker}
-        status={status}
-        floor={floor}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        onEnterDashboard={handleEnterDashboard}
-      />
+      <>
+        <LandingPage
+          ticker={ticker}
+          status={status}
+          floor={floor}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onEnterDashboard={handleEnterDashboard}
+        />
+        <AuthModal onSuccess={(target) => handleEnterDashboard(target)} />
+      </>
     );
   }
 
@@ -864,6 +916,17 @@ export default function App() {
         </div>
       </footer>
 
+      {/* Auth Modal for Re-Authentication or Session Expiration */}
+      <AuthModal onSuccess={(target) => handleEnterDashboard(target)} />
+
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <TradingApp />
+    </AuthProvider>
   );
 }

@@ -13,3 +13,6 @@ export const getWsUrl = () => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}/ws`;
 };
+
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://xtibimfydxnooeooiufl.supabase.co';
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_T03KAiPRsWNWrkKT5hHVGw_xg3A7jzd';

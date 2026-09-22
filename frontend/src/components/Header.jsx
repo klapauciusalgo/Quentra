@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { formatPrice, formatPercent, playRetroSound, isAudioEnabled, toggleAudio } from '../utils/formatters';
-import { Volume2, VolumeX, Zap, Clock, Sun, Moon, Compass, LogOut, User, ChevronDown, ShieldCheck } from 'lucide-react';
+import { Volume2, VolumeX, Zap, Sun, Moon, Compass, LogOut, User, ChevronDown, ShieldCheck } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import { useAuth } from '../context/AuthContext';
 
@@ -129,12 +129,6 @@ export default function Header({
 
         {/* Status Indicators & Tactile Controls */}
         <div className="flex items-center gap-2.5">
-          {/* Market Session Pill */}
-          <div className="hidden md:flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-full px-3 py-1 text-xs text-apple-muted">
-            <Clock className="w-3.5 h-3.5 text-apple-orange" />
-            <span className="truncate max-w-[140px]">{floor?.session?.name || 'Asia Market'}</span>
-          </div>
-
           {/* Binance WebSocket Status */}
           <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-full px-3 py-1 text-xs">
             <span

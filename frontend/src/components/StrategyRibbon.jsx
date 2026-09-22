@@ -8,7 +8,6 @@ import {
   Zap, 
   Activity, 
   ChevronRight,
-  Clock, 
   Compass,
   ArrowRight,
   Sliders
@@ -29,7 +28,6 @@ export function StrategySelectorBar({
   const longStrategies = strategies.filter((s) => s.type === 'LONG');
   const shortStrategies = strategies.filter((s) => s.type === 'SHORT');
 
-  const session = floor?.session || { name: 'London / NY Overlap', code: 'PEAK' };
   const regime = floor?.market_regime || { weekly_ma55: 82654, distance_pct: -6.5 };
 
   return (
@@ -47,12 +45,6 @@ export function StrategySelectorBar({
         </div>
 
         <div className="flex items-center gap-2 text-xs overflow-x-auto no-scrollbar max-w-full">
-          {/* Market Session Pill */}
-          <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-full px-2.5 py-1 text-apple-muted whitespace-nowrap shrink-0">
-            <Clock className="w-3.5 h-3.5 text-apple-orange" />
-            <span className="truncate max-w-[170px] sm:max-w-none">Session: {session.name || 'Asia / Global'}</span>
-          </div>
-
           {/* Macro Regime Pill */}
           <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-full px-2.5 py-1 whitespace-nowrap shrink-0">
             <Compass className="w-3.5 h-3.5 text-apple-purple" />

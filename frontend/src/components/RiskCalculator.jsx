@@ -69,8 +69,12 @@ export default function RiskCalculator({
   currentBtcPrice = 77300,
   strategies = strategiesData,
   selectedStrategyId = 'pippo-1h-enhanced',
-  onSelectStrategy
+  onSelectStrategy,
+  selectedAsset = 'BTCUSDT'
 }) {
+  const isEth = selectedAsset === 'ETHUSDT';
+  const assetName = isEth ? 'Ethereum' : 'Bitcoin';
+  const assetShort = isEth ? 'ETH' : 'BTC';
   const [initialCapital, setInitialCapital] = useState(1000);
   const [leverageTier, setLeverageTier] = useState('5x_safe'); // '1x_spot', '2x_compound', '3x_tactical', '5x_safe', 'custom'
   const [customLeverage, setCustomLeverage] = useState(2.5);
@@ -150,7 +154,7 @@ export default function RiskCalculator({
       riskTierClass: 'text-apple-green',
       projectedReturnPct: sim5x.projectedReturnPct > 0 ? sim5x.projectedReturnPct : benchmarkReturnPct,
       maxDrawdownPct: sim5x.maxDrawdownPct !== 0 ? sim5x.maxDrawdownPct : benchmarkMaxDd * 0.7,
-      note: `Only 20% of capital allocated to futures margin with 5x leverage. 80% remains protected in spot or cold reserve. Bitcoin would have to move 96% against the position to liquidate.`
+      note: `Only 20% of capital allocated to futures margin with 5x leverage. 80% remains protected in spot or cold reserve. ${assetName} would have to move 96% against the position to liquidate.`
     };
 
     // Custom Leverage Tier
@@ -528,7 +532,7 @@ export default function RiskCalculator({
         <p>
           Strategy <strong className="text-apple-text">{activeStrat.name}</strong> operates on a <strong className="text-apple-text">{activeStrat.timeframe} {activeStrat.type}</strong> cadence with a disciplined <strong className="text-apple-red">{hardStopPct.toFixed(1)}% hard stop loss</strong>.
           Under the <strong className="text-apple-text">{currentTier.name}</strong> model, your initial allocation of <strong className="text-apple-text">${initialCapital.toLocaleString()}</strong> simulated across <strong className="text-apple-text">{trades.length} historical trades</strong> yields a projected compounded value of <strong className="text-apple-green">{formatPrice(projectedFinal)}</strong> (+{Math.round(currentTier.projectedReturnPct).toLocaleString()}% ROI).
-          Liquidation is triggered only if Bitcoin {isLong ? 'crashes' : 'pumps'} by <strong className="text-apple-orange">{currentTier.liquidationDistancePct.toFixed(1)}%</strong> to <strong className="text-apple-text">{currentTier.liquidationPrice > 0 ? formatPrice(currentTier.liquidationPrice) : '$0.00'}</strong>, providing a comfortable <strong className="text-apple-cyan">{safetyMultiplier.toFixed(1)}x safety multiplier</strong> over the algorithm's stop loss trigger at <strong className="text-apple-text">{formatPrice(stopLossPrice)}</strong>.
+          Liquidation is triggered only if {assetName} {isLong ? 'crashes' : 'pumps'} by <strong className="text-apple-orange">{currentTier.liquidationDistancePct.toFixed(1)}%</strong> to <strong className="text-apple-text">{currentTier.liquidationPrice > 0 ? formatPrice(currentTier.liquidationPrice) : '$0.00'}</strong>, providing a comfortable <strong className="text-apple-cyan">{safetyMultiplier.toFixed(1)}x safety multiplier</strong> over the algorithm's stop loss trigger at <strong className="text-apple-text">{formatPrice(stopLossPrice)}</strong>.
         </p>
       </div>
 

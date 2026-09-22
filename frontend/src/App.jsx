@@ -986,6 +986,7 @@ function TradingApp() {
               strategies={strategies}
               selectedStrategyId={selectedStrategyId}
               onSelectStrategy={handleSelectStrategy}
+              selectedAsset={selectedAsset}
             />
           </section>
         )}

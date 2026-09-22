@@ -201,11 +201,12 @@ export default function Header({
           <NotificationBell
             activeSignals={activeSignals}
             notifications={notifications}
-            currentBtcPrice={ticker?.price || 77300}
+            currentBtcPrice={ticker?.price || (selectedAsset === 'ETHUSDT' ? 2650 : 77300)}
             onSelectStrategy={onSelectStrategy}
             onSimulateSignal={onSimulateSignal}
             onCloseSignal={onCloseSignal}
             onClearNotifications={onClearNotifications}
+            selectedAsset={selectedAsset}
           />
 
           {/* Return to Landing Page Overview */}

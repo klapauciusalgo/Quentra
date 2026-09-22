@@ -486,9 +486,9 @@ export default function StrategyDetail({
                 </div>
               )}
 
-              {/* TAB 4: ALGO VS BITCOIN BENCHMARK VISUALIZER */}
+              {/* TAB 4: ALGO VS BITCOIN/ETHEREUM BENCHMARK VISUALIZER */}
               {activeTab === 'vs-btc' && (
-                <AlgoVsBtcVisualizer strategy={strategy} />
+                <AlgoVsBtcVisualizer strategy={strategy} selectedAsset={selectedAsset} />
               )}
             </>
           )}

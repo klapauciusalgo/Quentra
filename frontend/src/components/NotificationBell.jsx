@@ -22,7 +22,8 @@ export default function NotificationBell({
   onSelectStrategy,
   onSimulateSignal,
   onCloseSignal,
-  onClearNotifications
+  onClearNotifications,
+  selectedAsset = 'BTCUSDT'
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
@@ -359,7 +360,7 @@ export default function NotificationBell({
           <div className="mt-3 pt-2.5 border-t border-black/[0.08] dark:border-white/[0.08] flex items-center justify-between text-[10px] text-apple-dim">
             <span className="flex items-center gap-1">
               <Activity className="w-3 h-3 text-apple-cyan" />
-              <span>BTC: {formatPrice(currentBtcPrice)}</span>
+              <span>{selectedAsset === 'ETHUSDT' ? 'ETH' : 'BTC'}: {formatPrice(currentBtcPrice)}</span>
             </span>
             <span className="font-mono">Autonomous Core v2.4</span>
           </div>

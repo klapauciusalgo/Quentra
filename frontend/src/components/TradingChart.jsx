@@ -11,6 +11,7 @@ import {
 import { formatPrice, formatPercent, playRetroSound } from '../utils/formatters';
 import { API_BASE } from '../config';
 import klinesBaseline from '../data/klinesBaseline.json';
+import klinesBaselineEth from '../data/klinesBaseline_eth.json';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -83,7 +84,10 @@ export default function TradingChart({
   const priceLinesRef = useRef([]);
 
   const [loading, setLoading] = useState(false);
-  const [candles, setCandles] = useState(() => klinesBaseline[timeframe] || []);
+  const [candles, setCandles] = useState(() => {
+    const source = symbol === 'ETHUSDT' ? klinesBaselineEth : klinesBaseline;
+    return source[timeframe] || [];
+  });
   const [hoveredData, setHoveredData] = useState(null);
   const [hoveredSignal, setHoveredSignal] = useState(null);
   const [showMarkers, setShowMarkers] = useState(true);
@@ -261,9 +265,10 @@ export default function TradingChart({
   useEffect(() => {
     let isMounted = true;
 
-    // 0. Instantly populate baseline candles for zero-latency initial paint (if BTC)
-    if (symbol === 'BTCUSDT' && klinesBaseline[timeframe] && klinesBaseline[timeframe].length > 0) {
-      setCandles(klinesBaseline[timeframe]);
+    // 0. Instantly populate baseline candles for zero-latency initial paint (BTC or ETH)
+    const baselineSource = symbol === 'ETHUSDT' ? klinesBaselineEth : klinesBaseline;
+    if (baselineSource && baselineSource[timeframe] && baselineSource[timeframe].length > 0) {
+      setCandles(baselineSource[timeframe]);
       setLoading(false);
     } else {
       setLoading(true);

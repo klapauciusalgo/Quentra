@@ -16,6 +16,18 @@ import {
 } from 'lucide-react';
 import { formatPrice, formatPercent, playRetroSound } from '../utils/formatters';
 import klinesBaseline from '../data/klinesBaseline.json';
+import klinesBaselineEth from '../data/klinesBaseline_eth.json';
+
+// Ground truth Ethereum annual returns (2020-2026)
+const ETH_ANNUAL_RETURNS = {
+  2020: { return_pct: 622.67, start_px: 135.37, end_px: 978.28, regime: 'DeFi Summer & Protocol Expansion' },
+  2021: { return_pct: 291.31, start_px: 978.33, end_px: 3828.27, regime: 'Double Peak ATH & NFT Supercycle' },
+  2022: { return_pct: -68.64, start_px: 3828.11, end_px: 1200.34, regime: 'Macro Contraction & The Merge' },
+  2023: { return_pct: 90.10, start_px: 1200.33, end_px: 2281.87, regime: 'Staking Inflow & L2 Rollup Scaling' },
+  2024: { return_pct: 59.34, start_px: 2281.87, end_px: 3635.99, regime: 'Spot ETH ETF Launch Expansion' },
+  2025: { return_pct: -13.51, start_px: 3636.00, end_px: 3144.70, regime: 'Institutional Asset Rebalancing' },
+  2026: { return_pct: -15.88, start_px: 3144.71, end_px: 2645.21, regime: 'Current High-Base Range' },
+};
 
 // Ground truth Bitcoin annual returns (2020-2026)
 const BTC_ANNUAL_RETURNS = {
@@ -28,7 +40,11 @@ const BTC_ANNUAL_RETURNS = {
   2026: { return_pct: -15.35, start_px: 91529.74, end_px: 77484.00, regime: 'Current High-Base Range' },
 };
 
-export default function AlgoVsBtcVisualizer({ strategy }) {
+export default function AlgoVsBtcVisualizer({ strategy, selectedAsset = 'BTCUSDT' }) {
+  const isEth = selectedAsset === 'ETHUSDT';
+  const assetName = isEth ? 'Ethereum' : 'Bitcoin';
+  const assetShort = isEth ? 'ETH' : 'BTC';
+  const benchmarkColor = isEth ? '#627EEA' : '#FF9F0A';
   const [metricMode, setMetricMode] = useState('EQUITY'); // 'EQUITY' ($10k base) | 'RETURN' (%) | 'ALPHA' (delta %)
   const [rangePreset, setRangePreset] = useState('ALL'); // 'ALL' | '2020-2022' | '2023-2024' | '2025-2026'
   const [hoveredPoint, setHoveredPoint] = useState(null);
@@ -37,11 +53,12 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
 
   const trades = strategy?.trades || [];
   const weeklyBars = useMemo(() => {
-    const raw = klinesBaseline['1w'] || [];
+    const source = isEth ? klinesBaselineEth : klinesBaseline;
+    const raw = source['1w'] || [];
     return raw.filter((c) => c.time >= 1577836800); // from Jan 1, 2020
-  }, []);
+  }, [isEth]);
 
-  const startBtcPrice = weeklyBars[0]?.close || 8184.98;
+  const startBtcPrice = weeklyBars[0]?.close || (isEth ? 135.37 : 8184.98);
   const initialCapital = 10000;
 
   // Build high-resolution comparison timeline
@@ -293,9 +310,10 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
   // Year-by-year comparative table
   const yearlyComparison = useMemo(() => {
     const stratYearly = strategy?.yearly_stats || [];
-    return Object.keys(BTC_ANNUAL_RETURNS).map((yStr) => {
+    const annualSource = isEth ? ETH_ANNUAL_RETURNS : BTC_ANNUAL_RETURNS;
+    return Object.keys(annualSource).map((yStr) => {
       const year = parseInt(yStr, 10);
-      const btc = BTC_ANNUAL_RETURNS[year];
+      const btc = annualSource[year];
       const algoY = stratYearly.find((item) => item.year === year);
       const algoReturn = algoY ? algoY.total_return_pct : 0.0;
       const alpha = algoReturn - btc.return_pct;
@@ -313,7 +331,7 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
         profitFactor: algoY?.profit_factor || 0,
       };
     });
-  }, [strategy]);
+  }, [strategy, isEth]);
 
   const isLong = strategy?.type === 'LONG';
 
@@ -334,10 +352,10 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
               </span>
             </div>
             <h3 className="text-lg md:text-xl font-bold text-apple-text tracking-tight flex items-center gap-2">
-              <span>{strategy?.name} vs Bitcoin Buy & Hold</span>
+              <span>{strategy?.name} vs {assetName} Buy & Hold</span>
             </h3>
             <p className="text-xs text-apple-muted max-w-2xl leading-relaxed">
-              Real-world mathematical comparison evaluating capital growth, drawdown mitigation during bear cycles, and net excess return (Alpha) versus passive Bitcoin holding.
+              Real-world mathematical comparison evaluating capital growth, drawdown mitigation during bear cycles, and net excess return (Alpha) versus passive {assetName} holding.
             </p>
           </div>
 
@@ -356,7 +374,7 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
                 </div>
                 <div className="text-[10px] text-apple-muted">
                   {summary.outperformanceRatio > 1 
-                    ? `${summary.outperformanceRatio}x More Wealth than Holding BTC` 
+                    ? `${summary.outperformanceRatio}x More Wealth than Holding ${assetShort}` 
                     : 'Systematic Capital Shield'}
                 </div>
               </div>
@@ -371,18 +389,18 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
             <div className="bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.06] dark:border-white/[0.06] rounded-2xl p-3.5 space-y-1">
               <div className="text-[11px] text-apple-muted font-medium flex items-center justify-between">
                 <span>Net Return</span>
-                <span className="text-[10px] font-semibold text-apple-blue">Algo vs BTC</span>
+                <span className="text-[10px] font-semibold text-apple-blue">Algo vs {assetShort}</span>
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-lg font-bold text-apple-green font-mono tabular-nums">
                   +{Number(summary.algoReturnPct).toLocaleString()}%
                 </span>
-                <span className="text-xs text-apple-orange font-mono tabular-nums">
-                  (+{Number(summary.btcReturnPct).toLocaleString()}%)
+                <span className={`text-xs font-mono tabular-nums ${isEth ? 'text-indigo-400' : 'text-apple-orange'}`}>
+                  ({summary.btcReturnPct >= 0 ? '+' : ''}{Number(summary.btcReturnPct).toLocaleString()}%)
                 </span>
               </div>
               <div className="text-[10px] text-apple-dim">
-                Algo Return vs Passive BTC Return
+                Algo Return vs Passive {assetShort} Return
               </div>
             </div>
 
@@ -435,7 +453,7 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
                   {summary.outperformanceRatio}x
                 </span>
                 <span className="text-xs text-apple-muted">
-                  over Bitcoin
+                  over {assetName}
                 </span>
               </div>
               <div className="text-[10px] text-apple-dim">
@@ -457,7 +475,7 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
             {[
               { id: 'EQUITY', label: 'Portfolio Growth ($10k Base)' },
               { id: 'RETURN', label: 'Cumulative Return (%)' },
-              { id: 'ALPHA', label: 'Alpha Spread (% Over BTC)' },
+              { id: 'ALPHA', label: `Alpha Spread (% Over ${assetShort})` },
             ].map((m) => (
               <button
                 key={m.id}
@@ -510,12 +528,12 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
               <div className="flex items-center gap-2">
                 <span className="w-3.5 h-1.5 rounded-full bg-apple-green shadow-[0_0_6px_rgba(48,209,88,0.6)]" />
                 <span className="font-semibold text-apple-green">Positive Alpha</span>
-                <span className="text-[10px] text-apple-dim">(Outperforming BTC Buy & Hold)</span>
+                <span className="text-[10px] text-apple-dim">(Outperforming {assetShort} Buy & Hold)</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3.5 h-1.5 rounded-full bg-apple-red shadow-[0_0_6px_rgba(255,69,58,0.6)]" />
                 <span className="font-semibold text-apple-red">Negative Alpha</span>
-                <span className="text-[10px] text-apple-dim">(Trailing BTC / Consolidation Lag)</span>
+                <span className="text-[10px] text-apple-dim">(Trailing {assetShort} / Consolidation Lag)</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3.5 h-0.5 border-b border-dashed border-apple-muted" />
@@ -531,8 +549,8 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
                 <span className="text-[10px] text-apple-dim">(Systematic Execution)</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3.5 h-1 rounded-full bg-apple-orange border-b border-dashed" />
-                <span className="font-semibold text-apple-orange">Bitcoin Buy & Hold</span>
+                <span className={`w-3.5 h-1 rounded-full border-b border-dashed ${isEth ? 'bg-[#627EEA]' : 'bg-apple-orange'}`} />
+                <span className={`font-semibold ${isEth ? 'text-indigo-400' : 'text-apple-orange'}`}>{assetName} Buy & Hold</span>
                 <span className="text-[10px] text-apple-dim">(Passive Benchmark)</span>
               </div>
             </div>
@@ -562,10 +580,10 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
                   <stop offset="100%" stopColor="#0071E3" stopOpacity="0.0" />
                 </linearGradient>
 
-                {/* BTC Orange Gradient */}
+                {/* Benchmark Asset Gradient */}
                 <linearGradient id="btcGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#FF9F0A" stopOpacity="0.22" />
-                  <stop offset="100%" stopColor="#FF9F0A" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor={benchmarkColor} stopOpacity="0.22" />
+                  <stop offset="100%" stopColor={benchmarkColor} stopOpacity="0.0" />
                 </linearGradient>
 
                 {/* Alpha Area Gradient (Dual Color: Apple Green above zero, Apple Red below zero) */}
@@ -701,7 +719,7 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
                   <path
                     d={chartData.btcPath}
                     fill="none"
-                    stroke="#FF9F0A"
+                    stroke={benchmarkColor}
                     strokeWidth="2"
                     strokeDasharray="4,4"
                     strokeLinecap="round"
@@ -739,13 +757,14 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
                     strokeDasharray="2,2"
                   />
 
-                  {/* Dot on BTC curve */}
+                  {/* Dot on Benchmark curve */}
                   {metricMode !== 'ALPHA' && mousePos.btcY !== undefined && (
                     <circle
                       cx={mousePos.x}
                       cy={mousePos.btcY}
                       r="4.5"
-                      className="fill-apple-orange stroke-white dark:stroke-[#0C0D12]"
+                      fill={benchmarkColor}
+                      className="stroke-white dark:stroke-[#0C0D12]"
                       strokeWidth="2"
                     />
                   )}
@@ -780,7 +799,7 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
                   {hoveredPoint.date}
                 </span>
                 <span className="text-[10px] text-apple-dim font-mono">
-                  BTC @ ${Math.round(hoveredPoint.btcPrice).toLocaleString()}
+                  {assetShort} @ ${Math.round(hoveredPoint.btcPrice).toLocaleString()}
                 </span>
               </div>
 
@@ -797,8 +816,8 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
 
                 {/* BTC value */}
                 <div className="flex items-center justify-between text-apple-orange">
-                  <span className="text-[11px] font-sans font-medium text-apple-muted">BTC {metricMode === 'EQUITY' ? 'Equity' : 'Return'}:</span>
-                  <span className={`font-medium tabular-nums ${hoveredPoint.btcReturnPct >= 0 ? 'text-apple-orange' : 'text-apple-dim'}`}>
+                  <span className="text-[11px] font-sans font-medium text-apple-muted">{assetShort} {metricMode === 'EQUITY' ? 'Equity' : 'Return'}:</span>
+                  <span className={`font-medium tabular-nums ${hoveredPoint.btcReturnPct >= 0 ? (isEth ? 'text-indigo-400' : 'text-apple-orange') : 'text-apple-dim'}`}>
                     {metricMode === 'EQUITY' 
                       ? `$${hoveredPoint.btcEquity.toLocaleString()}` 
                       : `${hoveredPoint.btcReturnPct >= 0 ? '+' : ''}${hoveredPoint.btcReturnPct}%`}
@@ -845,7 +864,7 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
               <span>Year-by-Year Alpha Audit (2020 - 2026)</span>
             </h4>
             <p className="text-xs text-apple-muted mt-0.5">
-              Granular comparison of strategy performance against Bitcoin in each distinct market regime.
+              Granular comparison of strategy performance against {assetName} in each distinct market regime.
             </p>
           </div>
           <span className="text-[11px] font-semibold text-apple-dim uppercase tracking-wider">
@@ -861,7 +880,7 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
                   <th className="py-2.5 text-left font-semibold">Year</th>
                   <th className="py-2.5 text-left font-semibold">Market Regime</th>
                   <th className="py-2.5 text-right font-semibold">Algo Return</th>
-                  <th className="py-2.5 text-right font-semibold">Bitcoin Return</th>
+                  <th className="py-2.5 text-right font-semibold">{assetName} Return</th>
                   <th className="py-2.5 text-right font-semibold">Alpha Spread</th>
                   <th className="py-2.5 text-center font-semibold">Trades</th>
                   <th className="py-2.5 text-right font-semibold">Outcome Verdict</th>
@@ -894,7 +913,7 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
 
                       {/* Bitcoin Return */}
                       <td className="py-3 text-right font-mono font-medium whitespace-nowrap">
-                        <span className={row.btcReturn >= 0 ? 'text-apple-orange' : 'text-apple-dim'}>
+                        <span className={row.btcReturn >= 0 ? (isEth ? 'text-indigo-400' : 'text-apple-orange') : 'text-apple-dim'}>
                           {row.btcReturn >= 0 ? `+${row.btcReturn.toFixed(1)}%` : `${row.btcReturn.toFixed(1)}%`}
                         </span>
                       </td>
@@ -928,7 +947,7 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
                           ) : isAlphaPositive ? (
                             <>
                               <TrendingUp className="w-3 h-3" />
-                              Outperformed BTC
+                              Outperformed {assetShort}
                             </>
                           ) : (
                             'Controlled Cadence'
@@ -955,7 +974,7 @@ export default function AlgoVsBtcVisualizer({ strategy }) {
             1. Asymmetric Drawdown Avoidance
           </h5>
           <p className="text-[11px] text-apple-muted leading-relaxed">
-            A -70% crash requires +233% gain just to break even. This algo exits on momentum breakdown, holding cash while Bitcoin bleeds, preserving critical compounding principal.
+            A -70% crash requires +233% gain just to break even. This algo exits on momentum breakdown, holding cash while {assetName} bleeds, preserving critical compounding principal.
           </p>
         </div>
 

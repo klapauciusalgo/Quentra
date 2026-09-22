@@ -46,8 +46,11 @@ export function mapAuthError(error) {
   if (msg.includes('password should be at least') || msg.includes('weak_password')) {
     return 'Password terlalu pendek. Gunakan minimal 6 karakter.';
   }
-  if (code === 'over_email_send_rate_limit' || msg.includes('rate limit')) {
-    return 'Terlalu banyak percobaan. Coba lagi dalam beberapa menit.';
+  if (code === 'over_email_send_rate_limit' || msg.includes('rate limit') || msg.includes('rate_limit')) {
+    return 'Batas pengiriman email verifikasi tercapai (kuota email gratis Supabase). Mohon tunggu beberapa saat sebelum mencoba lagi, atau konfigurasikan Custom SMTP di dashboard Supabase.';
+  }
+  if (code === 'email_address_invalid' || (msg.includes('email') && msg.includes('invalid'))) {
+    return 'Format alamat email tidak valid atau domain tidak didukung. Gunakan alamat email aktif seperti @gmail.com.';
   }
   if (msg.includes('network') || msg.includes('failed to fetch') || msg.includes('521') || msg.includes('offline')) {
     return 'Koneksi ke server auth terputus atau origin sedang standby. Silakan coba lagi.';
@@ -110,14 +113,38 @@ export async function signUpWithEmail(email, password, metadata = {}) {
     throw new Error('Supabase client tidak terkonfigurasi');
   }
 
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const emailRedirectTo = `${origin}/app`;
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
+      emailRedirectTo: emailRedirectTo,
       data: {
         full_name: metadata.fullName || email.split('@')[0],
         name: metadata.fullName || email.split('@')[0],
       },
+    },
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function resendVerificationEmail(email) {
+  if (!supabase) {
+    throw new Error('Supabase client tidak terkonfigurasi');
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const emailRedirectTo = `${origin}/app`;
+
+  const { data, error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: {
+      emailRedirectTo: emailRedirectTo,
     },
   });
 

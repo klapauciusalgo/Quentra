@@ -4,6 +4,7 @@ import {
   signInWithGoogle as sbSignInWithGoogle, 
   signInWithEmail as sbSignInWithEmail, 
   signUpWithEmail as sbSignUpWithEmail, 
+  resendVerificationEmail as sbResendVerificationEmail,
   signOut as sbSignOut,
   mapAuthError 
 } from '../services/supabaseClient';
@@ -146,15 +147,46 @@ export function AuthProvider({ children }) {
   const registerWithEmail = async (email, password, fullName) => {
     try {
       const data = await sbSignUpWithEmail(email, password, { fullName });
-      if (data?.user) {
+      
+      // Case 1: Supabase requires email verification (session is null)
+      if (data?.user && !data?.session) {
+        // If identities is empty array in Supabase, email is already registered
+        if (data.user.identities && data.user.identities.length === 0) {
+          throw new Error('Email ini sudah terdaftar. Silakan gunakan tab Masuk Akun.');
+        }
+
+        return {
+          needsEmailVerification: true,
+          email: data.user.email || email,
+          user: data.user,
+        };
+      }
+
+      // Case 2: Immediate login (auto-confirm is ON in Supabase or session active)
+      if (data?.user && data?.session) {
         const parsed = parseUserData(data.user, 'email');
         setUser(parsed);
         setSession(data.session);
         setIsAuthModalOpen(false);
-        return parsed;
+        return {
+          needsEmailVerification: false,
+          user: parsed,
+          session: data.session,
+        };
       }
+
+      return data;
     } catch (err) {
       console.error('Email signup error:', err);
+      throw err;
+    }
+  };
+
+  const resendVerification = async (email) => {
+    try {
+      return await sbResendVerificationEmail(email);
+    } catch (err) {
+      console.error('Resend verification error:', err);
       throw err;
     }
   };
@@ -203,6 +235,7 @@ export function AuthProvider({ children }) {
     loginWithGoogle,
     loginWithEmail,
     registerWithEmail,
+    resendVerification,
     loginDemoTrader,
     logout,
   };

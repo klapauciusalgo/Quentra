@@ -12,8 +12,7 @@ import {
   AlertCircle, 
   CheckCircle2, 
   ArrowRight, 
-  Shield,
-  Sparkles
+  Shield 
 } from 'lucide-react';
 
 export default function AuthModal({ onSuccess }) {
@@ -23,7 +22,6 @@ export default function AuthModal({ onSuccess }) {
     loginWithGoogle, 
     loginWithEmail, 
     registerWithEmail, 
-    loginDemoTrader,
     authRedirectTarget 
   } = useAuth();
 
@@ -121,20 +119,6 @@ export default function AuthModal({ onSuccess }) {
       const friendlyErr = mapAuthError(err);
       setErrorMessage(friendlyErr);
     }
-  };
-
-  const handleDemoLogin = () => {
-    playRetroSound('chime');
-    setIsLoading(true);
-    const demo = loginDemoTrader(
-      fullName || 'Demo Quant Trader', 
-      email || 'trader@quentra.io'
-    );
-    setSuccessMessage(`Selamat datang, ${demo.full_name}! Mengalihkan ke terminal...`);
-    setTimeout(() => {
-      setIsLoading(false);
-      if (onSuccess) onSuccess(authRedirectTarget);
-    }, 500);
   };
 
   return (
@@ -268,16 +252,6 @@ export default function AuthModal({ onSuccess }) {
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <div className="space-y-1.5 flex-1">
               <p className="leading-snug">{errorMessage}</p>
-              {errorMessage.includes('terputus') && (
-                <button
-                  type="button"
-                  onClick={handleDemoLogin}
-                  className="mt-1 px-3 py-1 bg-apple-blue/20 hover:bg-apple-blue/30 text-apple-blue text-[11px] font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Sparkles className="w-3 h-3" />
-                  <span>Buka Terminal dengan Akun Demo (Instant)</span>
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -368,19 +342,8 @@ export default function AuthModal({ onSuccess }) {
           </button>
         </form>
 
-        {/* Quick Demo Access Option */}
-        <div className="pt-2 text-center border-t border-black/[0.06] dark:border-white/[0.08]">
-          <button
-            type="button"
-            onClick={handleDemoLogin}
-            className="text-[11px] text-apple-muted hover:text-apple-blue transition-colors underline underline-offset-4 cursor-pointer"
-          >
-            Ingin melihat dulu? Masuk sebagai Demo Trader &rarr;
-          </button>
-        </div>
-
         {/* Security & Privacy Badge */}
-        <div className="flex items-center justify-center gap-1.5 text-[10px] text-apple-dim">
+        <div className="flex items-center justify-center gap-1.5 text-[10px] text-apple-dim pt-1 border-t border-black/[0.06] dark:border-white/[0.08]">
           <Shield className="w-3 h-3 text-apple-green" />
           <span>Sesi terenkripsi dan diverifikasi oleh Supabase Auth</span>
         </div>

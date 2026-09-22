@@ -60,6 +60,13 @@ export default function LandingPage({
     }
   };
 
+  // Strategy counts
+  const totalAlgosCount = (strategiesData || []).length;
+  const allCount = totalAlgosCount;
+  const longCount = (strategiesData || []).filter((s) => s.type === 'LONG' && s.id !== 'pure-macro-weekly-ma55').length;
+  const shortCount = (strategiesData || []).filter((s) => s.type === 'SHORT').length;
+  const macroCount = (strategiesData || []).filter((s) => s.id === 'pure-macro-weekly-ma55').length;
+
   // Filter strategies for the showcase grid
   const filteredStrategies = strategiesData.filter((s) => {
     if (activeCategory === 'LONG') return s.type === 'LONG' && s.id !== 'pure-macro-weekly-ma55';
@@ -113,7 +120,7 @@ export default function LandingPage({
           <nav className="hidden lg:flex items-center gap-6 text-xs text-apple-muted font-medium">
             <a href="#motion" className="hover:text-apple-text transition-colors">System In Motion</a>
             <a href="#features" className="hover:text-apple-text transition-colors">Core Features</a>
-            <a href="#strategies" className="hover:text-apple-text transition-colors">8 Quant Algos</a>
+            <a href="#strategies" className="hover:text-apple-text transition-colors">{totalAlgosCount} Quant Algos</a>
             <a href="#risk" className="hover:text-apple-text transition-colors">Capital Defense</a>
           </nav>
 
@@ -221,7 +228,7 @@ export default function LandingPage({
                 href="#strategies"
                 className="px-5 py-3.5 bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.1] active:scale-[0.98] border border-black/10 dark:border-white/15 text-apple-text text-sm font-medium rounded-2xl transition-all cursor-pointer"
               >
-                Explore 8 Models ↓
+                Explore {totalAlgosCount} Models ↓
               </a>
             </div>
 
@@ -229,7 +236,7 @@ export default function LandingPage({
             <div className="grid grid-cols-3 gap-3 pt-4 border-t border-black/[0.06] dark:border-white/[0.08]">
               <div className="apple-glass rounded-2xl p-3.5">
                 <div className="text-[11px] text-apple-muted font-medium">Audited Models</div>
-                <div className="text-lg font-bold text-apple-text font-mono mt-0.5">8 Algos</div>
+                <div className="text-lg font-bold text-apple-text font-mono mt-0.5">{totalAlgosCount} Algos</div>
                 <div className="text-[10px] text-apple-dim">Long · Short · Macro</div>
               </div>
 
@@ -436,7 +443,7 @@ export default function LandingPage({
         <div className="animate-marquee whitespace-nowrap flex items-center gap-8 text-apple-muted">
           <span>BTC/USDT LIVE STREAM</span>
           <span className="text-apple-dim">·</span>
-          <span className="text-apple-text font-semibold">8 AUDITED MODELS</span>
+          <span className="text-apple-text font-semibold">{totalAlgosCount} AUDITED MODELS</span>
           <span className="text-apple-dim">·</span>
           <span className="text-apple-green font-semibold">0.0% LIQUIDATION TRACK RECORD</span>
           <span className="text-apple-dim">·</span>
@@ -453,7 +460,7 @@ export default function LandingPage({
           {/* Duplicate set for seamless continuous marquee */}
           <span>BTC/USDT LIVE STREAM</span>
           <span className="text-apple-dim">·</span>
-          <span className="text-apple-text font-semibold">8 AUDITED MODELS</span>
+          <span className="text-apple-text font-semibold">{totalAlgosCount} AUDITED MODELS</span>
           <span className="text-apple-dim">·</span>
           <span className="text-apple-green font-semibold">0.0% LIQUIDATION TRACK RECORD</span>
           <span className="text-apple-dim">·</span>
@@ -745,14 +752,14 @@ export default function LandingPage({
         </div>
       </section>
 
-      {/* 6. Quantitative Strategy Directory (8 Audited Models) */}
+      {/* 6. Quantitative Strategy Directory (9 Audited Models) */}
       <section id="strategies" className="py-16 md:py-24 px-4 sm:px-6">
         <div className="max-w-[1400px] mx-auto space-y-10">
           
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div className="max-w-2xl space-y-2">
               <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-apple-text">
-                8 Quantitative Models Calibrated for Every Market Cycle
+                {totalAlgosCount} Quantitative Models Calibrated for Every Market Cycle
               </h2>
               <p className="text-xs sm:text-sm text-apple-muted leading-relaxed">
                 Choose between long-only momentum runners, macro cycle followers, and tactical short breakdown exploitations.
@@ -762,10 +769,10 @@ export default function LandingPage({
             {/* Filter Pills */}
             <div className="flex items-center gap-1.5 bg-black/[0.04] dark:bg-white/[0.05] border border-black/10 dark:border-white/10 p-1 rounded-2xl self-start md:self-auto">
               {[
-                { id: 'ALL', label: 'All Models (8)' },
-                { id: 'LONG', label: 'Long Momentum (4)' },
-                { id: 'SHORT', label: 'Short Breakdowns (3)' },
-                { id: 'MACRO', label: 'Macro Cycle (1)' }
+                { id: 'ALL', label: `All Models (${allCount})` },
+                { id: 'LONG', label: `Long Momentum (${longCount})` },
+                { id: 'SHORT', label: `Short Breakdowns (${shortCount})` },
+                { id: 'MACRO', label: `Macro Cycle (${macroCount})` }
               ].map((tab) => (
                 <button
                   key={tab.id}

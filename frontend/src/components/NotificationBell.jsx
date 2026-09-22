@@ -283,7 +283,7 @@ export default function NotificationBell({
                       No Active Buy / Sell Positions
                     </div>
                     <div className="text-[11px] text-apple-muted mt-0.5 leading-relaxed">
-                      Autonomous Engine is actively scanning real-time breakout / breakdown confirmation across 8 quantitative models.
+                      Autonomous Engine is actively scanning real-time breakout / breakdown confirmation across 9 quantitative models.
                     </div>
                   </div>
 

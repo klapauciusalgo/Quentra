@@ -145,15 +145,15 @@ def load_data_into_memory():
                     if not combined.get(field) and base_s.get(field):
                         combined[field] = base_s[field]
 
-                # Ensure metrics dict is fully populated
+                # Ensure metrics dict is fully populated with authoritative base calculations
                 base_metrics = base_s.get("metrics") or {}
                 m = combined.get("metrics") or {}
                 combined["metrics"] = {
-                    "total_return_pct": m.get("total_return_pct") or base_metrics.get("total_return_pct") or combined.get("total_return_pct", 0),
-                    "win_rate_pct": m.get("win_rate_pct") or base_metrics.get("win_rate_pct") or combined.get("win_rate_pct", 0),
-                    "profit_factor": m.get("profit_factor") or base_metrics.get("profit_factor") or combined.get("profit_factor", 1.0),
-                    "max_drawdown_pct": m.get("max_drawdown_pct") or base_metrics.get("max_drawdown_pct") or combined.get("max_drawdown_pct", 0),
-                    "total_trades": m.get("total_trades") or base_metrics.get("total_trades") or combined.get("trades_count", len(combined.get("trades", []))),
+                    "total_return_pct": base_metrics.get("total_return_pct") if base_metrics.get("total_return_pct") is not None else (m.get("total_return_pct") or combined.get("total_return_pct", 0)),
+                    "win_rate_pct": base_metrics.get("win_rate_pct") if base_metrics.get("win_rate_pct") is not None else (m.get("win_rate_pct") or combined.get("win_rate_pct", 0)),
+                    "profit_factor": base_metrics.get("profit_factor") if base_metrics.get("profit_factor") is not None else (m.get("profit_factor") or combined.get("profit_factor", 1.0)),
+                    "max_drawdown_pct": base_metrics.get("max_drawdown_pct") if base_metrics.get("max_drawdown_pct") is not None else (m.get("max_drawdown_pct") or combined.get("max_drawdown_pct", 0)),
+                    "total_trades": base_metrics.get("total_trades") if base_metrics.get("total_trades") is not None else (m.get("total_trades") or combined.get("trades_count", len(combined.get("trades", [])))),
                     "cagr_pct": base_metrics.get("cagr_pct", 0),
                     "calmar_ratio": base_metrics.get("calmar_ratio", 1.0),
                     "win_trades": base_metrics.get("win_trades", 0),
@@ -163,14 +163,18 @@ def load_data_into_memory():
                     "best_trade_pct": base_metrics.get("best_trade_pct", 0),
                     "worst_trade_pct": base_metrics.get("worst_trade_pct", 0),
                 }
+                combined["yearly_stats"] = base_s.get("yearly_stats", [])
                 combined["total_return_pct"] = combined["metrics"]["total_return_pct"]
                 combined["win_rate_pct"] = combined["metrics"]["win_rate_pct"]
                 combined["profit_factor"] = combined["metrics"]["profit_factor"]
                 # Deduplicate trades by trade_no
                 raw_trades = combined.get("trades") or base_s.get("trades", [])
-                unique_trades = {}
                 for tr in raw_trades:
                     t_no = tr.get("trade_no")
+                    if tr.get("status") in ["RUNNING", "OPEN (RUNNING)"] or tr.get("exit_time") in [None, "RUNNING"]:
+                        tr["status"] = "OPEN"
+                        if not tr.get("exit_time"):
+                            tr["exit_time"] = "RUNNING"
                     if t_no not in unique_trades:
                         unique_trades[t_no] = tr
                 combined["trades"] = sorted(unique_trades.values(), key=lambda x: x.get("trade_no", 0))
@@ -414,6 +418,8 @@ async def get_klines(
 def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
     from live_signal_engine import live_signal_engine
     sym = symbol.upper()
+    if s.get("id") in ["pippo-30m-new-gen", "pippo-30m-grd"]:
+        return s
     model = live_signal_engine.get_model(s["id"], symbol=sym)
     if not model:
         return s
@@ -504,11 +510,18 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
                 m_copy = dict(am)
                 m_copy["tradeNo"] = last_trade_no
                 base_markers.append(m_copy)
+    else:
+        # Preserve static open trade & markers if present in strategy catalog
+        orig_open_trade = next((t for t in s.get("trades", []) if t.get("status") == "OPEN" or t.get("exit_time") == "RUNNING"), None)
+        if orig_open_trade:
+            base_trades.append(orig_open_trade)
+        orig_active_markers = [m for m in s.get("markers", []) if m.get("isActive")]
+        base_markers.extend(orig_active_markers)
 
     s_copy["trades"] = base_trades
     s_copy["markers"] = sorted(base_markers, key=lambda m: m.get("time", 0))
-    s_copy["has_active_signal"] = (model.position_status == "OPEN")
-    s_copy["active_ticket"] = model.active_ticket
+    s_copy["has_active_signal"] = (model.position_status == "OPEN") or s.get("has_active_signal", False)
+    s_copy["active_ticket"] = model.active_ticket or s.get("active_ticket")
     return s_copy
 
 @app.get("/api/strategies")

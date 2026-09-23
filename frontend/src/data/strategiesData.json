@@ -11,12 +11,12 @@
     "recommended_for": "Traders looking to maximize full bull-run waves with tight asymmetric structural trailing without premature intraday shakeouts.",
     "badge": "Highest Profit Factor (5.60x)",
     "metrics": {
-      "total_return_pct": 2835.13,
-      "cagr_pct": 67.07,
+      "total_return_pct": 3037.06,
+      "cagr_pct": 69.12,
       "win_rate_pct": 73.33,
       "profit_factor": 5.6,
-      "max_drawdown_pct": -35.4,
-      "calmar_ratio": 1.89,
+      "max_drawdown_pct": -22.73,
+      "calmar_ratio": 3.04,
       "total_trades": 75,
       "win_trades": 55,
       "loss_trades": 20,
@@ -42,8 +42,8 @@
         "year": 2020,
         "trades": 16,
         "win_rate": 62.5,
-        "total_return_pct": 168.69,
-        "profit_factor": 6.53,
+        "total_return_pct": 234.93,
+        "profit_factor": 6.52,
         "wins": 10,
         "losses": 6
       },
@@ -51,7 +51,7 @@
         "year": 2021,
         "trades": 15,
         "win_rate": 60.0,
-        "total_return_pct": 59.31,
+        "total_return_pct": 47.08,
         "profit_factor": 2.94,
         "wins": 9,
         "losses": 6
@@ -60,7 +60,7 @@
         "year": 2022,
         "trades": 13,
         "win_rate": 92.31,
-        "total_return_pct": -3.77,
+        "total_return_pct": -3.83,
         "profit_factor": 0.26,
         "wins": 12,
         "losses": 1
@@ -69,8 +69,8 @@
         "year": 2023,
         "trades": 9,
         "win_rate": 77.78,
-        "total_return_pct": 110.58,
-        "profit_factor": 11.87,
+        "total_return_pct": 135.03,
+        "profit_factor": 11.86,
         "wins": 7,
         "losses": 2
       },
@@ -78,7 +78,7 @@
         "year": 2024,
         "trades": 2,
         "win_rate": 100.0,
-        "total_return_pct": 101.43,
+        "total_return_pct": 121.33,
         "profit_factor": 99.0,
         "wins": 2,
         "losses": 0
@@ -87,7 +87,7 @@
         "year": 2025,
         "trades": 9,
         "win_rate": 66.67,
-        "total_return_pct": 21.78,
+        "total_return_pct": 17.33,
         "profit_factor": 2.43,
         "wins": 6,
         "losses": 3
@@ -96,7 +96,7 @@
         "year": 2026,
         "trades": 11,
         "win_rate": 81.82,
-        "total_return_pct": 10.09,
+        "total_return_pct": 8.49,
         "profit_factor": 1.99,
         "wins": 9,
         "losses": 2
@@ -2947,7 +2947,12 @@
       ],
       "status": "LIVE_SIGNAL",
       "execution_mode": "AUTONOMOUS_ON_THE_FLY"
-    }
+    },
+    "total_return_pct": 3037.06,
+    "win_rate_pct": 73.33,
+    "profit_factor": 5.6,
+    "max_drawdown_pct": -22.73,
+    "trades_count": 75
   },
   {
     "id": "pippo-30m-new-gen",
@@ -2961,19 +2966,19 @@
     "recommended_for": "Traders looking for maximum capital preservation, low drawdown (-17.6%), and high consistency (7/7 positive years) via multi-timeframe moving average compression.",
     "badge": "7/7 Profitable Years (Max DD -17.6%)",
     "metrics": {
-      "total_return_pct": 1306.34,
-      "cagr_pct": 48.23,
+      "total_return_pct": 1251.76,
+      "cagr_pct": 48.13,
       "win_rate_pct": 34.84,
-      "profit_factor": 1.8,
-      "max_drawdown_pct": -17.59,
-      "calmar_ratio": 2.74,
+      "profit_factor": 1.96,
+      "max_drawdown_pct": -11.2,
+      "calmar_ratio": 4.3,
       "total_trades": 442,
       "win_trades": 154,
       "loss_trades": 288,
       "avg_win_pct": 3.79,
       "avg_loss_pct": -1.03,
       "best_trade_pct": 19.88,
-      "worst_trade_pct": -2.0
+      "worst_trade_pct": -2.1
     },
     "parameters": {
       "timeframe": "30m",
@@ -2992,7 +2997,7 @@
         "year": 2020,
         "trades": 79,
         "win_rate": 35.44,
-        "total_return_pct": 143.66,
+        "total_return_pct": 143.72,
         "profit_factor": 2.92,
         "wins": 28,
         "losses": 51
@@ -3001,7 +3006,7 @@
         "year": 2021,
         "trades": 54,
         "win_rate": 33.33,
-        "total_return_pct": 37.57,
+        "total_return_pct": 37.55,
         "profit_factor": 1.88,
         "wins": 18,
         "losses": 36
@@ -3010,7 +3015,7 @@
         "year": 2022,
         "trades": 40,
         "win_rate": 32.5,
-        "total_return_pct": 4.02,
+        "total_return_pct": 4.05,
         "profit_factor": 1.15,
         "wins": 13,
         "losses": 27
@@ -3019,7 +3024,7 @@
         "year": 2023,
         "trades": 80,
         "win_rate": 35.0,
-        "total_return_pct": 52.13,
+        "total_return_pct": 52.11,
         "profit_factor": 1.89,
         "wins": 28,
         "losses": 52
@@ -3028,7 +3033,7 @@
         "year": 2024,
         "trades": 83,
         "win_rate": 34.94,
-        "total_return_pct": 55.31,
+        "total_return_pct": 55.29,
         "profit_factor": 1.8,
         "wins": 29,
         "losses": 54
@@ -3037,7 +3042,7 @@
         "year": 2025,
         "trades": 58,
         "win_rate": 32.76,
-        "total_return_pct": 24.28,
+        "total_return_pct": 24.29,
         "profit_factor": 1.75,
         "wins": 19,
         "losses": 39
@@ -3046,8 +3051,8 @@
         "year": 2026,
         "trades": 48,
         "win_rate": 39.58,
-        "total_return_pct": 37.36,
-        "profit_factor": 2.11,
+        "total_return_pct": 32.01,
+        "profit_factor": 2.1,
         "wins": 19,
         "losses": 29
       }
@@ -19465,7 +19470,12 @@
       ],
       "status": "LIVE_SIGNAL",
       "execution_mode": "AUTONOMOUS_ON_THE_FLY"
-    }
+    },
+    "total_return_pct": 1251.76,
+    "win_rate_pct": 34.84,
+    "profit_factor": 1.96,
+    "max_drawdown_pct": -11.2,
+    "trades_count": 442
   },
   {
     "id": "pippo-30m-grd",
@@ -19477,18 +19487,18 @@
     "archetype": "High-Frequency Volatility Squeeze Sniper",
     "risk_tier": "Moderate",
     "recommended_for": "Traders seeking high cumulative returns (+1719.7%, CAGR 54.0%) with active market participation (724 trades) through 30M MA compression and 1H proximity regimes without 4H macro filters.",
-    "badge": "+1719.7% Return (CAGR 54.0%)",
+    "badge": "+1,649.6% Return (CAGR 53.2%)",
     "metrics": {
-      "total_return_pct": 1719.7,
-      "cagr_pct": 54.0,
-      "win_rate_pct": 32.87,
-      "profit_factor": 1.43,
-      "max_drawdown_pct": -21.44,
-      "calmar_ratio": 2.52,
+      "total_return_pct": 1649.61,
+      "cagr_pct": 53.21,
+      "win_rate_pct": 32.73,
+      "profit_factor": 1.64,
+      "max_drawdown_pct": -19.93,
+      "calmar_ratio": 2.67,
       "total_trades": 724,
-      "win_trades": 238,
-      "loss_trades": 486,
-      "avg_win_pct": 3.43,
+      "win_trades": 237,
+      "loss_trades": 487,
+      "avg_win_pct": 3.45,
       "avg_loss_pct": -1.02,
       "best_trade_pct": 19.88,
       "worst_trade_pct": -2.1
@@ -19510,8 +19520,8 @@
         "year": 2020,
         "trades": 104,
         "win_rate": 40.38,
-        "total_return_pct": 191.1,
-        "profit_factor": 2.79,
+        "total_return_pct": 191.11,
+        "profit_factor": 2.78,
         "wins": 42,
         "losses": 62
       },
@@ -19528,7 +19538,7 @@
         "year": 2022,
         "trades": 109,
         "win_rate": 22.94,
-        "total_return_pct": -16.41,
+        "total_return_pct": -16.07,
         "profit_factor": 0.85,
         "wins": 25,
         "losses": 84
@@ -19537,7 +19547,7 @@
         "year": 2023,
         "trades": 117,
         "win_rate": 33.33,
-        "total_return_pct": 96.05,
+        "total_return_pct": 95.32,
         "profit_factor": 2.0,
         "wins": 39,
         "losses": 78
@@ -19546,7 +19556,7 @@
         "year": 2024,
         "trades": 117,
         "win_rate": 37.61,
-        "total_return_pct": 85.15,
+        "total_return_pct": 85.18,
         "profit_factor": 1.87,
         "wins": 44,
         "losses": 73
@@ -19555,7 +19565,7 @@
         "year": 2025,
         "trades": 111,
         "win_rate": 27.93,
-        "total_return_pct": 7.91,
+        "total_return_pct": 7.9,
         "profit_factor": 1.14,
         "wins": 31,
         "losses": 80
@@ -19563,11 +19573,11 @@
       {
         "year": 2026,
         "trades": 87,
-        "win_rate": 34.48,
-        "total_return_pct": 24.48,
+        "win_rate": 33.33,
+        "total_return_pct": 19.64,
         "profit_factor": 1.4,
-        "wins": 30,
-        "losses": 57
+        "wins": 29,
+        "losses": 58
       }
     ],
     "markers": [
@@ -46417,7 +46427,12 @@
       ],
       "status": "LIVE_SIGNAL",
       "execution_mode": "AUTONOMOUS_ON_THE_FLY"
-    }
+    },
+    "total_return_pct": 1649.61,
+    "win_rate_pct": 32.73,
+    "profit_factor": 1.64,
+    "max_drawdown_pct": -19.93,
+    "trades_count": 724
   },
   {
     "id": "pippo-1h-enhanced",
@@ -46429,19 +46444,19 @@
     "archetype": "High Sharpe Flagship",
     "risk_tier": "Balanced",
     "recommended_for": "Traders seeking exceptional consistency, premier risk-adjusted returns, and superior multi-year compounding on the 1-hour timeframe.",
-    "badge": "Top Performer (+2,312%)",
+    "badge": "Top Performer (+2,392%)",
     "metrics": {
-      "total_return_pct": 2312.35,
-      "cagr_pct": 62.23,
-      "win_rate_pct": 65.62,
-      "profit_factor": 3.81,
-      "max_drawdown_pct": -45.99,
-      "calmar_ratio": 1.35,
-      "total_trades": 64,
+      "total_return_pct": 2392.04,
+      "cagr_pct": 63.17,
+      "win_rate_pct": 64.62,
+      "profit_factor": 3.76,
+      "max_drawdown_pct": -31.16,
+      "calmar_ratio": 2.03,
+      "total_trades": 65,
       "win_trades": 42,
-      "loss_trades": 22,
+      "loss_trades": 23,
       "avg_win_pct": 15.52,
-      "avg_loss_pct": -7.77,
+      "avg_loss_pct": -7.55,
       "best_trade_pct": 74.84,
       "worst_trade_pct": -8.08
     },
@@ -46462,8 +46477,8 @@
         "year": 2020,
         "trades": 11,
         "win_rate": 54.55,
-        "total_return_pct": 184.44,
-        "profit_factor": 5.56,
+        "total_return_pct": 251.89,
+        "profit_factor": 5.57,
         "wins": 6,
         "losses": 5
       },
@@ -46471,7 +46486,7 @@
         "year": 2021,
         "trades": 12,
         "win_rate": 66.67,
-        "total_return_pct": 55.92,
+        "total_return_pct": 41.66,
         "profit_factor": 2.73,
         "wins": 8,
         "losses": 4
@@ -46480,7 +46495,7 @@
         "year": 2022,
         "trades": 12,
         "win_rate": 83.33,
-        "total_return_pct": -15.07,
+        "total_return_pct": -14.57,
         "profit_factor": 0.07,
         "wins": 10,
         "losses": 2
@@ -46489,7 +46504,7 @@
         "year": 2023,
         "trades": 8,
         "win_rate": 50.0,
-        "total_return_pct": 126.47,
+        "total_return_pct": 138.14,
         "profit_factor": 4.91,
         "wins": 4,
         "losses": 4
@@ -46498,7 +46513,7 @@
         "year": 2024,
         "trades": 8,
         "win_rate": 75.0,
-        "total_return_pct": 103.15,
+        "total_return_pct": 113.72,
         "profit_factor": 7.38,
         "wins": 6,
         "losses": 2
@@ -46507,19 +46522,19 @@
         "year": 2025,
         "trades": 8,
         "win_rate": 50.0,
-        "total_return_pct": 14.02,
+        "total_return_pct": 7.11,
         "profit_factor": 1.55,
         "wins": 4,
         "losses": 4
       },
       {
         "year": 2026,
-        "trades": 5,
-        "win_rate": 80.0,
-        "total_return_pct": 11.79,
-        "profit_factor": 2.46,
+        "trades": 6,
+        "win_rate": 66.67,
+        "total_return_pct": 7.34,
+        "profit_factor": 1.86,
         "wins": 4,
-        "losses": 1
+        "losses": 2
       }
     ],
     "markers": [
@@ -48997,7 +49012,12 @@
       ],
       "status": "LIVE_SIGNAL",
       "execution_mode": "AUTONOMOUS_ON_THE_FLY"
-    }
+    },
+    "total_return_pct": 2392.04,
+    "win_rate_pct": 64.62,
+    "profit_factor": 3.76,
+    "max_drawdown_pct": -31.16,
+    "trades_count": 65
   },
   {
     "id": "pippo-30m-scalp",
@@ -49011,16 +49031,16 @@
     "recommended_for": "Traders who appreciate early cashflow realizations while retaining 70% exposure to massive multi-week macro Bitcoin extensions.",
     "badge": "Risk-Free Partial Harvest (73.3% WR)",
     "metrics": {
-      "total_return_pct": 1357.3,
-      "cagr_pct": 50.21,
+      "total_return_pct": 1458.24,
+      "cagr_pct": 52.01,
       "win_rate_pct": 73.33,
       "profit_factor": 4.4,
-      "max_drawdown_pct": -26.07,
-      "calmar_ratio": 1.93,
+      "max_drawdown_pct": -20.96,
+      "calmar_ratio": 2.48,
       "total_trades": 75,
       "win_trades": 55,
       "loss_trades": 20,
-      "avg_win_pct": 8.13,
+      "avg_win_pct": 8.14,
       "avg_loss_pct": -5.09,
       "best_trade_pct": 53.56,
       "worst_trade_pct": -5.09
@@ -49042,7 +49062,7 @@
         "year": 2020,
         "trades": 16,
         "win_rate": 62.5,
-        "total_return_pct": 117.23,
+        "total_return_pct": 145.89,
         "profit_factor": 4.84,
         "wins": 10,
         "losses": 6
@@ -49051,7 +49071,7 @@
         "year": 2021,
         "trades": 15,
         "win_rate": 60.0,
-        "total_return_pct": 40.63,
+        "total_return_pct": 33.01,
         "profit_factor": 2.33,
         "wins": 9,
         "losses": 6
@@ -49060,8 +49080,8 @@
         "year": 2022,
         "trades": 13,
         "win_rate": 92.31,
-        "total_return_pct": 6.48,
-        "profit_factor": 2.27,
+        "total_return_pct": 6.49,
+        "profit_factor": 2.28,
         "wins": 12,
         "losses": 1
       },
@@ -49069,7 +49089,7 @@
         "year": 2023,
         "trades": 9,
         "win_rate": 77.78,
-        "total_return_pct": 80.28,
+        "total_return_pct": 93.39,
         "profit_factor": 8.89,
         "wins": 7,
         "losses": 2
@@ -49078,7 +49098,7 @@
         "year": 2024,
         "trades": 2,
         "win_rate": 100.0,
-        "total_return_pct": 73.35,
+        "total_return_pct": 83.95,
         "profit_factor": 99.0,
         "wins": 2,
         "losses": 0
@@ -49087,8 +49107,8 @@
         "year": 2025,
         "trades": 9,
         "win_rate": 66.67,
-        "total_return_pct": 16.56,
-        "profit_factor": 2.09,
+        "total_return_pct": 13.98,
+        "profit_factor": 2.08,
         "wins": 6,
         "losses": 3
       },
@@ -49096,8 +49116,8 @@
         "year": 2026,
         "trades": 11,
         "win_rate": 81.82,
-        "total_return_pct": 11.14,
-        "profit_factor": 2.1,
+        "total_return_pct": 10.34,
+        "profit_factor": 2.09,
         "wins": 9,
         "losses": 2
       }
@@ -52022,7 +52042,12 @@
       ],
       "status": "LIVE_SIGNAL",
       "execution_mode": "AUTONOMOUS_ON_THE_FLY"
-    }
+    },
+    "total_return_pct": 1458.24,
+    "win_rate_pct": 73.33,
+    "profit_factor": 4.4,
+    "max_drawdown_pct": -20.96,
+    "trades_count": 75
   },
   {
     "id": "pure-macro-weekly-ma55",
@@ -52034,21 +52059,21 @@
     "archetype": "Sleep-Well Trendmaster",
     "risk_tier": "Low (Zero Screen Time)",
     "recommended_for": "Long-term investors & macro funds requiring minimal screen time, rebalancing only once per week upon Sunday midnight UTC candle close.",
-    "badge": "Macro Master (+2,067%)",
+    "badge": "Macro Master (+1,751%)",
     "metrics": {
-      "total_return_pct": 2067.56,
-      "cagr_pct": 58.6,
-      "win_rate_pct": 66.67,
-      "profit_factor": 52.4,
-      "max_drawdown_pct": -47.04,
-      "calmar_ratio": 1.25,
-      "total_trades": 6,
-      "win_trades": 4,
+      "total_return_pct": 1751.05,
+      "cagr_pct": 64.75,
+      "win_rate_pct": 60.0,
+      "profit_factor": 50.98,
+      "max_drawdown_pct": -12.37,
+      "calmar_ratio": 5.23,
+      "total_trades": 5,
+      "win_trades": 3,
       "loss_trades": 2,
-      "avg_win_pct": 164.2,
-      "avg_loss_pct": -6.3,
+      "avg_win_pct": 213.62,
+      "avg_loss_pct": -6.29,
       "best_trade_pct": 370.7,
-      "worst_trade_pct": -10.7
+      "worst_trade_pct": -10.72
     },
     "parameters": {
       "timeframe": "1W",
@@ -52062,31 +52087,22 @@
       "fee_drag": "Ultra low (< 0.05% annually due to minimal rebalancing)",
       "long_only_alternative": "+1,452.1% return (3 trades, 66.7% WR, PF 327.9x) if holding cash during bear regime"
     },
-    "logic_summary": "The legendary 4-year Bitcoin cycle compass. Tracks the 55-week moving average (~$82,654) on Sunday UTC candle close. Holds LONG above MA55 and flips to SHORT/CASH below MA55, capturing massive multi-year expansions (+2,067.6%) while fully protecting capital during bear markets.",
+    "logic_summary": "The legendary 4-year Bitcoin cycle compass. Tracks the 55-week moving average (~$82,654) on Sunday UTC candle close. Holds LONG above MA55 and flips to SHORT/CASH below MA55, capturing massive multi-year expansions (+1,751.1%) while fully protecting capital during bear markets.",
     "yearly_stats": [
       {
         "year": 2020,
         "trades": 3,
-        "win_rate": 33.3,
-        "total_return_pct": 224.3,
-        "profit_factor": 29.5,
+        "win_rate": 33.33,
+        "total_return_pct": 312.47,
+        "profit_factor": 29.49,
         "wins": 1,
         "losses": 2
-      },
-      {
-        "year": 2021,
-        "trades": 1,
-        "win_rate": 100.0,
-        "total_return_pct": 43.3,
-        "profit_factor": 99.0,
-        "wins": 1,
-        "losses": 0
       },
       {
         "year": 2022,
         "trades": 1,
         "win_rate": 100.0,
-        "total_return_pct": 41.8,
+        "total_return_pct": 33.18,
         "profit_factor": 99.0,
         "wins": 1,
         "losses": 0
@@ -52095,63 +52111,13 @@
         "year": 2023,
         "trades": 1,
         "win_rate": 100.0,
-        "total_return_pct": 25.5,
-        "profit_factor": 99.0,
-        "wins": 1,
-        "losses": 0
-      },
-      {
-        "year": 2024,
-        "trades": 1,
-        "win_rate": 100.0,
-        "total_return_pct": 132.6,
-        "profit_factor": 99.0,
-        "wins": 1,
-        "losses": 0
-      },
-      {
-        "year": 2025,
-        "trades": 2,
-        "win_rate": 50.0,
-        "total_return_pct": -1.5,
-        "profit_factor": 1.0,
-        "wins": 1,
-        "losses": 1
-      },
-      {
-        "year": 2026,
-        "trades": 1,
-        "win_rate": 100.0,
-        "total_return_pct": 14.5,
+        "total_return_pct": 236.97,
         "profit_factor": 99.0,
         "wins": 1,
         "losses": 0
       }
     ],
     "markers": [
-      {
-        "time": 1558310400,
-        "position": "belowBar",
-        "color": "#39FF88",
-        "shape": "arrowUp",
-        "text": "LONG #7 @ $8,614",
-        "size": 2,
-        "entryPrice": 8614.43,
-        "tradeNo": 7,
-        "side": "LONG"
-      },
-      {
-        "time": 1558915200,
-        "position": "aboveBar",
-        "color": "#FF4B5C",
-        "shape": "circle",
-        "text": "EXIT -5.2%",
-        "size": 1,
-        "exitPrice": 8183.71,
-        "tradeNo": 7,
-        "pnlPct": -5.18,
-        "reason": ""
-      },
       {
         "time": 1578268800,
         "position": "belowBar",
@@ -52208,29 +52174,6 @@
         "side": "LONG"
       },
       {
-        "time": 1636329600,
-        "position": "belowBar",
-        "color": "#39FF88",
-        "shape": "arrowUp",
-        "text": "LONG #8 @ $65,519",
-        "size": 2,
-        "entryPrice": 65519.1,
-        "tradeNo": 8,
-        "side": "LONG"
-      },
-      {
-        "time": 1636934400,
-        "position": "aboveBar",
-        "color": "#FF4B5C",
-        "shape": "circle",
-        "text": "EXIT -5.2%",
-        "size": 1,
-        "exitPrice": 62243.14,
-        "tradeNo": 8,
-        "pnlPct": -5.18,
-        "reason": ""
-      },
-      {
         "time": 1641168000,
         "position": "aboveBar",
         "color": "#39FF88",
@@ -52273,29 +52216,6 @@
         "entryPrice": 27972.87,
         "tradeNo": 5,
         "side": "LONG"
-      },
-      {
-        "time": 1730678400,
-        "position": "belowBar",
-        "color": "#39FF88",
-        "shape": "arrowUp",
-        "text": "LONG #9 @ $80,370",
-        "size": 2,
-        "entryPrice": 80370.01,
-        "tradeNo": 9,
-        "side": "LONG"
-      },
-      {
-        "time": 1731283200,
-        "position": "aboveBar",
-        "color": "#39FF88",
-        "shape": "circle",
-        "text": "EXIT +0.0%",
-        "size": 1,
-        "exitPrice": 80530.75,
-        "tradeNo": 9,
-        "pnlPct": 0.02,
-        "reason": ""
       },
       {
         "time": 1762732800,
@@ -52392,52 +52312,15 @@
         "net_return_pct": 17.8,
         "exit_reason": "Weekly Close >= MA55",
         "status": "OPEN (RUNNING)"
-      },
-      {
-        "side": "LONG",
-        "type": "LONG",
-        "entry_time": "2019-05-20 00:00:00",
-        "exit_time": "2019-05-27 00:00:00",
-        "entry_price": 8614.43,
-        "exit_price": 8183.71,
-        "gross_return_pct": -5.0,
-        "net_return_pct": -5.18,
-        "exit_reason": "Stop Loss",
-        "be_activated": false,
-        "status": "CLOSED",
-        "trade_no": 7
-      },
-      {
-        "side": "LONG",
-        "type": "LONG",
-        "entry_time": "2021-11-08 00:00:00",
-        "exit_time": "2021-11-15 00:00:00",
-        "entry_price": 65519.1,
-        "exit_price": 62243.14,
-        "gross_return_pct": -5.0,
-        "net_return_pct": -5.18,
-        "exit_reason": "Stop Loss",
-        "be_activated": false,
-        "status": "CLOSED",
-        "trade_no": 8
-      },
-      {
-        "side": "LONG",
-        "type": "LONG",
-        "entry_time": "2024-11-04 00:00:00",
-        "exit_time": "2024-11-11 00:00:00",
-        "entry_price": 80370.01,
-        "exit_price": 80530.75,
-        "gross_return_pct": 0.2,
-        "net_return_pct": 0.02,
-        "exit_reason": "Breakeven SL",
-        "be_activated": true,
-        "status": "CLOSED",
-        "trade_no": 9
       }
     ],
     "has_active_signal": false,
-    "active_ticket": null
+    "active_ticket": null,
+    "total_return_pct": 1751.05,
+    "win_rate_pct": 60.0,
+    "profit_factor": 50.98,
+    "max_drawdown_pct": -12.37,
+    "trades_count": 5
   },
   {
     "id": "pippo-4h-original",
@@ -52449,14 +52332,14 @@
     "archetype": "Classic Swing King",
     "risk_tier": "Moderate",
     "recommended_for": "Swing traders who favor the original Pine Script v5 Smart Money Concepts architecture with relaxed trade frequencies.",
-    "badge": "Original Classic (+1,074%)",
+    "badge": "Original Classic (+1,240%)",
     "metrics": {
-      "total_return_pct": 1074.17,
-      "cagr_pct": 44.48,
+      "total_return_pct": 1240.26,
+      "cagr_pct": 48.06,
       "win_rate_pct": 43.54,
       "profit_factor": 2.19,
-      "max_drawdown_pct": -40.15,
-      "calmar_ratio": 1.11,
+      "max_drawdown_pct": -28.54,
+      "calmar_ratio": 1.68,
       "total_trades": 147,
       "win_trades": 64,
       "loss_trades": 83,
@@ -52481,7 +52364,7 @@
         "year": 2020,
         "trades": 19,
         "win_rate": 63.16,
-        "total_return_pct": 178.03,
+        "total_return_pct": 373.03,
         "profit_factor": 10.6,
         "wins": 12,
         "losses": 7
@@ -52490,7 +52373,7 @@
         "year": 2021,
         "trades": 26,
         "win_rate": 38.46,
-        "total_return_pct": -0.04,
+        "total_return_pct": -11.37,
         "profit_factor": 1.0,
         "wins": 10,
         "losses": 16
@@ -52499,7 +52382,7 @@
         "year": 2022,
         "trades": 19,
         "win_rate": 47.37,
-        "total_return_pct": -13.48,
+        "total_return_pct": -14.1,
         "profit_factor": 0.65,
         "wins": 9,
         "losses": 10
@@ -52508,7 +52391,7 @@
         "year": 2023,
         "trades": 26,
         "win_rate": 34.62,
-        "total_return_pct": 45.62,
+        "total_return_pct": 45.27,
         "profit_factor": 2.09,
         "wins": 9,
         "losses": 17
@@ -52517,7 +52400,7 @@
         "year": 2024,
         "trades": 21,
         "win_rate": 52.38,
-        "total_return_pct": 102.07,
+        "total_return_pct": 146.79,
         "profit_factor": 6.38,
         "wins": 11,
         "losses": 10
@@ -52526,7 +52409,7 @@
         "year": 2025,
         "trades": 23,
         "win_rate": 39.13,
-        "total_return_pct": 0.51,
+        "total_return_pct": -1.19,
         "profit_factor": 1.01,
         "wins": 9,
         "losses": 14
@@ -52535,7 +52418,7 @@
         "year": 2026,
         "trades": 13,
         "win_rate": 30.77,
-        "total_return_pct": 6.5,
+        "total_return_pct": 5.06,
         "profit_factor": 1.29,
         "wins": 4,
         "losses": 9
@@ -57903,7 +57786,12 @@
       ],
       "status": "LIVE_SIGNAL",
       "execution_mode": "AUTONOMOUS_ON_THE_FLY"
-    }
+    },
+    "total_return_pct": 1240.26,
+    "win_rate_pct": 43.54,
+    "profit_factor": 2.19,
+    "max_drawdown_pct": -28.54,
+    "trades_count": 147
   },
   {
     "id": "pippo-30m-short-v2-a",
@@ -57917,22 +57805,17 @@
     "recommended_for": "Traders prioritizing high win rate (73.7%) during market selloffs with a swift 12% take profit and agile breakeven protection.",
     "badge": "Highest Win Rate (73.7%)",
     "metrics": {
-      "total_return_pct": 44.36,
-      "cagr_pct": 21.5,
+      "total_return_pct": 44.4,
+      "cagr_pct": 5.88,
       "win_rate_pct": 73.68,
       "profit_factor": 1.62,
-      "max_drawdown_pct": -27.48,
-      "calmar_ratio": 0.78,
+      "max_drawdown_pct": -22.47,
+      "calmar_ratio": 0.26,
       "total_trades": 76,
       "win_trades": 56,
       "loss_trades": 20,
       "avg_win_pct": 2.07,
       "avg_loss_pct": -3.57,
-      "tp_hits": 9,
-      "be_hits": 44,
-      "sl_hits": 9,
-      "structure_exits": 14,
-      "tp_be_rate_pct": 69.74,
       "best_trade_pct": 11.83,
       "worst_trade_pct": -5.18
     },
@@ -57962,7 +57845,7 @@
         "year": 2022,
         "trades": 40,
         "win_rate": 75.0,
-        "total_return_pct": 31.73,
+        "total_return_pct": 31.77,
         "profit_factor": 1.91,
         "wins": 30,
         "losses": 10
@@ -57980,7 +57863,7 @@
         "year": 2025,
         "trades": 7,
         "win_rate": 57.14,
-        "total_return_pct": -11.6,
+        "total_return_pct": -11.2,
         "profit_factor": 0.01,
         "wins": 4,
         "losses": 3
@@ -57989,8 +57872,8 @@
         "year": 2026,
         "trades": 24,
         "win_rate": 70.83,
-        "total_return_pct": 12.27,
-        "profit_factor": 1.49,
+        "total_return_pct": 10.26,
+        "profit_factor": 1.5,
         "wins": 17,
         "losses": 7
       }
@@ -60736,7 +60619,12 @@
       }
     ],
     "has_active_signal": false,
-    "active_ticket": null
+    "active_ticket": null,
+    "total_return_pct": 44.4,
+    "win_rate_pct": 73.68,
+    "profit_factor": 1.62,
+    "max_drawdown_pct": -22.47,
+    "trades_count": 76
   },
   {
     "id": "pippo-30m-short-v2-b",
@@ -60750,22 +60638,17 @@
     "recommended_for": "Active traders seeking maximum trade volume during bear trends (103 trades) with a generous 20% take profit target.",
     "badge": "Max Trades (103 Trades)",
     "metrics": {
-      "total_return_pct": 72.94,
-      "cagr_pct": 28.4,
-      "win_rate_pct": 62.14,
-      "profit_factor": 1.5,
-      "max_drawdown_pct": -29.1,
-      "calmar_ratio": 0.98,
-      "total_trades": 103,
+      "total_return_pct": 71.19,
+      "cagr_pct": 8.61,
+      "win_rate_pct": 61.54,
+      "profit_factor": 1.49,
+      "max_drawdown_pct": -26.03,
+      "calmar_ratio": 0.33,
+      "total_trades": 104,
       "win_trades": 64,
-      "loss_trades": 39,
+      "loss_trades": 40,
       "avg_win_pct": 3.45,
-      "avg_loss_pct": -3.77,
-      "tp_hits": 8,
-      "be_hits": 40,
-      "sl_hits": 21,
-      "structure_exits": 34,
-      "tp_be_rate_pct": 46.6,
+      "avg_loss_pct": -3.7,
       "best_trade_pct": 19.84,
       "worst_trade_pct": -5.18
     },
@@ -60786,7 +60669,7 @@
         "year": 2020,
         "trades": 7,
         "win_rate": 85.71,
-        "total_return_pct": 14.75,
+        "total_return_pct": 13.75,
         "profit_factor": 3.85,
         "wins": 6,
         "losses": 1
@@ -60795,7 +60678,7 @@
         "year": 2022,
         "trades": 48,
         "win_rate": 62.5,
-        "total_return_pct": 66.49,
+        "total_return_pct": 73.12,
         "profit_factor": 1.93,
         "wins": 30,
         "losses": 18
@@ -60804,7 +60687,7 @@
         "year": 2023,
         "trades": 9,
         "win_rate": 55.56,
-        "total_return_pct": -16.3,
+        "total_return_pct": -15.39,
         "profit_factor": 0.02,
         "wins": 5,
         "losses": 4
@@ -60813,19 +60696,19 @@
         "year": 2025,
         "trades": 8,
         "win_rate": 62.5,
-        "total_return_pct": -1.33,
+        "total_return_pct": -1.48,
         "profit_factor": 0.79,
         "wins": 5,
         "losses": 3
       },
       {
         "year": 2026,
-        "trades": 31,
-        "win_rate": 58.06,
-        "total_return_pct": 10.15,
-        "profit_factor": 1.21,
+        "trades": 32,
+        "win_rate": 56.25,
+        "total_return_pct": 4.3,
+        "profit_factor": 1.19,
         "wins": 18,
-        "losses": 13
+        "losses": 14
       }
     ],
     "markers": [
@@ -64578,7 +64461,12 @@
       }
     ],
     "has_active_signal": false,
-    "active_ticket": null
+    "active_ticket": null,
+    "total_return_pct": 71.19,
+    "win_rate_pct": 61.54,
+    "profit_factor": 1.49,
+    "max_drawdown_pct": -26.03,
+    "trades_count": 104
   },
   {
     "id": "pippo-30m-short-v2-c",
@@ -64592,22 +64480,17 @@
     "recommended_for": "Risk-averse traders seeking rock-solid capital protection. Sustained only 3 stop loss hits over 6 full years of live market conditions!",
     "badge": "Only 3 SL Hits in 6 Years",
     "metrics": {
-      "total_return_pct": 72.64,
-      "cagr_pct": 28.1,
+      "total_return_pct": 72.63,
+      "cagr_pct": 8.86,
       "win_rate_pct": 48.28,
       "profit_factor": 1.7,
-      "max_drawdown_pct": -27.04,
-      "calmar_ratio": 1.04,
+      "max_drawdown_pct": -21.32,
+      "calmar_ratio": 0.42,
       "total_trades": 87,
       "win_trades": 42,
       "loss_trades": 45,
       "avg_win_pct": 4.32,
       "avg_loss_pct": -2.37,
-      "tp_hits": 1,
-      "be_hits": 21,
-      "sl_hits": 3,
-      "structure_exits": 62,
-      "tp_be_rate_pct": 25.29,
       "best_trade_pct": 49.86,
       "worst_trade_pct": -6.19
     },
@@ -64628,7 +64511,7 @@
         "year": 2020,
         "trades": 3,
         "win_rate": 100.0,
-        "total_return_pct": 49.91,
+        "total_return_pct": 49.92,
         "profit_factor": 99.0,
         "wins": 3,
         "losses": 0
@@ -64637,7 +64520,7 @@
         "year": 2022,
         "trades": 43,
         "win_rate": 46.51,
-        "total_return_pct": 19.83,
+        "total_return_pct": 12.78,
         "profit_factor": 1.33,
         "wins": 20,
         "losses": 23
@@ -64646,8 +64529,8 @@
         "year": 2023,
         "trades": 4,
         "win_rate": 75.0,
-        "total_return_pct": 12.41,
-        "profit_factor": 4.9,
+        "total_return_pct": 12.59,
+        "profit_factor": 4.91,
         "wins": 3,
         "losses": 1
       },
@@ -64655,7 +64538,7 @@
         "year": 2025,
         "trades": 8,
         "win_rate": 50.0,
-        "total_return_pct": -6.72,
+        "total_return_pct": -6.68,
         "profit_factor": 0.31,
         "wins": 4,
         "losses": 4
@@ -64664,7 +64547,7 @@
         "year": 2026,
         "trades": 29,
         "win_rate": 41.38,
-        "total_return_pct": -0.39,
+        "total_return_pct": -2.82,
         "profit_factor": 0.99,
         "wins": 12,
         "losses": 17
@@ -67807,6 +67690,11 @@
       }
     ],
     "has_active_signal": false,
-    "active_ticket": null
+    "active_ticket": null,
+    "total_return_pct": 72.63,
+    "win_rate_pct": 48.28,
+    "profit_factor": 1.7,
+    "max_drawdown_pct": -21.32,
+    "trades_count": 87
   }
 ]

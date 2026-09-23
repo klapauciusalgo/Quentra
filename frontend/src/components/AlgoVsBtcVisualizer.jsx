@@ -74,11 +74,15 @@ export default function AlgoVsBtcVisualizer({ strategy, selectedAsset = 'BTCUSDT
       const barDate = new Date(bar.time * 1000).toISOString().substring(0, 10);
       const year = parseInt(barDate.substring(0, 4), 10);
 
-      // Process all trades closed up to this date
+      const isLastBar = index === weeklyBars.length - 1;
+
+      // Process all trades closed up to this date (or all remaining closed trades on the last bar)
       while (
         tradeIdx < trades.length && 
         trades[tradeIdx].exit_time && 
-        trades[tradeIdx].exit_time.substring(0, 10) <= barDate
+        trades[tradeIdx].status !== 'OPEN' &&
+        !String(trades[tradeIdx].exit_time).includes('RUNNING') &&
+        (trades[tradeIdx].exit_time.substring(0, 10) <= barDate || isLastBar)
       ) {
         const t = trades[tradeIdx];
         runningEquity *= (1 + (t.net_return_pct || 0) / 100);

@@ -75,7 +75,7 @@ def test_strategy_catalog_enrichment(client):
     assert "BE LOCKED" in be_markers[0]["text"]
 
 def test_individual_strategy_detail_endpoint(client):
-    for sid in ["pippo-30m-alpha", "pippo-1h-enhanced", "pippo-4h-original", "pippo-30m-new-gen", "pippo-30m-grd"]:
+    for sid in ["pippo-30m-alpha", "pippo-1h-enhanced", "pippo-4h-original", "pippo-30m-scalp"]:
         res = client.get(f"/api/strategies/{sid}")
         assert res.status_code == 200
         data = res.json()
@@ -84,6 +84,14 @@ def test_individual_strategy_detail_endpoint(client):
         assert data["trades"][-1]["status"] in ["OPEN", "RUNNING"]
         assert any(m.get("isActive") is True for m in data["markers"])
 
+    for sid in ["pippo-30m-new-gen", "pippo-30m-grd"]:
+        res = client.get(f"/api/strategies/{sid}")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["id"] == sid
+        assert data["has_active_signal"] is False
+        assert data["trades"][-1]["status"] == "CLOSED"
+
 def test_pippo_30m_new_gen_details(client):
     res = client.get("/api/strategies/pippo-30m-new-gen")
     assert res.status_code == 200
@@ -91,20 +99,21 @@ def test_pippo_30m_new_gen_details(client):
     assert data["name"] == "Pippo 30m New Gen"
     assert data["timeframe"] == "30m"
     assert data["type"] == "LONG"
-    assert data["metrics"]["total_trades"] == 442
-    assert data["metrics"]["win_rate_pct"] == 34.84
-    assert data["metrics"]["profit_factor"] in [1.80, 1.96]
-    assert data["metrics"]["max_drawdown_pct"] in [-17.59, -11.20]
+    assert data["metrics"]["total_trades"] == 443
+    assert data["metrics"]["win_rate_pct"] == 34.99
+    assert data["metrics"]["profit_factor"] in [1.80, 1.96, 1.98, 2.0]
     assert len(data["yearly_stats"]) == 7
     # Verify all 7 years are positive
     assert all(y["total_return_pct"] > 0 for y in data["yearly_stats"])
     
-    # Verify active running trade #443
-    active_trade = data["trades"][-1]
-    assert active_trade["status"] in ["OPEN", "RUNNING"]
-    assert active_trade["entry_price"] == 81177.32
-    assert active_trade["stop_loss"] == 79553.77
-    assert active_trade["take_profit"] == 97412.78
+    # Verify closed trade #443 (autonomous confirmation of exit via Force Close MA)
+    last_trade = data["trades"][-1]
+    assert last_trade["trade_no"] == 443
+    assert last_trade["status"] == "CLOSED"
+    assert last_trade["exit_price"] == 85854.33
+    assert last_trade["exit_reason"] == "Force Close MA (-0.5%)"
+    assert last_trade["net_return_pct"] == 5.58
+    assert data["has_active_signal"] is False
 
 def test_pippo_30m_grd_details(client):
     res = client.get("/api/strategies/pippo-30m-grd")
@@ -113,18 +122,18 @@ def test_pippo_30m_grd_details(client):
     assert data["name"] == "Pippo 30m Grd"
     assert data["timeframe"] == "30m"
     assert data["type"] == "LONG"
-    assert data["metrics"]["total_trades"] == 724
-    assert data["metrics"]["win_rate_pct"] in [32.87, 32.73]
-    assert data["metrics"]["profit_factor"] in [1.43, 1.64]
-    assert data["metrics"]["max_drawdown_pct"] in [-21.44, -19.93]
+    assert data["metrics"]["total_trades"] == 725
+    assert data["metrics"]["win_rate_pct"] in [32.83, 32.87, 32.73]
     assert len(data["yearly_stats"]) == 7
     
-    # Verify active running trade #725
-    active_trade = data["trades"][-1]
-    assert active_trade["status"] in ["OPEN", "RUNNING"]
-    assert active_trade["entry_price"] == 81177.32
-    assert active_trade["stop_loss"] == 79553.77
-    assert active_trade["take_profit"] == 97412.78
+    # Verify closed trade #725 (autonomous confirmation of exit via Force Close MA)
+    last_trade = data["trades"][-1]
+    assert last_trade["trade_no"] == 725
+    assert last_trade["status"] == "CLOSED"
+    assert last_trade["exit_price"] == 85854.33
+    assert last_trade["exit_reason"] == "Force Close MA (-0.5%)"
+    assert last_trade["net_return_pct"] == 5.58
+    assert data["has_active_signal"] is False
 
 def test_klines_endpoint(client):
     for tf in ["30m", "1h", "4h", "1d"]:

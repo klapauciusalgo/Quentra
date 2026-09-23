@@ -168,6 +168,7 @@ def load_data_into_memory():
                 combined["win_rate_pct"] = combined["metrics"]["win_rate_pct"]
                 combined["profit_factor"] = combined["metrics"]["profit_factor"]
                 # Deduplicate trades by trade_no
+                unique_trades = {}
                 raw_trades = combined.get("trades") or base_s.get("trades", [])
                 for tr in raw_trades:
                     t_no = tr.get("trade_no")
@@ -418,8 +419,6 @@ async def get_klines(
 def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
     from live_signal_engine import live_signal_engine
     sym = symbol.upper()
-    if s.get("id") in ["pippo-30m-new-gen", "pippo-30m-grd"]:
-        return s
     model = live_signal_engine.get_model(s["id"], symbol=sym)
     if not model:
         return s
@@ -433,10 +432,12 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
     existing_entries = {str(t.get("entry_time")) for t in base_trades}
     last_trade_no = base_trades[-1].get("trade_no", len(base_trades)) if base_trades else 0
 
+    last_base_entry = base_trades[-1].get("entry_time", "") if base_trades else ""
+
     # 1. Inject synced recent closed trades from engine
     for rc in getattr(model, "synced_recent_trades", []):
         rc_entry = str(rc.get("entry_time", ""))
-        if rc_entry and rc_entry not in existing_entries:
+        if rc_entry and rc_entry not in existing_entries and rc_entry >= last_base_entry:
             last_trade_no += 1
             new_tr = dict(rc)
             new_tr["trade_no"] = last_trade_no
@@ -475,7 +476,7 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
             except Exception:
                 pass
 
-    # 2. Inject active OPEN trade & active markers
+    # 2. Inject active OPEN trade & active markers IF model is currently OPEN
     if model.position_status == "OPEN" and model.entry_price > 0:
         live_price = binance_manager.get_ticker(sym).get("price") or live_signal_engine.get_last_price(sym) or model.entry_price
         if model.direction == "LONG":
@@ -510,18 +511,19 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
                 m_copy = dict(am)
                 m_copy["tradeNo"] = last_trade_no
                 base_markers.append(m_copy)
+
+        s_copy["has_active_signal"] = True
+        s_copy["active_ticket"] = model.active_ticket or s.get("active_ticket")
     else:
-        # Preserve static open trade & markers if present in strategy catalog
-        orig_open_trade = next((t for t in s.get("trades", []) if t.get("status") == "OPEN" or t.get("exit_time") == "RUNNING"), None)
-        if orig_open_trade:
-            base_trades.append(orig_open_trade)
-        orig_active_markers = [m for m in s.get("markers", []) if m.get("isActive")]
-        base_markers.extend(orig_active_markers)
+        # Model is FLAT: no active position, clean active indicators
+        s_copy["has_active_signal"] = False
+        s_copy["active_ticket"] = None
 
     s_copy["trades"] = base_trades
     s_copy["markers"] = sorted(base_markers, key=lambda m: m.get("time", 0))
-    s_copy["has_active_signal"] = (model.position_status == "OPEN") or s.get("has_active_signal", False)
-    s_copy["active_ticket"] = model.active_ticket or s.get("active_ticket")
+    s_copy["trades_count"] = len([t for t in base_trades if t.get("status") == "CLOSED"])
+    if "metrics" in s_copy and isinstance(s_copy["metrics"], dict):
+        s_copy["metrics"]["total_trades"] = s_copy["trades_count"]
     return s_copy
 
 @app.get("/api/strategies")

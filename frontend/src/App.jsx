@@ -178,8 +178,13 @@ function TradingApp() {
       .then((r) => r.json())
       .then((data) => {
         setStatus(data);
-        if (data.latest_btc_price) {
-          setTicker((prev) => ({ ...prev, price: data.latest_btc_price }));
+        if (data.latest_btc_price && selectedAssetRef.current === 'BTCUSDT') {
+          setTicker((prev) => ({ ...prev, symbol: 'BTCUSDT', price: data.latest_btc_price }));
+        } else if (data.latest_eth_price && selectedAssetRef.current === 'ETHUSDT') {
+          setTicker((prev) => ({ ...prev, symbol: 'ETHUSDT', price: data.latest_eth_price }));
+        }
+        if (data.tickers) {
+          setTickersMap((prev) => ({ ...prev, ...data.tickers }));
         }
       })
       .catch(() => {
@@ -187,32 +192,39 @@ function TradingApp() {
       });
 
     // Ticker
-    fetch(`${API_BASE}/api/ticker`)
+    const curAsset = selectedAssetRef.current;
+    fetch(`${API_BASE}/api/ticker?symbol=${curAsset}`)
       .then((r) => {
         const ct = r.headers.get('content-type') || '';
         if (r.ok && ct.includes('application/json')) return r.json();
         throw new Error('Not JSON');
       })
       .then((data) => {
-        if (data && data.price) setTicker(data);
+        if (data && data.price && (data.symbol === selectedAssetRef.current || !data.symbol)) {
+          setTicker(data);
+          setTickersMap((prev) => ({ ...prev, [data.symbol || curAsset]: data }));
+        }
       })
       .catch(() => {
         // Direct Bybit public ticker fallback (accessible worldwide)
-        fetch('https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT')
+        fetch(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${curAsset}`)
           .then((r) => r.json())
           .then((data) => {
             const item = data?.result?.list?.[0];
             if (item) {
               const curPrice = parseFloat(item.lastPrice);
               const prevPrice = parseFloat(item.prevPrice24h || item.lastPrice);
-              const changePct = ((curPrice - prevPrice) / prevPrice) * 100;
-              setTicker({
+              const changePct = prevPrice > 0 ? ((curPrice - prevPrice) / prevPrice) * 100 : 0;
+              const tData = {
+                symbol: curAsset,
                 price: curPrice,
                 change_24h_pct: changePct,
-                high_24h: parseFloat(item.highPrice24h),
-                low_24h: parseFloat(item.lowPrice24h),
-                volume_24h: parseFloat(item.volume24h),
-              });
+                high_24h: parseFloat(item.highPrice24h || curPrice),
+                low_24h: parseFloat(item.lowPrice24h || curPrice),
+                volume_24h: parseFloat(item.volume24h || 0),
+              };
+              setTicker(tData);
+              setTickersMap((prev) => ({ ...prev, [curAsset]: tData }));
             }
           })
           .catch(() => {});
@@ -307,25 +319,31 @@ function TradingApp() {
       try {
         const bybitWs = new WebSocket('wss://stream.bybit.com/v5/public/spot');
         bybitWs.onopen = () => {
-          bybitWs.send(JSON.stringify({ op: 'subscribe', args: ['tickers.BTCUSDT'] }));
+          bybitWs.send(JSON.stringify({ op: 'subscribe', args: ['tickers.BTCUSDT', 'tickers.ETHUSDT'] }));
           setStatus((prev) => ({ ...prev, binance_ws_connected: true, ticker_status: 'BYBIT_LIVE' }));
         };
         bybitWs.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data);
-            if (msg.topic === 'tickers.BTCUSDT' && msg.data) {
-              lastWsTickTimeRef.current = Date.now();
+            if (msg.topic && msg.topic.startsWith('tickers.') && msg.data) {
+              const sym = msg.topic.includes('ETH') ? 'ETHUSDT' : 'BTCUSDT';
               const d = msg.data;
               const curPrice = parseFloat(d.lastPrice);
               const prevPrice = parseFloat(d.prevPrice24h || d.lastPrice);
-              const changePct = ((curPrice - prevPrice) / prevPrice) * 100;
-              setTicker({
+              const changePct = prevPrice > 0 ? ((curPrice - prevPrice) / prevPrice) * 100 : 0;
+              const tData = {
+                symbol: sym,
                 price: curPrice,
                 change_24h_pct: changePct,
-                high_24h: parseFloat(d.highPrice24h),
-                low_24h: parseFloat(d.lowPrice24h),
-                volume_24h: parseFloat(d.volume24h),
-              });
+                high_24h: parseFloat(d.highPrice24h || curPrice),
+                low_24h: parseFloat(d.lowPrice24h || curPrice),
+                volume_24h: parseFloat(d.volume24h || 0),
+              };
+              setTickersMap((prev) => ({ ...prev, [sym]: tData }));
+              if (sym === selectedAssetRef.current) {
+                lastWsTickTimeRef.current = Date.now();
+                setTicker(tData);
+              }
             }
           } catch (e) {}
         };
@@ -335,7 +353,7 @@ function TradingApp() {
     function connectDirectBinance() {
       if (directBinanceWsRef.current) return;
       try {
-        const binanceWs = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@ticker');
+        const binanceWs = new WebSocket('wss://stream.binance.com:9443/stream?streams=btcusdt@ticker/ethusdt@ticker');
         directBinanceWsRef.current = binanceWs;
 
         binanceWs.onopen = () => {
@@ -344,19 +362,27 @@ function TradingApp() {
 
         binanceWs.onmessage = (event) => {
           try {
-            const data = JSON.parse(event.data);
+            const parsed = JSON.parse(event.data);
+            const stream = parsed.stream || '';
+            const data = parsed.data || parsed;
             if (data.c) {
-              lastWsTickTimeRef.current = Date.now();
+              const sym = stream.startsWith('eth') || data.s === 'ETHUSDT' ? 'ETHUSDT' : 'BTCUSDT';
               const curPrice = parseFloat(data.c);
-              const openPrice = parseFloat(data.o);
-              const changePct = ((curPrice - openPrice) / openPrice) * 100;
-              setTicker({
+              const openPrice = parseFloat(data.o || data.c);
+              const changePct = openPrice > 0 ? ((curPrice - openPrice) / openPrice) * 100 : 0;
+              const tData = {
+                symbol: sym,
                 price: curPrice,
                 change_24h_pct: changePct,
-                high_24h: parseFloat(data.h),
-                low_24h: parseFloat(data.l),
-                volume_24h: parseFloat(data.v),
-              });
+                high_24h: parseFloat(data.h || curPrice),
+                low_24h: parseFloat(data.l || curPrice),
+                volume_24h: parseFloat(data.v || 0),
+              };
+              setTickersMap((prev) => ({ ...prev, [sym]: tData }));
+              if (sym === selectedAssetRef.current) {
+                lastWsTickTimeRef.current = Date.now();
+                setTicker(tData);
+              }
             }
           } catch (e) {}
         };
@@ -554,9 +580,20 @@ function TradingApp() {
     setSelectedAsset(newAsset);
     selectedAssetRef.current = newAsset;
 
-    // Instantly update active ticker from map to eliminate lag
-    if (tickersMap[newAsset]) {
+    // Instantly update active ticker from map to eliminate lag or set clean baseline
+    if (tickersMap[newAsset] && tickersMap[newAsset].price > 0) {
       setTicker(tickersMap[newAsset]);
+    } else {
+      const fallbackTicker = {
+        symbol: newAsset,
+        price: newAsset === 'ETHUSDT' ? 2645.20 : 77379.6,
+        change_24h_pct: 0.0,
+        high_24h: newAsset === 'ETHUSDT' ? 2850.0 : 79890.0,
+        low_24h: newAsset === 'ETHUSDT' ? 2600.0 : 76046.58,
+        volume_24h: newAsset === 'ETHUSDT' ? 84520.10 : 18905.45,
+      };
+      setTicker(fallbackTicker);
+      setTickersMap((prev) => ({ ...prev, [newAsset]: fallbackTicker }));
     }
 
     const fallbackStrats = newAsset === 'ETHUSDT' ? strategiesDataEth : strategiesData;
@@ -581,22 +618,53 @@ function TradingApp() {
           }
         } else {
           setStrategies(fallbackStrats);
+          if (!fallbackStrats.some((s) => s.id === selectedStrategyId)) {
+            setSelectedStrategyId(fallbackStrats[0].id);
+            if (fallbackStrats[0].timeframe) setTimeframe(fallbackStrats[0].timeframe.toLowerCase());
+          }
         }
       })
       .catch(() => {
         setStrategies(fallbackStrats);
+        if (!fallbackStrats.some((s) => s.id === selectedStrategyId)) {
+          setSelectedStrategyId(fallbackStrats[0].id);
+          if (fallbackStrats[0].timeframe) setTimeframe(fallbackStrats[0].timeframe.toLowerCase());
+        }
       });
 
     // Fetch latest ticker for this asset
     fetch(`${API_BASE}/api/ticker?symbol=${newAsset}`)
       .then((r) => r.json())
       .then((t) => {
-        if (t && t.price) {
+        if (t && t.price && t.price > 0 && selectedAssetRef.current === newAsset) {
           setTicker(t);
           setTickersMap((prev) => ({ ...prev, [newAsset]: t }));
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // Fallback to Bybit public spot REST ticker
+        fetch(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${newAsset}`)
+          .then((r) => r.json())
+          .then((data) => {
+            const item = data?.result?.list?.[0];
+            if (item && selectedAssetRef.current === newAsset) {
+              const curPrice = parseFloat(item.lastPrice);
+              const prevPrice = parseFloat(item.prevPrice24h || item.lastPrice);
+              const changePct = prevPrice > 0 ? ((curPrice - prevPrice) / prevPrice) * 100 : 0;
+              const tData = {
+                symbol: newAsset,
+                price: curPrice,
+                change_24h_pct: changePct,
+                high_24h: parseFloat(item.highPrice24h || curPrice),
+                low_24h: parseFloat(item.lowPrice24h || curPrice),
+                volume_24h: parseFloat(item.volume24h || 0),
+              };
+              setTicker(tData);
+              setTickersMap((prev) => ({ ...prev, [newAsset]: tData }));
+            }
+          })
+          .catch(() => {});
+      });
   };
 
   // Switch strategy AND automatically adapt chart timeframe and live ticket
@@ -745,12 +813,13 @@ function TradingApp() {
   };
 
   // Synchronize top header label with chart's latest candle close if no live WS ticks have arrived recently
-  const handlePriceSyncFromChart = (chartPrice) => {
+  const handlePriceSyncFromChart = (chartPrice, chartSymbol) => {
     if (!chartPrice || typeof chartPrice !== 'number') return;
+    if (chartSymbol && chartSymbol !== selectedAssetRef.current) return;
     if (Date.now() - lastWsTickTimeRef.current > 4000) {
       setTicker((prev) => {
         if (!prev.price || Math.abs(prev.price - chartPrice) > 0.01) {
-          return { ...prev, price: chartPrice };
+          return { ...prev, symbol: chartSymbol || selectedAssetRef.current, price: chartPrice };
         }
         return prev;
       });
@@ -931,6 +1000,7 @@ function TradingApp() {
               currentBtcPrice={ticker.price}
               floor={floor}
               showDetailsCard={false}
+              selectedAsset={selectedAsset}
             />
           </section>
         )}

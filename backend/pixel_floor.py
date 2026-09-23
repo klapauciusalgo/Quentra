@@ -52,7 +52,7 @@ class PixelFloorEngine:
             "status": "ACTIVE_WATCH"
         }
 
-    def get_floor_state(self, current_btc_price: float = 77300.0):
+    def get_floor_state(self, current_btc_price: float = 77300.0, current_eth_price: float = 2645.20):
         session = get_market_session()
         
         # Retrieve dynamic telemetry from live_signal_engine
@@ -71,6 +71,10 @@ class PixelFloorEngine:
             ticket = dict(self.signal_ticket)
             ticket["current_price"] = current_btc_price
             telemetry = None
+
+        eth_ma55_level = 2648.68
+        eth_diff_pct = ((current_eth_price - eth_ma55_level) / eth_ma55_level) * 100.0
+        eth_regime_status = "BULLISH_RECOVERY" if current_eth_price >= eth_ma55_level else "MACRO_DISCOUNT"
 
         quant_speech = (
             f"BTC: ${current_btc_price:,.2f} | Nearest Entry: ${ticket.get('entry_price', 0):,.2f} ({ticket.get('trigger_distance_pct', 0):+.1f}%)"
@@ -194,6 +198,12 @@ class PixelFloorEngine:
                 "weekly_ma55": ma55_level,
                 "distance_pct": round(ma55_diff_pct, 2),
                 "summary": "Weekly Close vs MA55 Macro Horizon"
+            },
+            "eth_market_regime": {
+                "status": eth_regime_status,
+                "weekly_ma55": eth_ma55_level,
+                "distance_pct": round(eth_diff_pct, 2),
+                "summary": "ETH Weekly Close vs MA55 Macro Horizon"
             },
             "agents": agents,
             "active_agent_id": self.active_agent_id,

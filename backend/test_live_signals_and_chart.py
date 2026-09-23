@@ -202,4 +202,14 @@ def test_eth_strategy_detail_endpoint(client):
     res404 = client.get("/api/strategies/non-existent-strat?symbol=ETHUSDT")
     assert res404.status_code == 404
 
+def test_floor_with_eth_regime(client):
+    res = client.get("/api/floor")
+    assert res.status_code == 200
+    data = res.json()
+    assert "market_regime" in data
+    assert "eth_market_regime" in data
+    assert data["market_regime"]["weekly_ma55"] > 50000.0 # BTC
+    assert 2000.0 < data["eth_market_regime"]["weekly_ma55"] < 4000.0 # ETH MA55 (~2648.68)
+
+
 

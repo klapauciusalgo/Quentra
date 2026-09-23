@@ -17,7 +17,9 @@ export function StrategySelectorBar({
   strategies = [], 
   selectedStrategyId, 
   onSelectStrategy, 
-  floor = null
+  floor = null,
+  selectedAsset = 'BTCUSDT',
+  currentBtcPrice = 0
 }) {
   const activeStrat = strategies.find((s) => s.id === selectedStrategyId) || strategies[0];
   const m = activeStrat?.metrics || {};
@@ -28,7 +30,15 @@ export function StrategySelectorBar({
   const longStrategies = strategies.filter((s) => s.type === 'LONG');
   const shortStrategies = strategies.filter((s) => s.type === 'SHORT');
 
-  const regime = floor?.market_regime || { weekly_ma55: 82654, distance_pct: -6.5 };
+  const isEth = selectedAsset === 'ETHUSDT';
+  const defaultMa55 = isEth ? 2648.68 : 82654;
+  const rawMa55 = isEth 
+    ? (floor?.eth_market_regime?.weekly_ma55 || defaultMa55) 
+    : (floor?.market_regime?.weekly_ma55 || defaultMa55);
+  const activePrice = currentBtcPrice || (isEth ? 2645.20 : 77379.6);
+  const distancePct = rawMa55 > 0 
+    ? Number((((activePrice - rawMa55) / rawMa55) * 100).toFixed(1)) 
+    : 0;
 
   return (
     <div className="apple-glass rounded-3xl p-4 sm:p-5 space-y-3.5">
@@ -37,7 +47,7 @@ export function StrategySelectorBar({
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-apple-blue shadow-[0_0_8px_rgba(10,132,255,0.6)]" />
           <span className="font-semibold text-xs tracking-wider uppercase text-apple-text">
-            Algo Strategy Runtime
+            {isEth ? 'ETH Algo Strategy Runtime' : 'BTC Algo Strategy Runtime'}
           </span>
           <span className="text-xs text-apple-dim hidden md:inline">
             / Autonomous Live Engine (On-The-Fly)
@@ -48,12 +58,12 @@ export function StrategySelectorBar({
           {/* Macro Regime Pill */}
           <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-full px-2.5 py-1 whitespace-nowrap shrink-0">
             <Compass className="w-3.5 h-3.5 text-apple-purple" />
-            <span className="text-apple-dim hidden sm:inline">Weekly MA55:</span>
+            <span className="text-apple-dim hidden sm:inline">{isEth ? 'ETH' : 'BTC'} Weekly MA55:</span>
             <span className="text-apple-text font-medium tabular-nums">
-              ${Number(regime.weekly_ma55 || 82654).toLocaleString()}
+              ${Number(rawMa55).toLocaleString(undefined, { minimumFractionDigits: isEth ? 2 : 0, maximumFractionDigits: 2 })}
             </span>
-            <span className={`font-medium tabular-nums ${regime.distance_pct >= 0 ? 'text-apple-green' : 'text-apple-orange'}`}>
-              ({regime.distance_pct >= 0 ? '+' : ''}{regime.distance_pct}%)
+            <span className={`font-medium tabular-nums ${distancePct >= 0 ? 'text-apple-green' : 'text-apple-orange'}`}>
+              ({distancePct >= 0 ? '+' : ''}{distancePct}%)
             </span>
           </div>
         </div>
@@ -497,6 +507,7 @@ export default function StrategyRibbon(props) {
           activeSignals={props.activeSignals}
           floor={props.floor}
           onOpenDetail={props.onOpenDetail}
+          selectedAsset={props.selectedAsset}
         />
       )}
     </div>

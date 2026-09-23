@@ -547,19 +547,21 @@ async def get_strategy_detail(strategy_id: str, symbol: str = Query(default="BTC
 
 @app.get("/api/floor")
 async def get_floor_state():
-    price = binance_manager.ticker_data.get("price", 77300.0)
-    return floor_engine.get_floor_state(price)
+    btc_price = binance_manager.get_ticker("BTCUSDT").get("price", 77300.0)
+    eth_price = binance_manager.get_ticker("ETHUSDT").get("price", 2645.20)
+    return floor_engine.get_floor_state(current_btc_price=btc_price, current_eth_price=eth_price)
 
 @app.post("/api/floor/select-agent")
 async def select_agent(agent_id: str = Query(...)):
     floor_engine.set_active_agent(agent_id)
-    price = binance_manager.ticker_data.get("price", 77300.0)
-    state = floor_engine.get_floor_state(price)
+    btc_price = binance_manager.get_ticker("BTCUSDT").get("price", 77300.0)
+    eth_price = binance_manager.get_ticker("ETHUSDT").get("price", 2645.20)
+    state = floor_engine.get_floor_state(current_btc_price=btc_price, current_eth_price=eth_price)
     await binance_manager.broadcast({
         "type": "FLOOR_UPDATE",
         "floor": state
     })
-    return state
+    return {"status": "SUCCESS", "active_agent": agent_id, "floor": state}
 
 @app.post("/api/floor/simulate-signal")
 async def simulate_signal(strategy_id: Optional[str] = Query(default=None)):

@@ -934,8 +934,15 @@ export default function TradingChart({
   useEffect(() => {
     if (!candleSeriesRef.current || !liveTicker?.price || candles.length === 0) return;
 
+    // Guard: ensure ticker symbol matches current chart symbol
+    if (liveTicker.symbol && liveTicker.symbol !== symbol) return;
+
     const lastCandle = candles[candles.length - 1];
     if (!lastCandle) return;
+
+    // Sanity guard: prevent accidental cross-ticker price corruption (e.g. BTC 87k on ETH 2.6k chart)
+    const ratio = liveTicker.price / (lastCandle.close || 1);
+    if (ratio > 4.0 || ratio < 0.25) return;
 
     const updated = {
       time: lastCandle.time,
@@ -950,17 +957,17 @@ export default function TradingChart({
     } catch (e) {
       // Safe catch
     }
-  }, [liveTicker?.price]);
+  }, [liveTicker?.price, liveTicker?.symbol, symbol, candles]);
 
   // Synchronize latest candle close price with platform header
   useEffect(() => {
     if (candles && candles.length > 0 && typeof onPriceSync === 'function') {
       const lastCandle = candles[candles.length - 1];
       if (lastCandle && lastCandle.close) {
-        onPriceSync(lastCandle.close);
+        onPriceSync(lastCandle.close, symbol);
       }
     }
-  }, [candles, onPriceSync]);
+  }, [candles, onPriceSync, symbol]);
 
   // Jump chart to specific trade
   const handleJumpToTrade = (trade, index) => {
@@ -1058,9 +1065,13 @@ export default function TradingChart({
               Binance
             </span>
             <span className="font-mono text-sm md:text-base font-bold text-apple-text tabular-nums ml-1">
-              {formatPrice(liveTicker?.price || (candles.length > 0 ? candles[candles.length - 1].close : 77300))}
+              {formatPrice(
+                (liveTicker?.symbol && liveTicker.symbol !== symbol)
+                  ? (candles.length > 0 ? candles[candles.length - 1].close : (symbol === 'ETHUSDT' ? 2645.20 : 77379.6))
+                  : (liveTicker?.price || (candles.length > 0 ? candles[candles.length - 1].close : (symbol === 'ETHUSDT' ? 2645.20 : 77379.6)))
+              )}
             </span>
-            {liveTicker?.change_24h_pct !== undefined && (
+            {liveTicker?.change_24h_pct !== undefined && (!liveTicker.symbol || liveTicker.symbol === symbol) && (
               <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border tabular-nums ${
                 (liveTicker.change_24h_pct || 0) >= 0
                   ? 'text-apple-green bg-apple-green/10 border-apple-green/20'

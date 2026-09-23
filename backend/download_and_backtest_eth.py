@@ -1,3 +1,9 @@
+def make_badge(ret, suffix=""):
+    sign = "+" if ret >= 0 else ""
+    if suffix:
+        return f"{sign}{ret:,.2f}% Return ({suffix})"
+    return f"{sign}{ret:,.2f}% Return"
+
 #!/usr/bin/env python3
 """
 Quentra Multi-Asset Pipeline: Download ETHUSDT historical datasets from Binance (2020-2026),
@@ -145,11 +151,18 @@ def compute_yearly_metrics(trades, init_cap=10000.0):
         l_sum = abs(losses["net_return_pct"].sum())
         pf = round(float(w_sum / l_sum) if l_sum > 0 else 99.0, 2)
         
+        # Compounded return for this specific year
+        yr_cap = 1.0
+        for ret in grp["net_return_pct"]:
+            yr_cap *= (1.0 + ret / 100.0)
+        yr_return = round(float((yr_cap - 1.0) * 100.0), 2)
+        
         yearly.append({
             "year": int(yr),
             "trades": int(len(grp)),
             "win_rate": wr,
             "total_return_pct": round(float(grp["net_return_pct"].sum()), 2),
+            "total_return_pct": yr_return,
             "profit_factor": pf,
             "wins": int(len(wins)),
             "losses": int(len(losses))
@@ -238,6 +251,7 @@ def calculate_overall_metrics(trades):
     peaks = np.maximum.accumulate(eq_arr)
     dd_arr = (eq_arr - peaks) / peaks * 100.0
     max_dd = round(float(np.min(dd_arr)), 2)
+    compounded_total_ret = round(float((cap - 10000.0) / 10000.0 * 100.0), 2)
     
     years = (pd.to_datetime(df_t["exit_time"].iloc[-1]) - pd.to_datetime(df_t["entry_time"].iloc[0])).total_seconds() / (86400 * 365.25)
     years = max(years, 1.0)
@@ -246,6 +260,7 @@ def calculate_overall_metrics(trades):
     
     return {
         "total_return_pct": total_ret,
+        "total_return_pct": compounded_total_ret,
         "cagr_pct": cagr,
         "win_rate_pct": win_rate,
         "profit_factor": pf,
@@ -868,6 +883,7 @@ def run_eth_pipeline():
         "risk_tier": "Moderate",
         "recommended_for": "Traders looking to capture prolonged Ethereum multi-week macro expansions.",
         "badge": f"+{m_alpha['total_return_pct']}% Return (CAGR {m_alpha['cagr_pct']}%)",
+        "badge": make_badge(m_alpha["total_return_pct"], f"CAGR {m_alpha['cagr_pct']}%"),
         "metrics": m_alpha,
         "parameters": {
             "timeframe": "30m",
@@ -905,6 +921,7 @@ def run_eth_pipeline():
         "risk_tier": "Conservative-Moderate",
         "recommended_for": "Capital preservation with high consistency across market cycles on Ethereum.",
         "badge": f"+{m_new_gen['total_return_pct']}% Return (DD {m_new_gen['max_drawdown_pct']}%)",
+        "badge": make_badge(m_new_gen["total_return_pct"], f"DD {m_new_gen['max_drawdown_pct']}%"),
         "metrics": m_new_gen,
         "parameters": {
             "timeframe": "30m",
@@ -943,6 +960,7 @@ def run_eth_pipeline():
         "risk_tier": "Moderate",
         "recommended_for": "Traders seeking active exposure and high returns on ETH via pure multi-MA compression.",
         "badge": f"+{m_grd['total_return_pct']}% Return ({len(t_grd)} Trades)",
+        "badge": make_badge(m_grd["total_return_pct"], f"{len(t_grd)} Trades"),
         "metrics": m_grd,
         "parameters": {
             "timeframe": "30m",
@@ -981,6 +999,7 @@ def run_eth_pipeline():
         "risk_tier": "Moderate",
         "recommended_for": "Swing traders looking for balanced execution with intermediate macro filtering.",
         "badge": f"+{m_1h['total_return_pct']}% Return (CAGR {m_1h['cagr_pct']}%)",
+        "badge": make_badge(m_1h["total_return_pct"], f"CAGR {m_1h['cagr_pct']}%"),
         "metrics": m_1h,
         "parameters": {
             "timeframe": "1h",
@@ -1018,6 +1037,7 @@ def run_eth_pipeline():
         "risk_tier": "Moderate",
         "recommended_for": "Traders wanting quick partial profit harvesting (+4.0%) while keeping runner upside.",
         "badge": f"+{m_scalp['total_return_pct']}% Return (CAGR {m_scalp['cagr_pct']}%)",
+        "badge": make_badge(m_scalp["total_return_pct"], f"CAGR {m_scalp['cagr_pct']}%"),
         "metrics": m_scalp,
         "parameters": {
             "timeframe": "30m",
@@ -1055,6 +1075,7 @@ def run_eth_pipeline():
         "risk_tier": "Conservative",
         "recommended_for": "Institutional investors tracking long-term Ethereum secular cycles.",
         "badge": f"+{m_macro['total_return_pct']}% Return (Macro Cycle)",
+        "badge": make_badge(m_macro["total_return_pct"], "Macro Cycle"),
         "metrics": m_macro,
         "parameters": {
             "timeframe": "1w",
@@ -1089,6 +1110,7 @@ def run_eth_pipeline():
         "risk_tier": "Conservative-Moderate",
         "recommended_for": "Macro trend followers seeking minimal trade frequency and maximum ride time.",
         "badge": f"+{m_4h['total_return_pct']}% Return (CAGR {m_4h['cagr_pct']}%)",
+        "badge": make_badge(m_4h["total_return_pct"], f"CAGR {m_4h['cagr_pct']}%"),
         "metrics": m_4h,
         "parameters": {
             "timeframe": "4h",
@@ -1126,6 +1148,7 @@ def run_eth_pipeline():
         "risk_tier": "Moderate",
         "recommended_for": "Bear market hedging with quick profit harvesting (+12.0%) on ETH drops.",
         "badge": f"+{m_short_a['total_return_pct']}% Return (Win Rate {m_short_a['win_rate_pct']}%)",
+        "badge": make_badge(m_short_a["total_return_pct"], f"Win Rate {m_short_a['win_rate_pct']}%"),
         "metrics": m_short_a,
         "parameters": {
             "timeframe": "30m",
@@ -1163,6 +1186,7 @@ def run_eth_pipeline():
         "risk_tier": "Moderate",
         "recommended_for": "Traders wanting maximum trade participation during bearish ETH momentum phases.",
         "badge": f"+{m_short_b['total_return_pct']}% Return ({len(t_short_b)} Trades)",
+        "badge": make_badge(m_short_b["total_return_pct"], f"{len(t_short_b)} Trades"),
         "metrics": m_short_b,
         "parameters": {
             "timeframe": "30m",
@@ -1200,6 +1224,7 @@ def run_eth_pipeline():
         "risk_tier": "Moderate",
         "recommended_for": "Riding severe multi-week market downturns and flash crashes on Ethereum.",
         "badge": f"+{m_short_c['total_return_pct']}% Return (Target 50% TP)",
+        "badge": make_badge(m_short_c["total_return_pct"], "Target 50% TP"),
         "metrics": m_short_c,
         "parameters": {
             "timeframe": "30m",

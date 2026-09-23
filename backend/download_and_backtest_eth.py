@@ -1,18 +1,16 @@
-def make_badge(ret, suffix=""):
-    sign = "+" if ret >= 0 else ""
-    if suffix:
-        return f"{sign}{ret:,.2f}% Return ({suffix})"
-    return f"{sign}{ret:,.2f}% Return"
-
 #!/usr/bin/env python3
 """
-Quentra Multi-Asset Pipeline: Download ETHUSDT historical datasets from Binance (2020-2026),
-generate rolling indicators, and execute deterministic backtests for all 10 quantitative algorithms.
+Quentra Multi-Asset Quantitative Pipeline: ETHUSDT
+Downloads official Binance historical klines (2017-2026),
+generates multi-timeframe rolling indicators, and executes deterministic backtests
+for all 10 quantitative algorithms matching ground-truth trading specifications.
+
 Outputs:
-- backend/data/ETHUSDT_{tf}.parquet
+- backend/data/ETHUSDT_{tf}.parquet (30m, 1h, 4h, 1d, 1w)
 - backend/data/klines_cache_eth.json
 - backend/data/strategies_eth.json
 - frontend/src/data/strategiesData_eth.json
+- frontend/src/data/klinesBaseline_eth.json
 """
 
 import os
@@ -32,17 +30,34 @@ os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(FRONTEND_DATA_DIR, exist_ok=True)
 
 BINANCE_BASE = "https://data-api.binance.vision/api/v3/klines"
-START_MS = int(pd.to_datetime("2020-01-01 00:00:00").timestamp() * 1000)
+START_2017_MS = 1502928000000 # 2017-08-17 00:00:00 UTC (Binance earliest bar)
+START_2019_MS = 1546300800000 # 2019-01-01 00:00:00 UTC
+START_2020_MS = 1577836800000 # 2020-01-01 00:00:00 UTC
 NOW_MS = int(time.time() * 1000)
 
-INTERVALS = ["30m", "1h", "4h", "1d", "1w"]
+INTERVAL_START_MS = {
+    "1w": START_2017_MS,
+    "1d": START_2017_MS,
+    "4h": START_2019_MS,
+    "1h": START_2020_MS,
+    "30m": START_2020_MS,
+}
+
+INTERVALS = ["1w", "1d", "4h", "1h", "30m"]
 MA_WINDOWS = [8, 25, 50, 55, 111]
-FEE = 0.0009 # 0.09% per trade (Binance standard taker fee)
+FEE = 0.0009 # 0.09% per trade (Binance standard VIP0 taker fee)
+
+def make_badge(ret, suffix=""):
+    sign = "+" if ret >= 0 else ""
+    if suffix:
+        return f"{sign}{ret:,.2f}% Return ({suffix})"
+    return f"{sign}{ret:,.2f}% Return"
 
 def fetch_klines_range(symbol: str, interval: str, start_ms: int, end_ms: int):
     out = []
     cursor = start_ms
-    print(f"  Fetching {symbol} {interval} from {pd.to_datetime(start_ms, unit='ms')}...")
+    start_dt = pd.to_datetime(start_ms, unit='ms')
+    print(f"  Fetching {symbol} {interval} from {start_dt}...")
     while cursor < end_ms:
         url = f"{BINANCE_BASE}?symbol={symbol}&interval={interval}&startTime={cursor}&limit=1000"
         batch = None
@@ -51,7 +66,7 @@ def fetch_klines_range(symbol: str, interval: str, start_ms: int, end_ms: int):
                 with urllib.request.urlopen(url, timeout=20) as resp:
                     batch = json.loads(resp.read().decode())
                     break
-            except Exception as e:
+            except Exception:
                 time.sleep(1.0 + attempt * 1.5)
         
         if not batch:
@@ -62,9 +77,9 @@ def fetch_klines_range(symbol: str, interval: str, start_ms: int, end_ms: int):
         cursor = last_open + 1
         if len(batch) < 1000:
             break
-        time.sleep(0.08)
+        time.sleep(0.06)
     
-    print(f"  Downloaded {len(out)} raw bars for {interval}")
+    print(f"  ✓ Downloaded {len(out)} raw bars for {interval}")
     return out
 
 def process_klines(raw_rows):
@@ -112,28 +127,28 @@ def serialize_klines_list(df, limit=10000):
         })
     return rows
 
-def compute_swings(highs, lows, length):
-    n = len(highs)
+def compute_swings(high_arr, low_arr, len_p):
+    n = len(high_arr)
     top = np.zeros(n)
     btm = np.zeros(n)
-    os_state = 0
-    for i in range(length, n):
-        upper = np.max(highs[i - length + 1 : i + 1])
-        lower = np.min(lows[i - length + 1 : i + 1])
-        hl = highs[i - length]
-        ll = lows[i - length]
-        prev_os = os_state
+    os = 0
+    for i in range(len_p, n):
+        upper = np.max(high_arr[i - len_p + 1 : i + 1])
+        lower = np.min(low_arr[i - len_p + 1 : i + 1])
+        hl = high_arr[i - len_p]
+        ll = low_arr[i - len_p]
+        prev_os = os
         if hl > upper:
-            os_state = 0
+            os = 0
         elif ll < lower:
-            os_state = 1
-        if os_state == 0 and prev_os != 0:
+            os = 1
+        if os == 0 and prev_os != 0:
             top[i] = hl
-        if os_state == 1 and prev_os != 1:
+        if os == 1 and prev_os != 1:
             btm[i] = ll
     return top, btm
 
-def compute_yearly_metrics(trades, init_cap=10000.0):
+def compute_yearly_metrics(trades):
     if not trades:
         return []
     closed = [t for t in trades if t.get("status") != "OPEN"]
@@ -161,7 +176,6 @@ def compute_yearly_metrics(trades, init_cap=10000.0):
             "year": int(yr),
             "trades": int(len(grp)),
             "win_rate": wr,
-            "total_return_pct": round(float(grp["net_return_pct"].sum()), 2),
             "total_return_pct": yr_return,
             "profit_factor": pf,
             "wins": int(len(wins)),
@@ -236,16 +250,15 @@ def calculate_overall_metrics(trades):
     wins = df_t[df_t["net_return_pct"] > 0]
     losses = df_t[df_t["net_return_pct"] <= 0]
     
-    total_ret = round(float(df_t["net_return_pct"].sum()), 2)
     win_rate = round(float(len(wins) / len(df_t) * 100), 2)
-    w_sum = wins["net_return_pct"].sum() if len(wins) > 0 else 0
-    l_sum = abs(losses["net_return_pct"].sum()) if len(losses) > 0 else 0
+    w_sum = wins["net_return_pct"].sum() if len(wins) > 0 else 0.0
+    l_sum = abs(losses["net_return_pct"].sum()) if len(losses) > 0 else 0.0
     pf = round(float(w_sum / l_sum) if l_sum > 0 else 99.0, 2)
     
     cap = 10000.0
     equity = [cap]
     for ret in df_t["net_return_pct"]:
-        cap *= (1 + ret / 100.0)
+        cap *= (1.0 + ret / 100.0)
         equity.append(cap)
     eq_arr = np.array(equity)
     peaks = np.maximum.accumulate(eq_arr)
@@ -259,7 +272,6 @@ def calculate_overall_metrics(trades):
     calmar = round(abs(cagr / max_dd) if abs(max_dd) > 0 else 1.0, 2)
     
     return {
-        "total_return_pct": total_ret,
         "total_return_pct": compounded_total_ret,
         "cagr_pct": cagr,
         "win_rate_pct": win_rate,
@@ -275,469 +287,514 @@ def calculate_overall_metrics(trades):
         "worst_trade_pct": round(float(df_t["net_return_pct"].min()), 2)
     }
 
+def create_ticket(strat_id, name, direction, trades):
+    last_t = trades[-1] if trades else {}
+    is_open = last_t.get("status") == "OPEN"
+    ep = last_t.get("entry_price", 0.0)
+    curr_p = last_t.get("exit_price", ep)
+    sl = last_t.get("stop_loss", ep * 0.95 if direction == "LONG" else ep * 1.05)
+    tp = last_t.get("take_profit", ep * 1.20 if direction == "LONG" else ep * 0.80)
+    
+    if not is_open:
+        return None
+        
+    return {
+        "symbol": "ETH/USDT",
+        "direction": direction,
+        "strategy_name": name,
+        "strategy_id": strat_id,
+        "confidence_pct": 94,
+        "confidence_blocks": 9,
+        "entry_price": ep,
+        "current_price": curr_p,
+        "stop_loss": sl,
+        "stop_loss_pct": round(((sl - ep) / ep) * 100.0, 2) if direction == "LONG" else round(((ep - sl) / ep) * 100.0, 2),
+        "breakeven_trigger": 0.0,
+        "breakeven_trigger_pct": 0.0,
+        "take_profit": tp,
+        "take_profit_pct": round(((tp - ep) / ep) * 100.0, 2) if direction == "LONG" else round(((ep - tp) / ep) * 100.0, 2),
+        "risk_reward_ratio": "4.0x",
+        "timestamp": last_t.get("entry_time", ""),
+        "contributing_agents": ["quant", "trader", "informan"],
+        "status": "LIVE_SIGNAL",
+        "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+    }
+
 # =============================================================================
-# Accurate SMC State-Machine Simulators
+# Accurate Strategy Engines
 # =============================================================================
 
-def sim_long_smc_breakout(df_main, maj_top, maj_btm, ent_top, ex_btm, reg_cond, sl_pct=0.05, be_pct=0.03, tp_pct=0.75, partial_tp_pct=0.0, partial_weight=0.0):
-    """Accurate LONG SMC breakout simulator tracking itop/ibtm crossing state."""
-    n = len(df_main)
-    closes = df_main["close"].values
-    highs = df_main["high"].values
-    lows = df_main["low"].values
-    dts = df_main["datetime"].values
-    
-    top_y = 0.0
-    itop_y = 0.0
-    itop_cross = True
-    btm_y = 0.0
-    ibtm_y = 0.0
-    ibtm_cross = True
+def sim_30m_smc_breakout(df_sub, bull_signals, bear_signals, sl_pct=0.05, be_pct=0.03, tp_pct=0.75, partial_tp_pct=0.0, partial_weight=0.0):
+    n = len(df_sub)
+    highs = df_sub["high"].values
+    lows = df_sub["low"].values
+    closes = df_sub["close"].values
+    dts = df_sub["datetime"].values
     
     in_pos = False
-    entry_p = 0.0
+    ep = 0.0
     peak_p = 0.0
-    entry_i = 0
+    ei = 0
     be_trig = False
     partial_taken = False
     trades = []
     
     for i in range(1, n):
-        prev_itop = itop_y
-        prev_ibtm = ibtm_y
-        
-        if maj_top[i] > 0: top_y = maj_top[i]
-        if ent_top[i] > 0: itop_y = ent_top[i]; itop_cross = True
-        
-        if maj_btm[i] > 0: btm_y = maj_btm[i]
-        if ex_btm[i] > 0: ibtm_y = ex_btm[i]; ibtm_cross = True
-        
-        crossover_itop = (closes[i] > itop_y) and (closes[i-1] <= prev_itop)
-        crossunder_ibtm = (closes[i] < ibtm_y) and (closes[i-1] >= prev_ibtm)
-        
-        reg_ok = reg_cond[i] if reg_cond is not None else True
-        b_entry = crossover_itop and itop_cross and (top_y != itop_y) and reg_ok
-        b_exit = crossunder_ibtm and ibtm_cross and (btm_y != ibtm_y)
-        
-        if b_entry:
-            itop_cross = False
-        if b_exit:
-            ibtm_cross = False
-            
         if in_pos:
             peak_p = max(peak_p, highs[i])
-            curr_sl = entry_p * (1.0 - sl_pct)
+            curr_sl = ep * (1.0 - sl_pct)
             
-            if be_pct > 0 and peak_p >= entry_p * (1.0 + be_pct):
-                curr_sl = max(curr_sl, entry_p * 1.002)
+            if be_pct > 0 and peak_p >= ep * (1.0 + be_pct):
+                curr_sl = max(curr_sl, ep * 1.002)
                 be_trig = True
                 
-            if partial_tp_pct > 0 and not partial_taken and highs[i] >= entry_p * (1.0 + partial_tp_pct):
+            if partial_tp_pct > 0 and not partial_taken and highs[i] >= ep * (1.0 + partial_tp_pct):
                 partial_taken = True
-                curr_sl = max(curr_sl, entry_p * 1.002)
+                curr_sl = max(curr_sl, ep * 1.002)
                 be_trig = True
                 
             hit_sl = lows[i] <= curr_sl
-            hit_tp = highs[i] >= entry_p * (1.0 + tp_pct)
-            struct_exit = b_exit
+            hit_tp = highs[i] >= ep * (1.0 + tp_pct)
+            struct_exit = bear_signals[i]
             
             if hit_sl or hit_tp or struct_exit:
-                exit_p = curr_sl if hit_sl else (entry_p * (1.0 + tp_pct) if hit_tp else closes[i])
-                reason = "Stop Loss" if hit_sl and not be_trig else ("Breakeven SL" if hit_sl else ("Take Profit" if hit_tp else "Structural Exit"))
-                
-                raw_ret = (exit_p - entry_p) / entry_p
-                if partial_taken:
-                    blended = partial_weight * partial_tp_pct + (1.0 - partial_weight) * raw_ret
-                else:
-                    blended = raw_ret
-                    
-                net = (blended - (FEE * 2)) * 100.0
-                gross = blended * 100.0
+                xp = curr_sl if hit_sl else (ep * (1.0 + tp_pct) if hit_tp else closes[i])
+                rs = "Stop Loss (5%)" if hit_sl and not be_trig else ("Breakeven SL" if hit_sl else ("Take Profit (75%)" if hit_tp else "Bearish CHoCH (48h)"))
+                raw_ret = (xp - ep) / ep
+                blended = partial_weight * partial_tp_pct + (1.0 - partial_weight) * raw_ret if partial_taken else raw_ret
+                net = (1.0 + blended) * (1.0 - FEE)**2 - 1.0
                 
                 trades.append({
                     "trade_no": len(trades) + 1,
                     "side": "LONG",
                     "type": "LONG",
-                    "entry_time": dts[entry_i],
+                    "entry_time": dts[ei],
                     "exit_time": dts[i],
-                    "entry_price": round(entry_p, 2),
-                    "exit_price": round(exit_p, 2),
-                    "gross_return_pct": round(gross, 2),
-                    "net_return_pct": round(net, 2),
-                    "exit_reason": reason,
+                    "entry_price": round(ep, 2),
+                    "exit_price": round(xp, 2),
+                    "gross_return_pct": round(blended * 100.0, 2),
+                    "net_return_pct": round(net * 100.0, 2),
+                    "exit_reason": rs,
                     "be_activated": be_trig,
                     "status": "CLOSED"
                 })
                 in_pos = False
+                be_trig = False
+                partial_taken = False
+        else:
+            if bull_signals[i]:
+                in_pos = True
+                ep = closes[i]
+                peak_p = highs[i]
+                ei = i
+                be_trig = False
+                partial_taken = False
                 
-        if not in_pos and b_entry:
-            in_pos = True
-            entry_p = closes[i]
-            peak_p = highs[i]
-            entry_i = i
-            be_trig = False
-            partial_taken = False
-            
     if in_pos:
         last_c = closes[-1]
-        curr_sl = entry_p * (1.0 - sl_pct)
+        curr_sl = ep * (1.0 - sl_pct)
         if be_trig:
-            curr_sl = max(curr_sl, entry_p * 1.002)
-        gross = ((last_c - entry_p) / entry_p) * 100.0
-        net = gross - (FEE * 2 * 100.0)
+            curr_sl = max(curr_sl, ep * 1.002)
+        raw_ret = (last_c - ep) / ep
+        net = (1.0 + raw_ret) * (1.0 - FEE)**2 - 1.0
         trades.append({
             "trade_no": len(trades) + 1,
             "side": "LONG",
             "type": "LONG",
-            "entry_time": dts[entry_i],
+            "entry_time": dts[ei],
             "exit_time": "RUNNING",
-            "entry_price": round(entry_p, 2),
+            "entry_price": round(ep, 2),
             "exit_price": round(last_c, 2),
-            "gross_return_pct": round(gross, 2),
-            "net_return_pct": round(net, 2),
+            "gross_return_pct": round(raw_ret * 100.0, 2),
+            "net_return_pct": round(net * 100.0, 2),
             "exit_reason": "Active Signal (Trailing)",
             "be_activated": be_trig,
             "status": "OPEN",
             "stop_loss": round(curr_sl, 2),
-            "take_profit": round(entry_p * (1.0 + tp_pct), 2),
+            "take_profit": round(ep * (1.0 + tp_pct), 2),
             "is_active": True
         })
     return trades
 
-def sim_short_smc_breakdown(df_main, maj_top, maj_btm, ent_btm, ex_top, reg_cond, sl_pct=0.05, be_pct=0.02, tp_pct=0.25):
-    """Accurate SHORT SMC breakdown simulator tracking itop/ibtm crossing state."""
-    n = len(df_main)
-    closes = df_main["close"].values
-    highs = df_main["high"].values
-    lows = df_main["low"].values
-    dts = df_main["datetime"].values
-    
-    top_y = 0.0
-    itop_y = 0.0
-    itop_cross = True
-    btm_y = 0.0
-    ibtm_y = 0.0
-    ibtm_cross = True
+def sim_1h_smc_enhanced(df_sub, bull_sigs, bear_sigs, sl_pct=0.08, be_pct=0.05, tp_pct=0.75):
+    n = len(df_sub)
+    highs = df_sub["high"].values
+    lows = df_sub["low"].values
+    closes = df_sub["close"].values
+    dts = df_sub["datetime"].values
     
     in_pos = False
-    entry_p = 0.0
-    trough_p = 0.0
-    entry_i = 0
+    ep = 0.0
+    peak_p = 0.0
+    ei = 0
     be_trig = False
     trades = []
     
     for i in range(1, n):
-        prev_itop = itop_y
-        prev_ibtm = ibtm_y
-        
-        if maj_btm[i] > 0: btm_y = maj_btm[i]
-        if maj_top[i] > 0: top_y = maj_top[i]
-        
-        if ent_btm[i] > 0: ibtm_y = ent_btm[i]; ibtm_cross = True
-        if ex_top[i] > 0: itop_y = ex_top[i]; itop_cross = True
-        
-        crossunder_ibtm = (closes[i] < ibtm_y) and (closes[i-1] >= prev_ibtm)
-        crossover_itop = (closes[i] > itop_y) and (closes[i-1] <= prev_itop)
-        
-        reg_ok = reg_cond[i] if reg_cond is not None else True
-        s_entry = crossunder_ibtm and ibtm_cross and (btm_y != ibtm_y) and reg_ok
-        s_exit = crossover_itop and itop_cross and (top_y != itop_y)
-        
-        if s_entry:
-            ibtm_cross = False
-        if s_exit:
-            itop_cross = False
-            
         if in_pos:
-            trough_p = min(trough_p, lows[i])
-            curr_sl = entry_p * (1.0 + sl_pct)
-            
-            if be_pct > 0 and trough_p <= entry_p * (1.0 - be_pct):
-                curr_sl = min(curr_sl, entry_p * 0.998)
+            peak_p = max(peak_p, highs[i])
+            curr_sl = ep * (1.0 - sl_pct)
+            if be_pct > 0 and peak_p >= ep * (1.0 + be_pct):
+                curr_sl = max(curr_sl, ep * 1.002)
                 be_trig = True
                 
-            hit_sl = highs[i] >= curr_sl
-            hit_tp = lows[i] <= entry_p * (1.0 - tp_pct)
-            struct_exit = s_exit
+            hit_sl = lows[i] <= curr_sl
+            hit_tp = highs[i] >= ep * (1.0 + tp_pct)
+            struct_exit = bear_sigs[i]
             
             if hit_sl or hit_tp or struct_exit:
-                exit_p = curr_sl if hit_sl else (entry_p * (1.0 - tp_pct) if hit_tp else closes[i])
-                reason = "Stop Loss" if hit_sl and not be_trig else ("Breakeven SL" if hit_sl else ("Take Profit" if hit_tp else "Structural Exit"))
-                
-                raw_ret = (entry_p - exit_p) / entry_p
-                net = (raw_ret - (FEE * 2)) * 100.0
-                gross = raw_ret * 100.0
+                xp = curr_sl if hit_sl else (ep * (1.0 + tp_pct) if hit_tp else closes[i])
+                rs = "Stop Loss (8%)" if hit_sl and not be_trig else ("Breakeven SL" if hit_sl else ("Take Profit (75%)" if hit_tp else "Bearish CHoCH Exit"))
+                raw_ret = (xp - ep) / ep
+                net = (1.0 + raw_ret) * (1.0 - FEE)**2 - 1.0
                 
                 trades.append({
                     "trade_no": len(trades) + 1,
-                    "side": "SHORT",
-                    "type": "SHORT",
-                    "entry_time": dts[entry_i],
+                    "side": "LONG",
+                    "type": "LONG",
+                    "entry_time": dts[ei],
                     "exit_time": dts[i],
-                    "entry_price": round(entry_p, 2),
-                    "exit_price": round(exit_p, 2),
-                    "gross_return_pct": round(gross, 2),
-                    "net_return_pct": round(net, 2),
-                    "exit_reason": reason,
+                    "entry_price": round(ep, 2),
+                    "exit_price": round(xp, 2),
+                    "gross_return_pct": round(raw_ret * 100.0, 2),
+                    "net_return_pct": round(net * 100.0, 2),
+                    "exit_reason": rs,
                     "be_activated": be_trig,
                     "status": "CLOSED"
                 })
                 in_pos = False
+                be_trig = False
+        else:
+            if bull_sigs[i]:
+                in_pos = True
+                ep = closes[i]
+                peak_p = highs[i]
+                ei = i
+                be_trig = False
                 
-        if not in_pos and s_entry:
-            in_pos = True
-            entry_p = closes[i]
-            trough_p = lows[i]
-            entry_i = i
-            be_trig = False
-            
     if in_pos:
         last_c = closes[-1]
-        curr_sl = entry_p * (1.0 + sl_pct)
+        curr_sl = ep * (1.0 - sl_pct)
         if be_trig:
-            curr_sl = min(curr_sl, entry_p * 0.998)
-        gross = ((entry_p - last_c) / entry_p) * 100.0
-        net = gross - (FEE * 2 * 100.0)
+            curr_sl = max(curr_sl, ep * 1.002)
+        raw_ret = (last_c - ep) / ep
+        net = (1.0 + raw_ret) * (1.0 - FEE)**2 - 1.0
         trades.append({
             "trade_no": len(trades) + 1,
-            "side": "SHORT",
-            "type": "SHORT",
-            "entry_time": dts[entry_i],
+            "side": "LONG",
+            "type": "LONG",
+            "entry_time": dts[ei],
             "exit_time": "RUNNING",
-            "entry_price": round(entry_p, 2),
+            "entry_price": round(ep, 2),
             "exit_price": round(last_c, 2),
-            "gross_return_pct": round(gross, 2),
-            "net_return_pct": round(net, 2),
+            "gross_return_pct": round(raw_ret * 100.0, 2),
+            "net_return_pct": round(net * 100.0, 2),
             "exit_reason": "Active Signal (Trailing)",
             "be_activated": be_trig,
             "status": "OPEN",
             "stop_loss": round(curr_sl, 2),
-            "take_profit": round(entry_p * (1.0 - tp_pct), 2),
+            "take_profit": round(ep * (1.0 + tp_pct), 2),
             "is_active": True
         })
     return trades
 
-def sim_ma_squeeze_strategy(df_30m, df_1h, df_4h=None, use_4h=True):
-    d30 = df_30m.copy()
-    d1h = df_1h.copy()
-    d1h["ts"] = d1h["timestamp"] + 3600000
+def sim_4h_pippo_original(df_4h_data):
+    n = len(df_4h_data)
+    highs = df_4h_data["high"].values
+    lows = df_4h_data["low"].values
+    closes = df_4h_data["close"].values
+    dts = df_4h_data["datetime"].values
+    sma111 = df_4h_data["MA111"].values
     
-    df = pd.merge_asof(
-        d30,
-        d1h[["ts", "close", "MA25", "MA50"]].rename(columns={"close": "c1h", "MA25": "m25h", "MA50": "m50h"}),
-        left_on="timestamp", right_on="ts", direction="backward"
-    )
+    top_50, btm_50 = compute_swings(highs, lows, 50)
+    itop_5, ibtm_5 = compute_swings(highs, lows, 5)
     
-    if use_4h and df_4h is not None:
-        d4h = df_4h.copy()
-        d4h["ts4"] = d4h["timestamp"] + 4 * 3600 * 1000
-        df = pd.merge_asof(
-            df,
-            d4h[["ts4", "close", "MA111"]].rename(columns={"close": "c4h", "MA111": "ma111_4h"}),
-            left_on="timestamp", right_on="ts4", direction="backward"
-        )
+    itop_y, ibtm_y, top_y, btm_y = 0.0, 0.0, 0.0, 0.0
+    itop_cross, ibtm_cross = True, True
     
-    tr = np.maximum(df["high"] - df["low"], np.maximum((df["high"] - df["close"].shift()).abs(), (df["low"] - df["close"].shift()).abs()))
-    df["atr_pct"] = tr.rolling(14).mean() / df["close"] * 100.0
-    
-    trades = []
     in_pos = False
     ep = 0.0
     ei = 0
-    sl_pct = 0.02
-    tp_pct = 0.20
-    fc_dist = 0.005
+    trades = []
     
-    closes = df["close"].values
-    highs = df["high"].values
-    lows = df["low"].values
-    dts = df["datetime"].values
-    m25 = df["MA25"].values
-    m50 = df["MA50"].values
-    
-    c1h = df["c1h"].values
-    m25h = df["m25h"].values
-    m50h = df["m50h"].values
-    atr = df["atr_pct"].values
-    c4h = df["c4h"].values if "c4h" in df else None
-    m111_4h = df["ma111_4h"].values if "ma111_4h" in df else None
-    
-    for i in range(50, len(df)):
-        c = closes[i]
-        h = highs[i]
-        l = lows[i]
-        cur_dt = dts[i]
+    for i in range(1, n):
+        prev_itop, prev_ibtm = itop_y, ibtm_y
+        if top_50[i] > 0: top_y = top_50[i]
+        if itop_5[i] > 0: itop_y = itop_5[i]; itop_cross = True
+        if btm_50[i] > 0: btm_y = btm_50[i]
+        if ibtm_5[i] > 0: ibtm_y = ibtm_5[i]; ibtm_cross = True
+        
+        cross_itop = (closes[i] > itop_y) and (closes[i-1] <= prev_itop)
+        cross_ibtm = (closes[i] < ibtm_y) and (closes[i-1] >= prev_ibtm)
+        
+        bull_signal = cross_itop and itop_cross and (top_y != itop_y) and (closes[i] > sma111[i])
+        bear_signal = cross_ibtm and ibtm_cross and (btm_y != ibtm_y)
         
         if in_pos:
-            slp = ep * (1.0 - sl_pct)
-            tpp = ep * (1.0 + tp_pct)
-            m25_val = m25[i] if not np.isnan(m25[i]) else c
-            m50_val = m50[i] if not np.isnan(m50[i]) else c
-            fc = (c < m25_val) and (c < m50_val) and ((m25_val - c) / m25_val >= fc_dist) and ((m50_val - c) / m50_val >= fc_dist)
+            sl_price = ep * 0.85
+            tp_price = ep * 1.75
+            hit_tp = highs[i] >= tp_price
+            hit_sl = lows[i] <= sl_price
             
-            hit_sl = l <= slp
-            hit_tp = h >= tpp
-            
-            if hit_sl or hit_tp or fc:
-                xp = slp if hit_sl else (tpp if hit_tp else c)
-                rs = "Stop Loss (-2%)" if hit_sl else ("Take Profit (+20%)" if hit_tp else "Force Close MA (-0.5%)")
-                gross = ((xp - ep) / ep) * 100.0
-                net = gross - (FEE * 2 * 100.0)
+            if hit_tp or hit_sl:
+                xp = tp_price if hit_tp else sl_price
+                rs = "Take Profit (75%)" if hit_tp else "Stop Loss (15%)"
+                gross = (xp - ep) / ep
+                net = (1.0 + gross) * (1.0 - FEE)**2 - 1.0
                 trades.append({
-                    "trade_no": len(trades) + 1,
-                    "side": "LONG",
-                    "type": "LONG",
-                    "entry_time": dts[ei],
-                    "exit_time": cur_dt,
-                    "entry_price": round(ep, 2),
-                    "exit_price": round(xp, 2),
-                    "gross_return_pct": round(gross, 2),
-                    "net_return_pct": round(net, 2),
-                    "exit_reason": rs,
-                    "be_activated": False,
-                    "status": "CLOSED"
+                    "trade_no": len(trades) + 1, "side": "LONG", "type": "LONG",
+                    "entry_time": dts[ei], "exit_time": dts[i], "entry_price": round(ep, 2),
+                    "exit_price": round(xp, 2), "gross_return_pct": round(gross * 100.0, 2),
+                    "net_return_pct": round(net * 100.0, 2), "exit_reason": rs, "status": "CLOSED"
+                })
+                in_pos = False
+            elif bear_signal:
+                xp = closes[i]
+                rs = "Bearish CHoCH Exit"
+                gross = (xp - ep) / ep
+                net = (1.0 + gross) * (1.0 - FEE)**2 - 1.0
+                trades.append({
+                    "trade_no": len(trades) + 1, "side": "LONG", "type": "LONG",
+                    "entry_time": dts[ei], "exit_time": dts[i], "entry_price": round(ep, 2),
+                    "exit_price": round(xp, 2), "gross_return_pct": round(gross * 100.0, 2),
+                    "net_return_pct": round(net * 100.0, 2), "exit_reason": rs, "status": "CLOSED"
                 })
                 in_pos = False
                 
-        if not in_pos:
-            m25_val = m25[i]
-            m50_val = m50[i]
-            if np.isnan(m25_val) or np.isnan(m50_val):
-                continue
-                
-            c1_val = c1h[i]
-            m25h_val = m25h[i]
-            m50h_val = m50h[i]
-            if np.isnan(c1_val) or np.isnan(m25h_val) or np.isnan(m50h_val):
-                continue
-                
-            a1h = (c1_val > m25h_val) and (c1_val > m50h_val) and ((c1_val - m25h_val) / m25h_val < 0.015) and ((c1_val - m50h_val) / m50h_val < 0.015)
-            
-            a4h = True
-            if use_4h and c4h is not None and m111_4h is not None:
-                c4_val = c4h[i]
-                m4_val = m111_4h[i]
-                if not np.isnan(c4_val) and not np.isnan(m4_val):
-                    a4h = c4_val > m4_val
-                    
-            a30 = (c > m25_val) and (c > m50_val) and ((c - m25_val) / m25_val < 0.008) and ((c - m50_val) / m50_val < 0.008)
-            sp = abs(m25_val - m50_val) / m50_val < 0.0015
-            at = atr[i] <= 1.0 if not np.isnan(atr[i]) else False
-            
-            if a1h and a4h and a30 and sp and at:
+        if bear_signal: ibtm_cross = False
+        if bull_signal:
+            itop_cross = False
+            if not in_pos:
                 in_pos = True
-                ep = c
+                ep = closes[i]
                 ei = i
                 
     if in_pos:
         last_c = closes[-1]
-        gross = ((last_c - ep) / ep) * 100.0
-        net = gross - (FEE * 2 * 100.0)
+        gross = (last_c - ep) / ep
+        net = (1.0 + gross) * (1.0 - FEE)**2 - 1.0
         trades.append({
-            "trade_no": len(trades) + 1,
-            "side": "LONG",
-            "type": "LONG",
-            "entry_time": dts[ei],
-            "exit_time": "RUNNING",
-            "entry_price": round(ep, 2),
-            "exit_price": round(last_c, 2),
-            "gross_return_pct": round(gross, 2),
-            "net_return_pct": round(net, 2),
-            "exit_reason": "Active Signal (Trailing)",
-            "be_activated": False,
-            "status": "OPEN",
-            "stop_loss": round(ep * 0.98, 2),
-            "take_profit": round(ep * 1.20, 2),
-            "is_active": True
+            "trade_no": len(trades) + 1, "side": "LONG", "type": "LONG",
+            "entry_time": dts[ei], "exit_time": "RUNNING", "entry_price": round(ep, 2),
+            "exit_price": round(last_c, 2), "gross_return_pct": round(gross * 100.0, 2),
+            "net_return_pct": round(net * 100.0, 2), "exit_reason": "Active Macro Hold",
+            "status": "OPEN", "stop_loss": round(ep * 0.85, 2), "take_profit": round(ep * 1.75, 2), "is_active": True
         })
-        
     return trades
 
-def sim_weekly_ma55(df_w):
-    trades = []
-    closes = df_w["close"].values
-    ma55 = df_w["MA55"].values
-    dts = df_w["datetime"].values
-    n = len(df_w)
+def sim_pure_weekly_ma55(df_w_data):
+    df_2020 = df_w_data[df_w_data["datetime"] >= "2020-01-01"].copy().reset_index(drop=True)
+    nw = len(df_2020)
+    closes = df_2020["close"].values
+    ma55 = df_2020["MA55"].values
+    dts = df_2020["datetime"].values
     
+    trades = []
     in_pos = False
     ep = 0.0
     ei = 0
     
-    for i in range(55, n):
+    for i in range(nw):
         c = closes[i]
         m = ma55[i]
-        cur_dt = dts[i]
-        
         if in_pos:
             if c < m:
-                gross = ((c - ep) / ep) * 100.0
-                net = gross - (FEE * 2 * 100.0)
+                gross = (c - ep) / ep
+                net = (1.0 + gross) * (1.0 - FEE)**2 - 1.0
                 trades.append({
-                    "trade_no": len(trades) + 1,
-                    "side": "LONG",
-                    "type": "LONG",
-                    "entry_time": dts[ei],
-                    "exit_time": cur_dt,
-                    "entry_price": round(ep, 2),
-                    "exit_price": round(c, 2),
-                    "gross_return_pct": round(gross, 2),
-                    "net_return_pct": round(net, 2),
-                    "exit_reason": "Weekly Close < MA55",
-                    "status": "CLOSED"
+                    "trade_no": len(trades) + 1, "side": "LONG", "type": "LONG",
+                    "entry_time": dts[ei], "exit_time": dts[i], "entry_price": round(ep, 2),
+                    "exit_price": round(c, 2), "gross_return_pct": round(gross * 100.0, 2),
+                    "net_return_pct": round(net * 100.0, 2), "exit_reason": "Weekly Close < MA55", "status": "CLOSED"
                 })
                 in_pos = False
         else:
-            if c > m:
+            if c >= m:
                 in_pos = True
                 ep = c
                 ei = i
                 
     if in_pos:
         last_c = closes[-1]
-        gross = ((last_c - ep) / ep) * 100.0
-        net = gross - (FEE * 2 * 100.0)
+        gross = (last_c - ep) / ep
+        net = (1.0 + gross) * (1.0 - FEE)**2 - 1.0
         trades.append({
-            "trade_no": len(trades) + 1,
-            "side": "LONG",
-            "type": "LONG",
-            "entry_time": dts[ei],
-            "exit_time": "RUNNING",
-            "entry_price": round(ep, 2),
-            "exit_price": round(last_c, 2),
-            "gross_return_pct": round(gross, 2),
-            "net_return_pct": round(net, 2),
-            "exit_reason": "Active Macro Hold",
-            "status": "OPEN",
-            "is_active": True
+            "trade_no": len(trades) + 1, "side": "LONG", "type": "LONG",
+            "entry_time": dts[ei], "exit_time": "RUNNING", "entry_price": round(ep, 2),
+            "exit_price": round(last_c, 2), "gross_return_pct": round(gross * 100.0, 2),
+            "net_return_pct": round(net * 100.0, 2), "exit_reason": "Active Macro Hold",
+            "status": "OPEN", "is_active": True
+        })
+    return trades
+
+def sim_ma_squeeze(df_main, use_4h=True):
+    highs, lows, closes = df_main["high"].values, df_main["low"].values, df_main["close"].values
+    dts = df_main["datetime"].values
+    a1h = ((df_main["c1h"] > df_main["m25h"]) & (df_main["c1h"] > df_main["m50h"])).values
+    d25h, d50h = df_main["d25h"].values, df_main["d50h"].values
+    a30 = ((df_main["close"] > df_main["ma25"]) & (df_main["close"] > df_main["ma50"])).values
+    b30 = ((df_main["close"] < df_main["ma25"]) & (df_main["close"] < df_main["ma50"])).values
+    d25, d50 = df_main["d25"].values, df_main["d50"].values
+    spread = df_main["abs_spread"].values
+    atr = df_main["atr"].values
+    above4h = (df_main["c4h"] > df_main["ma111_4h"]).fillna(False).values if use_4h else np.ones(len(df_main), dtype=bool)
+    
+    trades = []
+    in_pos = False
+    ep = 0.0
+    ei = 0
+    
+    for i in range(len(df_main)):
+        ex = False
+        if in_pos:
+            slp = ep * 0.98
+            tpp = ep * 1.20
+            hit_sl = lows[i] <= slp
+            hit_tp = highs[i] >= tpp
+            hit_fc = b30[i] and (-d25[i] > 0.5) and (-d50[i] > 0.5)
+            
+            if hit_sl or hit_tp or hit_fc:
+                xp = slp if hit_sl else (tpp if hit_tp else closes[i])
+                rs = "Stop Loss (-2%)" if hit_sl else ("Take Profit (+20%)" if hit_tp else "Force Close MA (-0.5%)")
+                gross = (xp - ep) / ep
+                net = (1.0 + gross) * (1.0 - FEE)**2 - 1.0
+                trades.append({
+                    "trade_no": len(trades) + 1, "side": "LONG", "type": "LONG",
+                    "entry_time": dts[ei], "exit_time": dts[i], "entry_price": round(ep, 2),
+                    "exit_price": round(xp, 2), "gross_return_pct": round(gross * 100.0, 2),
+                    "net_return_pct": round(net * 100.0, 2), "exit_reason": rs, "status": "CLOSED"
+                })
+                in_pos = False
+                ex = True
+        if not in_pos and not ex:
+            cond_reg = a1h[i] and d25h[i] < 1.5 and d50h[i] < 1.5 and above4h[i]
+            cond_ent = a30[i] and d25[i] < 0.8 and d50[i] < 0.8
+            cond_flt = spread[i] < 0.15 and atr[i] <= 1.0
+            if cond_reg and cond_ent and cond_flt:
+                in_pos = True
+                ep = closes[i]
+                ei = i
+                
+    if in_pos:
+        last_c = closes[-1]
+        gross = (last_c - ep) / ep
+        net = (1.0 + gross) * (1.0 - FEE)**2 - 1.0
+        trades.append({
+            "trade_no": len(trades) + 1, "side": "LONG", "type": "LONG",
+            "entry_time": dts[ei], "exit_time": "RUNNING", "entry_price": round(ep, 2),
+            "exit_price": round(last_c, 2), "gross_return_pct": round(gross * 100.0, 2),
+            "net_return_pct": round(net * 100.0, 2), "exit_reason": "Active Signal (Trailing)",
+            "status": "OPEN", "stop_loss": round(ep * 0.98, 2), "take_profit": round(ep * 1.20, 2), "is_active": True
+        })
+    return trades
+
+def sim_short_smc_v2(df_sub, swings_dict, maj, ent, ex, r_mask, sl_pct=0.05, be_pct=0.02, tp_pct=0.20):
+    n = len(df_sub)
+    closes = df_sub["close"].values
+    highs = df_sub["high"].values
+    lows = df_sub["low"].values
+    dts = df_sub["datetime"].values
+    
+    top_m, btm_m = swings_dict[maj]
+    top_e, btm_e = swings_dict[ent]
+    top_x, btm_x = swings_dict[ex]
+    
+    top_y = 0.0; itop_y = 0.0; itop_cross = True
+    btm_y = 0.0; ibtm_y = 0.0; ibtm_cross = True
+    in_pos = False; ep = 0.0; ei = 0; curr_sl = 0.0; trough_p = 0.0; be_active = False
+    trades = []
+    
+    for i in range(1, n):
+        prev_itop = itop_y; prev_ibtm = ibtm_y
+        if btm_m[i] > 0: btm_y = btm_m[i]
+        if top_m[i] > 0: top_y = top_m[i]
+        if btm_e[i] > 0: ibtm_y = btm_e[i]; ibtm_cross = True
+        if top_x[i] > 0:  itop_y = top_x[i];  itop_cross = True
+        
+        cross_ibtm = (closes[i] < ibtm_y) and (closes[i-1] >= prev_ibtm)
+        cross_itop = (closes[i] > itop_y) and (closes[i-1] <= prev_itop)
+        
+        s_entry = cross_ibtm and ibtm_cross and (btm_y != ibtm_y) and r_mask[i]
+        s_exit  = cross_itop and itop_cross and (top_y != itop_y)
+        
+        if not in_pos:
+            if s_entry:
+                in_pos = True; ep = closes[i]; ei = i; trough_p = lows[i]
+                curr_sl = ep * (1.0 + sl_pct); be_active = False; ibtm_cross = False
+        else:
+            trough_p = min(trough_p, lows[i])
+            drop = (ep - trough_p) / ep
+            if be_pct > 0 and drop >= be_pct:
+                be_sl = ep * 0.998
+                if be_sl < curr_sl: curr_sl = be_sl; be_active = True
+                
+            hit_sl = (highs[i] >= curr_sl)
+            hit_tp = (tp_pct > 0 and lows[i] <= ep * (1.0 - tp_pct))
+            struct_exit = s_exit
+            
+            if hit_sl or hit_tp or struct_exit:
+                if hit_tp:
+                    xp = ep * (1.0 - tp_pct); rs = "Take Profit"
+                elif hit_sl:
+                    xp = curr_sl; rs = "Breakeven SL" if be_active else "Stop Loss"
+                else:
+                    xp = closes[i]; rs = "Structural Exit"
+                    
+                gross = (ep - xp) / ep
+                net = (1.0 + gross) * (1.0 - FEE)**2 - 1.0
+                trades.append({
+                    "trade_no": len(trades) + 1, "side": "SHORT", "type": "SHORT",
+                    "entry_time": dts[ei], "exit_time": dts[i], "entry_price": round(ep, 2),
+                    "exit_price": round(xp, 2), "gross_return_pct": round(gross * 100.0, 2),
+                    "net_return_pct": round(net * 100.0, 2), "exit_reason": rs, "status": "CLOSED"
+                })
+                in_pos = False; itop_cross = False
+                
+    if in_pos:
+        last_c = closes[-1]
+        gross = (ep - last_c) / ep
+        net = (1.0 + gross) * (1.0 - FEE)**2 - 1.0
+        trades.append({
+            "trade_no": len(trades) + 1, "side": "SHORT", "type": "SHORT",
+            "entry_time": dts[ei], "exit_time": "RUNNING", "entry_price": round(ep, 2),
+            "exit_price": round(last_c, 2), "gross_return_pct": round(gross * 100.0, 2),
+            "net_return_pct": round(net * 100.0, 2), "exit_reason": "Active Signal (Trailing)",
+            "status": "OPEN", "stop_loss": round(curr_sl, 2), "take_profit": round(ep * (1.0 - tp_pct), 2), "is_active": True
         })
     return trades
 
 # =============================================================================
-# Main Pipeline Execution
+# Main Pipeline
 # =============================================================================
 
 def run_eth_pipeline():
     print("===================================================================")
-    print("STEP 1: Checking / Loading Official Binance ETHUSDT Datasets")
+    print("STEP 1: Fetching / Processing Official Binance ETHUSDT Datasets")
     print("===================================================================")
-    
     dfs = {}
     for itv in INTERVALS:
         pq_path = os.path.join(DATA_DIR, f"ETHUSDT_{itv}.parquet")
+        start_ms = INTERVAL_START_MS[itv]
+        
+        # Check if existing parquet covers required start time
+        needs_fetch = True
         if os.path.exists(pq_path):
-            df = pd.read_parquet(pq_path).sort_values("timestamp").reset_index(drop=True)
-            print(f"  ✓ Loaded existing {len(df)} bars from {pq_path}")
-        else:
-            raw = fetch_klines_range("ETHUSDT", itv, START_MS, NOW_MS)
+            existing_df = pd.read_parquet(pq_path).sort_values("timestamp").reset_index(drop=True)
+            if len(existing_df) > 0 and existing_df["timestamp"].iloc[0] <= start_ms + 86400000:
+                print(f"  ✓ Loaded valid {len(existing_df)} bars for {itv} from {pq_path}")
+                dfs[itv] = existing_df
+                needs_fetch = False
+                
+        if needs_fetch:
+            raw = fetch_klines_range("ETHUSDT", itv, start_ms, NOW_MS)
             df = process_klines(raw)
             df.to_parquet(pq_path, index=False)
             csv_path = os.path.join(DATA_DIR, f"ETHUSDT_{itv}.csv")
             df.to_csv(csv_path, index=False)
             print(f"  ✓ Saved {len(df)} bars to {pq_path}")
-        dfs[itv] = df
-        
-    print("\nSaving ETHUSDT serialized klines cache...")
+            dfs[itv] = df
+
+    print("\nSaving ETHUSDT serialized klines cache & baseline...")
     klines_cache_eth = {
         "30m": serialize_klines_list(dfs["30m"], 10000),
         "1h": serialize_klines_list(dfs["1h"], 10000),
@@ -749,125 +806,171 @@ def run_eth_pipeline():
         json.dump(klines_cache_eth, f)
     print("  ✓ Saved backend/data/klines_cache_eth.json")
     
+    # Save frontend klinesBaseline_eth.json (optimized baseline matching BTC structure)
+    klines_baseline_eth = {
+        "30m": serialize_klines_list(dfs["30m"], 600),
+        "1h": serialize_klines_list(dfs["1h"], 600),
+        "4h": serialize_klines_list(dfs["4h"], 600),
+        "1d": serialize_klines_list(dfs["1d"], 600),
+        "1w": serialize_klines_list(dfs["1w"], None),
+    }
+    with open(os.path.join(FRONTEND_DATA_DIR, "klinesBaseline_eth.json"), "w") as f:
+        json.dump(klines_baseline_eth, f)
+    print("  ✓ Saved frontend/src/data/klinesBaseline_eth.json (optimized 600 bars baseline)")
+    
     print("\n===================================================================")
-    print("STEP 2: Computing Multi-Timeframe SMC Swings & Alignments")
+    print("STEP 2: Computing Multi-Timeframe Confluence & Alignment")
     print("===================================================================")
     df_30m = dfs["30m"]
     df_1h = dfs["1h"]
     df_4h = dfs["4h"]
     df_1w = dfs["1w"]
     
-    # Pre-calculate indicator columns if missing
-    for w in [50, 55, 111]:
-        if f"MA{w}" not in df_1w and len(df_1w) >= w:
-            df_1w[f"MA{w}"] = df_1w["close"].rolling(w).mean()
-        if f"MA{w}" not in df_4h and len(df_4h) >= w:
-            df_4h[f"MA{w}"] = df_4h["close"].rolling(w).mean()
-        if f"MA{w}" not in df_1h and len(df_1h) >= w:
-            df_1h[f"MA{w}"] = df_1h["close"].rolling(w).mean()
-    if "EMA50" not in df_1h:
-        df_1h["EMA50"] = df_1h["close"].ewm(span=50, adjust=False).mean()
-        
-    # 30M swings
-    top_100_30m, btm_100_30m = compute_swings(df_30m["high"].values, df_30m["low"].values, 100)
-    top_36_30m, btm_36_30m = compute_swings(df_30m["high"].values, df_30m["low"].values, 36)
-    top_96_30m, btm_96_30m = compute_swings(df_30m["high"].values, df_30m["low"].values, 96)
+    # Calculate EMA50 on 1h
+    df_1h["EMA50"] = df_1h["close"].ewm(span=50, adjust=False).mean()
+    df_1h["ts1"] = df_1h["timestamp"] + 3600 * 1000
     
-    top_64_30m, btm_64_30m = compute_swings(df_30m["high"].values, df_30m["low"].values, 64)
-    top_48_30m, btm_48_30m = compute_swings(df_30m["high"].values, df_30m["low"].values, 48)
-    top_32_30m, btm_32_30m = compute_swings(df_30m["high"].values, df_30m["low"].values, 32)
-    top_16_30m, btm_16_30m = compute_swings(df_30m["high"].values, df_30m["low"].values, 16)
+    # Calculate MA111 on 4h
+    df_4h["MA111"] = df_4h["close"].rolling(111).mean()
+    df_4h["ts4"] = df_4h["timestamp"] + 4 * 3600 * 1000
     
-    # 1H swings
-    top_50_1h, btm_50_1h = compute_swings(df_1h["high"].values, df_1h["low"].values, 50)
-    top_16_1h, _ = compute_swings(df_1h["high"].values, df_1h["low"].values, 16)
-    _, btm_48_1h = compute_swings(df_1h["high"].values, df_1h["low"].values, 48)
+    # Calculate MA55 on 1w
+    df_1w["MA55"] = df_1w["close"].rolling(55).mean()
+    df_1w["tsw"] = df_1w["timestamp"] + 7 * 24 * 3600 * 1000
     
-    # 4H swings
-    top_20_4h, btm_20_4h = compute_swings(df_4h["high"].values, df_4h["low"].values, 20)
-    top_5_4h, _ = compute_swings(df_4h["high"].values, df_4h["low"].values, 5)
-    _, btm_16_4h = compute_swings(df_4h["high"].values, df_4h["low"].values, 16)
-    
-    # Align higher timeframes
-    d1h_sub = df_1h.copy()
-    d1h_sub["ts1h"] = d1h_sub["timestamp"] + 3600 * 1000
-    d4h_sub = df_4h.copy()
-    d4h_sub["ts4h"] = d4h_sub["timestamp"] + 4 * 3600 * 1000
-    dw_sub = df_1w.copy()
-    dw_sub["tsw"] = dw_sub["timestamp"] + 7 * 24 * 3600 * 1000
-    
-    # Merge onto 30m
+    # Multi-TF merge onto 30m
     d30_m = pd.merge_asof(
-        df_30m, d1h_sub[["ts1h", "close", "EMA50"]].rename(columns={"close": "c_1h", "EMA50": "ema50_1h"}),
-        left_on="timestamp", right_on="ts1h", direction="backward"
+        df_30m, df_1h[["ts1", "close", "EMA50"]].rename(columns={"close": "c_1h", "EMA50": "ema50_1h"}),
+        left_on="timestamp", right_on="ts1", direction="backward"
     )
     d30_m = pd.merge_asof(
-        d30_m, d4h_sub[["ts4h", "close", "MA111"]].rename(columns={"close": "c_4h", "MA111": "sma111_4h"}),
-        left_on="timestamp", right_on="ts4h", direction="backward"
+        d30_m, df_4h[["ts4", "close", "MA111"]].rename(columns={"close": "c_4h", "MA111": "sma111_4h"}),
+        left_on="timestamp", right_on="ts4", direction="backward"
     )
     d30_m = pd.merge_asof(
-        d30_m, dw_sub[["tsw", "close", "MA55"]].rename(columns={"close": "c_w", "MA55": "sma55_w"}),
+        d30_m, df_1w[["tsw", "close", "MA55"]].rename(columns={"close": "c_w", "MA55": "sma55_w"}),
         left_on="timestamp", right_on="tsw", direction="backward"
     )
     
-    bull_macro_30m = (d30_m["c_4h"] > d30_m["sma111_4h"]) & (d30_m["c_1h"] > d30_m["ema50_1h"])
-    bear_macro_30m = (d30_m["c_w"] < d30_m["sma55_w"]) & (d30_m["c_4h"] < d30_m["sma111_4h"])
+    d30 = d30_m.iloc[1000:].reset_index(drop=True)
+    n30 = len(d30)
+    h30, l30, c30 = d30["high"].values, d30["low"].values, d30["close"].values
     
-    # Merge onto 1h
+    top_100_30, btm_100_30 = compute_swings(h30, l30, 100)
+    top_36_30, btm_36_30 = compute_swings(h30, l30, 36)
+    top_96_30, btm_96_30 = compute_swings(h30, l30, 96)
+    
+    top_64_30, btm_64_30 = compute_swings(h30, l30, 64)
+    top_48_30, btm_48_30 = compute_swings(h30, l30, 48)
+    top_32_30, btm_32_30 = compute_swings(h30, l30, 32)
+    top_28_30, btm_28_30 = compute_swings(h30, l30, 28)
+    top_16_30, btm_16_30 = compute_swings(h30, l30, 16)
+    
+    bull_macro_30m = (d30["c_4h"].values > d30["sma111_4h"].values) & (d30["c_1h"].values > d30["ema50_1h"].values)
+    
+    # 30M precomputed breakout signals
+    top_y = 0.0; itop_y = 0.0; itop_cross = True
+    btm_y = 0.0; ibtm_y = 0.0; ibtm_cross = True
+    bull_signals_30 = np.zeros(n30, dtype=bool)
+    bear_signals_30 = np.zeros(n30, dtype=bool)
+    
+    for i in range(1, n30):
+        prev_itop, prev_ibtm = itop_y, ibtm_y
+        if top_100_30[i] > 0: top_y = top_100_30[i]
+        if top_36_30[i] > 0: itop_y = top_36_30[i]; itop_cross = True
+        if btm_100_30[i] > 0: btm_y = btm_100_30[i]
+        if btm_96_30[i] > 0: ibtm_y = btm_96_30[i]; ibtm_cross = True
+        
+        cross_itop = (c30[i] > itop_y) and (c30[i-1] <= prev_itop)
+        cross_ibtm = (c30[i] < ibtm_y) and (c30[i-1] >= prev_ibtm)
+        
+        b_entry = cross_itop and itop_cross and (top_y != itop_y) and bull_macro_30m[i]
+        b_exit = cross_ibtm and ibtm_cross and (btm_y != ibtm_y)
+        
+        if b_entry: bull_signals_30[i] = True; itop_cross = False
+        if b_exit: bear_signals_30[i] = True; ibtm_cross = False
+        
+    # Multi-TF merge onto 1h
     d1h_m = pd.merge_asof(
-        df_1h, d4h_sub[["ts4h", "close", "MA111"]].rename(columns={"close": "c_4h", "MA111": "sma111_4h"}),
-        left_on="timestamp", right_on="ts4h", direction="backward"
+        df_1h, df_4h[["ts4", "close", "MA111"]].rename(columns={"close": "c_4h", "MA111": "sma111_4h"}),
+        left_on="timestamp", right_on="ts4", direction="backward"
     )
-    bull_macro_1h = d1h_m["c_4h"] > d1h_m["sma111_4h"]
+    d1 = d1h_m.iloc[1000:].reset_index(drop=True)
+    n1 = len(d1)
+    h1, l1, c1 = d1["high"].values, d1["low"].values, d1["close"].values
     
-    # Merge onto 4h
-    d4h_m = pd.merge_asof(
-        df_4h, dw_sub[["tsw", "close", "MA55"]].rename(columns={"close": "c_w", "MA55": "sma55_w"}),
-        left_on="timestamp", right_on="tsw", direction="backward"
-    )
-    bull_macro_4h = d4h_m["c_w"] > d4h_m["sma55_w"]
+    top_50_1, btm_50_1 = compute_swings(h1, l1, 50)
+    top_16_1, btm_16_1 = compute_swings(h1, l1, 16)
+    top_48_1, btm_48_1 = compute_swings(h1, l1, 48)
+    bull_macro_1h = d1["c_4h"].values > d1["sma111_4h"].values
     
-    print("\n===================================================================")
-    print("STEP 3: Simulating 10 Quantitative Strategies on ETHUSDT")
-    print("===================================================================")
+    top_y = 0.0; itop_y = 0.0; itop_cross = True
+    btm_y = 0.0; ibtm_y = 0.0; ibtm_cross = True
+    bull_sigs_1h = np.zeros(n1, dtype=bool)
+    bear_sigs_1h = np.zeros(n1, dtype=bool)
     
-    strategies_eth = []
-    
-    def create_ticket(strat_id, name, direction, trades):
-        last_t = trades[-1] if trades else {}
-        is_open = last_t.get("status") == "OPEN"
-        ep = last_t.get("entry_price", 0.0)
-        curr_p = last_t.get("exit_price", ep)
-        sl = last_t.get("stop_loss", ep * 0.95)
-        tp = last_t.get("take_profit", ep * 1.20)
+    for i in range(1, n1):
+        prev_itop, prev_ibtm = itop_y, ibtm_y
+        if top_50_1[i] > 0: top_y = top_50_1[i]
+        if top_16_1[i] > 0: itop_y = top_16_1[i]; itop_cross = True
+        if btm_50_1[i] > 0: btm_y = btm_50_1[i]
+        if btm_48_1[i] > 0: ibtm_y = btm_48_1[i]; ibtm_cross = True
         
-        if not is_open:
-            return None
-            
-        return {
-            "symbol": "ETH/USDT",
-            "direction": direction,
-            "strategy_name": name,
-            "strategy_id": strat_id,
-            "confidence_pct": 94,
-            "confidence_blocks": 9,
-            "entry_price": ep,
-            "current_price": curr_p,
-            "stop_loss": sl,
-            "stop_loss_pct": round(((sl - ep) / ep) * 100.0, 2) if direction == "LONG" else round(((ep - sl) / ep) * 100.0, 2),
-            "breakeven_trigger": 0.0,
-            "breakeven_trigger_pct": 0.0,
-            "take_profit": tp,
-            "take_profit_pct": round(((tp - ep) / ep) * 100.0, 2) if direction == "LONG" else round(((ep - tp) / ep) * 100.0, 2),
-            "risk_reward_ratio": "4.0x",
-            "timestamp": last_t.get("entry_time", ""),
-            "contributing_agents": ["quant", "trader", "informan"],
-            "status": "LIVE_SIGNAL",
-            "execution_mode": "AUTONOMOUS_ON_THE_FLY"
-        }
+        cross_itop = (c1[i] > itop_y) and (c1[i-1] <= prev_itop)
+        cross_ibtm = (c1[i] < ibtm_y) and (c1[i-1] >= prev_ibtm)
+        
+        b_entry = cross_itop and itop_cross and (top_y != itop_y) and bull_macro_1h[i]
+        b_exit = cross_ibtm and ibtm_cross and (btm_y != ibtm_y)
+        
+        if b_entry: bull_sigs_1h[i] = True; itop_cross = False
+        if b_exit: bear_sigs_1h[i] = True; ibtm_cross = False
+
+    # MA Squeeze DataFrame preparation
+    d30_grd = df_30m.copy()
+    d1h_grd = df_1h.copy()
+    d4h_grd = df_4h.copy()
+    
+    d1h_grd["ma25"] = d1h_grd.close.rolling(25).mean()
+    d1h_grd["ma50"] = d1h_grd.close.rolling(50).mean()
+    d1h_grd["d25"] = (d1h_grd.close - d1h_grd.ma25) / d1h_grd.ma25 * 100
+    d1h_grd["d50"] = (d1h_grd.close - d1h_grd.ma50) / d1h_grd.ma50 * 100
+    
+    d4h_grd["ma111"] = d4h_grd.close.rolling(111).mean()
+    
+    d30_grd["ma25"] = d30_grd.close.rolling(25).mean()
+    d30_grd["ma50"] = d30_grd.close.rolling(50).mean()
+    d30_grd["d25"] = (d30_grd.close - d30_grd.ma25) / d30_grd.ma25 * 100
+    d30_grd["d50"] = (d30_grd.close - d30_grd.ma50) / d30_grd.ma50 * 100
+    d30_grd["abs_spread"] = (d30_grd.ma25 - d30_grd.ma50).abs() / d30_grd.ma50 * 100
+    tr = np.maximum(d30_grd.high - d30_grd.low, np.maximum((d30_grd.high - d30_grd.close.shift()).abs(), (d30_grd.low - d30_grd.close.shift()).abs()))
+    d30_grd["atr"] = tr.rolling(14).mean() / d30_grd.close * 100
+    
+    df_grd = pd.merge_asof(d30_grd, d1h_grd[["ts1", "close", "ma25", "ma50", "d25", "d50"]].rename(
+        columns={"close": "c1h", "ma25": "m25h", "ma50": "m50h", "d25": "d25h", "d50": "d50h"}),
+        left_on="timestamp", right_on="ts1", direction="backward")
+    df_grd = pd.merge_asof(df_grd, d4h_grd[["ts4", "close", "ma111"]].rename(
+        columns={"close": "c4h", "ma111": "ma111_4h"}),
+        left_on="timestamp", right_on="ts4", direction="backward")
+    df_grd = df_grd.dropna(subset=["m25h", "m50h", "ma25", "ma50", "atr"]).reset_index(drop=True)
+
+    # Short Swings setup
+    swings_s = {
+        64: (top_64_30, btm_64_30),
+        48: (top_48_30, btm_48_30),
+        32: (top_32_30, btm_32_30),
+        28: (top_28_30, btm_28_30),
+        16: (top_16_30, btm_16_30),
+    }
+    r_no1h_short = (d30["c_w"].values < d30["sma55_w"].values) & (d30["c_4h"].values < d30["sma111_4h"].values)
+    r_wbear_short = (d30["c_w"].values < d30["sma55_w"].values)
+
+    print("\n===================================================================")
+    print("STEP 3: Simulating All 10 Quantitative Strategies on ETHUSDT")
+    print("===================================================================")
+    strategies_eth = []
 
     # 1. Pippo 30M Alpha
-    t_alpha = sim_long_smc_breakout(df_30m, top_100_30m, btm_100_30m, top_36_30m, btm_96_30m, bull_macro_30m.values, 0.05, 0.03, 0.75)
+    t_alpha = sim_30m_smc_breakout(d30, bull_signals_30, bear_signals_30, sl_pct=0.05, be_pct=0.03, tp_pct=0.75)
     m_alpha = calculate_overall_metrics(t_alpha)
     y_alpha = compute_yearly_metrics(t_alpha)
     mk_alpha = build_markers(t_alpha)
@@ -882,7 +985,6 @@ def run_eth_pipeline():
         "archetype": "Alpha Trend Rider",
         "risk_tier": "Moderate",
         "recommended_for": "Traders looking to capture prolonged Ethereum multi-week macro expansions.",
-        "badge": f"+{m_alpha['total_return_pct']}% Return (CAGR {m_alpha['cagr_pct']}%)",
         "badge": make_badge(m_alpha["total_return_pct"], f"CAGR {m_alpha['cagr_pct']}%"),
         "metrics": m_alpha,
         "parameters": {
@@ -902,10 +1004,10 @@ def run_eth_pipeline():
         "has_active_signal": tk_alpha is not None,
         "active_ticket": tk_alpha
     })
-    print(f"  ✓ 1. Pippo 30M Alpha: {len(t_alpha)} trades | Total Return: {m_alpha['total_return_pct']:+,.1f}% | Win Rate: {m_alpha['win_rate_pct']}%")
+    print(f"  ✓ 1. Pippo 30M Alpha: {len(t_alpha)} trades | Total Return: {m_alpha['total_return_pct']:+,.1f}% | Win Rate: {m_alpha['win_rate_pct']}% | PF: {m_alpha['profit_factor']}")
 
     # 2. Pippo 30m New Gen
-    t_new_gen = sim_ma_squeeze_strategy(df_30m, df_1h, df_4h, use_4h=True)
+    t_new_gen = sim_ma_squeeze(df_grd, use_4h=True)
     m_new_gen = calculate_overall_metrics(t_new_gen)
     y_new_gen = compute_yearly_metrics(t_new_gen)
     mk_new_gen = build_markers(t_new_gen)
@@ -920,7 +1022,6 @@ def run_eth_pipeline():
         "archetype": "Volatility Contraction Sniper",
         "risk_tier": "Conservative-Moderate",
         "recommended_for": "Capital preservation with high consistency across market cycles on Ethereum.",
-        "badge": f"+{m_new_gen['total_return_pct']}% Return (DD {m_new_gen['max_drawdown_pct']}%)",
         "badge": make_badge(m_new_gen["total_return_pct"], f"DD {m_new_gen['max_drawdown_pct']}%"),
         "metrics": m_new_gen,
         "parameters": {
@@ -941,10 +1042,10 @@ def run_eth_pipeline():
         "has_active_signal": tk_new_gen is not None,
         "active_ticket": tk_new_gen
     })
-    print(f"  ✓ 2. Pippo 30m New Gen: {len(t_new_gen)} trades | Total Return: {m_new_gen['total_return_pct']:+,.1f}% | Win Rate: {m_new_gen['win_rate_pct']}%")
+    print(f"  ✓ 2. Pippo 30m New Gen: {len(t_new_gen)} trades | Total Return: {m_new_gen['total_return_pct']:+,.1f}% | Win Rate: {m_new_gen['win_rate_pct']}% | PF: {m_new_gen['profit_factor']}")
 
     # 3. Pippo 30m Grd
-    t_grd = sim_ma_squeeze_strategy(df_30m, df_1h, df_4h, use_4h=False)
+    t_grd = sim_ma_squeeze(df_grd, use_4h=False)
     m_grd = calculate_overall_metrics(t_grd)
     y_grd = compute_yearly_metrics(t_grd)
     mk_grd = build_markers(t_grd)
@@ -959,7 +1060,6 @@ def run_eth_pipeline():
         "archetype": "High-Frequency Volatility Squeeze Sniper",
         "risk_tier": "Moderate",
         "recommended_for": "Traders seeking active exposure and high returns on ETH via pure multi-MA compression.",
-        "badge": f"+{m_grd['total_return_pct']}% Return ({len(t_grd)} Trades)",
         "badge": make_badge(m_grd["total_return_pct"], f"{len(t_grd)} Trades"),
         "metrics": m_grd,
         "parameters": {
@@ -980,10 +1080,10 @@ def run_eth_pipeline():
         "has_active_signal": tk_grd is not None,
         "active_ticket": tk_grd
     })
-    print(f"  ✓ 3. Pippo 30m Grd: {len(t_grd)} trades | Total Return: {m_grd['total_return_pct']:+,.1f}% | Win Rate: {m_grd['win_rate_pct']}%")
+    print(f"  ✓ 3. Pippo 30m Grd: {len(t_grd)} trades | Total Return: {m_grd['total_return_pct']:+,.1f}% | Win Rate: {m_grd['win_rate_pct']}% | PF: {m_grd['profit_factor']}")
 
     # 4. Pippo 1h Enhanced
-    t_1h = sim_long_smc_breakout(df_1h, top_50_1h, btm_50_1h, top_16_1h, btm_48_1h, bull_macro_1h.values, 0.08, 0.05, 0.75)
+    t_1h = sim_1h_smc_enhanced(d1, bull_sigs_1h, bear_sigs_1h, sl_pct=0.08, be_pct=0.05, tp_pct=0.75)
     m_1h = calculate_overall_metrics(t_1h)
     y_1h = compute_yearly_metrics(t_1h)
     mk_1h = build_markers(t_1h)
@@ -998,7 +1098,6 @@ def run_eth_pipeline():
         "archetype": "Trend Continuation Engine",
         "risk_tier": "Moderate",
         "recommended_for": "Swing traders looking for balanced execution with intermediate macro filtering.",
-        "badge": f"+{m_1h['total_return_pct']}% Return (CAGR {m_1h['cagr_pct']}%)",
         "badge": make_badge(m_1h["total_return_pct"], f"CAGR {m_1h['cagr_pct']}%"),
         "metrics": m_1h,
         "parameters": {
@@ -1018,10 +1117,10 @@ def run_eth_pipeline():
         "has_active_signal": tk_1h is not None,
         "active_ticket": tk_1h
     })
-    print(f"  ✓ 4. Pippo 1h Enhanced: {len(t_1h)} trades | Total Return: {m_1h['total_return_pct']:+,.1f}% | Win Rate: {m_1h['win_rate_pct']}%")
+    print(f"  ✓ 4. Pippo 1h Enhanced: {len(t_1h)} trades | Total Return: {m_1h['total_return_pct']:+,.1f}% | Win Rate: {m_1h['win_rate_pct']}% | PF: {m_1h['profit_factor']}")
 
     # 5. Pippo 30m Scalp-Runner
-    t_scalp = sim_long_smc_breakout(df_30m, top_100_30m, btm_100_30m, top_36_30m, btm_96_30m, bull_macro_30m.values, 0.05, 0.04, 0.75, partial_tp_pct=0.04, partial_weight=0.30)
+    t_scalp = sim_30m_smc_breakout(d30, bull_signals_30, bear_signals_30, sl_pct=0.05, be_pct=0.04, tp_pct=0.75, partial_tp_pct=0.04, partial_weight=0.30)
     m_scalp = calculate_overall_metrics(t_scalp)
     y_scalp = compute_yearly_metrics(t_scalp)
     mk_scalp = build_markers(t_scalp)
@@ -1036,7 +1135,6 @@ def run_eth_pipeline():
         "archetype": "Fast Harvest & Core Runner",
         "risk_tier": "Moderate",
         "recommended_for": "Traders wanting quick partial profit harvesting (+4.0%) while keeping runner upside.",
-        "badge": f"+{m_scalp['total_return_pct']}% Return (CAGR {m_scalp['cagr_pct']}%)",
         "badge": make_badge(m_scalp["total_return_pct"], f"CAGR {m_scalp['cagr_pct']}%"),
         "metrics": m_scalp,
         "parameters": {
@@ -1056,10 +1154,10 @@ def run_eth_pipeline():
         "has_active_signal": tk_scalp is not None,
         "active_ticket": tk_scalp
     })
-    print(f"  ✓ 5. Pippo 30m Scalp: {len(t_scalp)} trades | Total Return: {m_scalp['total_return_pct']:+,.1f}% | Win Rate: {m_scalp['win_rate_pct']}%")
+    print(f"  ✓ 5. Pippo 30m Scalp: {len(t_scalp)} trades | Total Return: {m_scalp['total_return_pct']:+,.1f}% | Win Rate: {m_scalp['win_rate_pct']}% | PF: {m_scalp['profit_factor']}")
 
-    # 6. Pure Macro Weekly MA55
-    t_macro = sim_weekly_ma55(df_1w)
+    # 6. Pure Macro Weekly MA55 (Historical primed from 2017)
+    t_macro = sim_pure_weekly_ma55(df_1w)
     m_macro = calculate_overall_metrics(t_macro)
     y_macro = compute_yearly_metrics(t_macro)
     mk_macro = build_markers(t_macro)
@@ -1074,27 +1172,27 @@ def run_eth_pipeline():
         "archetype": "Institutional Cycle Anchor",
         "risk_tier": "Conservative",
         "recommended_for": "Institutional investors tracking long-term Ethereum secular cycles.",
-        "badge": f"+{m_macro['total_return_pct']}% Return (Macro Cycle)",
         "badge": make_badge(m_macro["total_return_pct"], "Macro Cycle"),
         "metrics": m_macro,
         "parameters": {
             "timeframe": "1w",
             "regime": "Weekly MA55 Close",
-            "entry": "Weekly Close > MA55",
+            "entry": "Weekly Close >= MA55",
             "exit": "Weekly Close < MA55",
             "commission": "0.09%"
         },
-        "logic_summary": "Secular Ethereum multi-year cycle filter. Long exclusively above Weekly MA55.",
+        "logic_summary": "Secular Ethereum multi-year cycle filter. Long exclusively above Weekly MA55 with full 2017-2026 data depth.",
         "yearly_stats": y_macro,
         "markers": mk_macro,
         "trades": t_macro,
         "has_active_signal": tk_macro is not None,
         "active_ticket": tk_macro
     })
-    print(f"  ✓ 6. Pure Macro Weekly MA55: {len(t_macro)} trades | Total Return: {m_macro['total_return_pct']:+,.1f}%")
+    print(f"  ✓ 6. Pure Macro Weekly MA55: {len(t_macro)} trades | Total Return: {m_macro['total_return_pct']:+,.1f}% | Win Rate: {m_macro['win_rate_pct']}% | PF: {m_macro['profit_factor']}")
 
-    # 7. Pippo 4h Original
-    t_4h = sim_long_smc_breakout(df_4h, top_20_4h, btm_20_4h, top_5_4h, btm_16_4h, bull_macro_4h.values, 0.15, 0.05, 0.75)
+    # 7. Pippo 4h Original (Exact Pine Script SMC Engine)
+    df_4h_2020 = df_4h[df_4h["datetime"] >= "2020-01-01"].copy().reset_index(drop=True)
+    t_4h = sim_4h_pippo_original(df_4h_2020)
     m_4h = calculate_overall_metrics(t_4h)
     y_4h = compute_yearly_metrics(t_4h)
     mk_4h = build_markers(t_4h)
@@ -1109,30 +1207,29 @@ def run_eth_pipeline():
         "archetype": "High-Timeframe Trend Engine",
         "risk_tier": "Conservative-Moderate",
         "recommended_for": "Macro trend followers seeking minimal trade frequency and maximum ride time.",
-        "badge": f"+{m_4h['total_return_pct']}% Return (CAGR {m_4h['cagr_pct']}%)",
         "badge": make_badge(m_4h["total_return_pct"], f"CAGR {m_4h['cagr_pct']}%"),
         "metrics": m_4h,
         "parameters": {
             "timeframe": "4h",
-            "macro_filters": "Weekly MA55",
+            "macro_filters": "4H SMA111",
             "entry_breakout": "5-bar High Breakout",
-            "exit_floor": "16-bar Low Structural Floor",
+            "exit_floor": "5-bar Low Structural Floor (Bearish CHoCH)",
+            "major_swings": "50-bar Confluence Anchor",
             "stop_loss": "15.0%",
-            "breakeven": "+5.0% trigger -> BE+0.2%",
             "take_profit": "75.0%",
             "commission": "0.09%"
         },
-        "logic_summary": "The benchmark 4H macro trend system that started the Pippo lineage on Ethereum.",
+        "logic_summary": "The flagship 4H Smart Money Concepts benchmark transpiled directly from verified TradingView Pine Script.",
         "yearly_stats": y_4h,
         "markers": mk_4h,
         "trades": t_4h,
         "has_active_signal": tk_4h is not None,
         "active_ticket": tk_4h
     })
-    print(f"  ✓ 7. Pippo 4h Original: {len(t_4h)} trades | Total Return: {m_4h['total_return_pct']:+,.1f}% | Win Rate: {m_4h['win_rate_pct']}%")
+    print(f"  ✓ 7. Pippo 4h Original: {len(t_4h)} trades | Total Return: {m_4h['total_return_pct']:+,.1f}% | Win Rate: {m_4h['win_rate_pct']}% | PF: {m_4h['profit_factor']}")
 
     # 8. Pippo 30M Short V2 Type A (Active TP)
-    t_short_a = sim_short_smc_breakdown(df_30m, top_64_30m, btm_64_30m, btm_32_30m, top_48_30m, bear_macro_30m.values, 0.05, 0.015, 0.12)
+    t_short_a = sim_short_smc_v2(d30, swings_s, 64, 32, 48, r_no1h_short, sl_pct=0.05, be_pct=0.015, tp_pct=0.12)
     m_short_a = calculate_overall_metrics(t_short_a)
     y_short_a = compute_yearly_metrics(t_short_a)
     mk_short_a = build_markers(t_short_a)
@@ -1147,7 +1244,6 @@ def run_eth_pipeline():
         "archetype": "Fast-Harvest Short Engine",
         "risk_tier": "Moderate",
         "recommended_for": "Bear market hedging with quick profit harvesting (+12.0%) on ETH drops.",
-        "badge": f"+{m_short_a['total_return_pct']}% Return (Win Rate {m_short_a['win_rate_pct']}%)",
         "badge": make_badge(m_short_a["total_return_pct"], f"Win Rate {m_short_a['win_rate_pct']}%"),
         "metrics": m_short_a,
         "parameters": {
@@ -1167,10 +1263,10 @@ def run_eth_pipeline():
         "has_active_signal": tk_short_a is not None,
         "active_ticket": tk_short_a
     })
-    print(f"  ✓ 8. Short V2 Type A: {len(t_short_a)} trades | Total Return: {m_short_a['total_return_pct']:+,.1f}% | Win Rate: {m_short_a['win_rate_pct']}%")
+    print(f"  ✓ 8. Short V2 Type A: {len(t_short_a)} trades | Total Return: {m_short_a['total_return_pct']:+,.1f}% | Win Rate: {m_short_a['win_rate_pct']}% | PF: {m_short_a['profit_factor']}")
 
     # 9. Pippo 30M Short V2 Type B (Max Frequency)
-    t_short_b = sim_short_smc_breakdown(df_30m, top_64_30m, btm_64_30m, btm_16_30m, top_32_30m, bear_macro_30m.values, 0.05, 0.02, 0.25)
+    t_short_b = sim_short_smc_v2(d30, swings_s, 64, 28, 48, r_wbear_short, sl_pct=0.05, be_pct=0.025, tp_pct=0.20)
     m_short_b = calculate_overall_metrics(t_short_b)
     y_short_b = compute_yearly_metrics(t_short_b)
     mk_short_b = build_markers(t_short_b)
@@ -1185,30 +1281,29 @@ def run_eth_pipeline():
         "archetype": "High-Frequency Short Engine",
         "risk_tier": "Moderate",
         "recommended_for": "Traders wanting maximum trade participation during bearish ETH momentum phases.",
-        "badge": f"+{m_short_b['total_return_pct']}% Return ({len(t_short_b)} Trades)",
         "badge": make_badge(m_short_b["total_return_pct"], f"{len(t_short_b)} Trades"),
         "metrics": m_short_b,
         "parameters": {
             "timeframe": "30m",
-            "macro_filters": "Weekly MA55 & 4H SMA111 Bearish",
-            "entry_breakout": "16-bar Low Breakdown",
-            "exit_ceiling": "32-bar High Structural Exit",
+            "macro_filters": "Weekly MA55 Bearish Regime",
+            "entry_breakout": "28-bar Low Breakdown",
+            "exit_ceiling": "48-bar High Structural Exit",
             "stop_loss": "5.0%",
-            "breakeven": "+2.0% trigger -> BE",
-            "take_profit": "25.0%",
+            "breakeven": "+2.5% trigger -> BE",
+            "take_profit": "20.0%",
             "commission": "0.09%"
         },
-        "logic_summary": "High-frequency bearish model capturing local breakdown volatility with 25% TP targets.",
+        "logic_summary": "High-frequency bearish model capturing local breakdown volatility with 20% TP targets.",
         "yearly_stats": y_short_b,
         "markers": mk_short_b,
         "trades": t_short_b,
         "has_active_signal": tk_short_b is not None,
         "active_ticket": tk_short_b
     })
-    print(f"  ✓ 9. Short V2 Type B: {len(t_short_b)} trades | Total Return: {m_short_b['total_return_pct']:+,.1f}% | Win Rate: {m_short_b['win_rate_pct']}%")
+    print(f"  ✓ 9. Short V2 Type B: {len(t_short_b)} trades | Total Return: {m_short_b['total_return_pct']:+,.1f}% | Win Rate: {m_short_b['win_rate_pct']}% | PF: {m_short_b['profit_factor']}")
 
     # 10. Pippo 30M Short V2 Type C (Defensive Fortress)
-    t_short_c = sim_short_smc_breakdown(df_30m, top_64_30m, btm_64_30m, btm_32_30m, top_16_30m, bear_macro_30m.values, 0.06, 0.025, 0.50)
+    t_short_c = sim_short_smc_v2(d30, swings_s, 64, 32, 16, r_no1h_short, sl_pct=0.06, be_pct=0.025, tp_pct=0.50)
     m_short_c = calculate_overall_metrics(t_short_c)
     y_short_c = compute_yearly_metrics(t_short_c)
     mk_short_c = build_markers(t_short_c)
@@ -1223,7 +1318,6 @@ def run_eth_pipeline():
         "archetype": "Deep Trend Short Engine",
         "risk_tier": "Moderate",
         "recommended_for": "Riding severe multi-week market downturns and flash crashes on Ethereum.",
-        "badge": f"+{m_short_c['total_return_pct']}% Return (Target 50% TP)",
         "badge": make_badge(m_short_c["total_return_pct"], "Target 50% TP"),
         "metrics": m_short_c,
         "parameters": {
@@ -1243,7 +1337,7 @@ def run_eth_pipeline():
         "has_active_signal": tk_short_c is not None,
         "active_ticket": tk_short_c
     })
-    print(f"  ✓ 10. Short V2 Type C: {len(t_short_c)} trades | Total Return: {m_short_c['total_return_pct']:+,.1f}% | Win Rate: {m_short_c['win_rate_pct']}%")
+    print(f"  ✓ 10. Short V2 Type C: {len(t_short_c)} trades | Total Return: {m_short_c['total_return_pct']:+,.1f}% | Win Rate: {m_short_c['win_rate_pct']}% | PF: {m_short_c['profit_factor']}")
 
     print("\n===================================================================")
     print("STEP 4: Saving Strategies Catalog for ETHUSDT")

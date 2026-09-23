@@ -693,17 +693,17 @@ export default function TradingChart({
     });
     volumeSeriesRef.current = volumeSeries;
 
-    // 3. Moving Average Series (Default: only MA25 and MA50 visible)
+    // 3. Moving Average Series (Default: only MA25 Blue and MA50 Yellow visible)
     const ma25Series = chart.addSeries(LineSeries, {
-      color: isDark ? '#64D2FF' : '#0071E3',
-      lineWidth: 1,
+      color: isDark ? '#0A84FF' : '#0071E3',
+      lineWidth: 1.5,
       title: 'MA25',
       priceLineVisible: false,
       visible: Boolean(visibleMAsRef.current?.ma25),
     });
 
     const ma50Series = chart.addSeries(LineSeries, {
-      color: isDark ? '#0A84FF' : '#0288D1',
+      color: isDark ? '#FFD60A' : '#D97706',
       lineWidth: 1.5,
       title: 'MA50',
       priceLineVisible: false,
@@ -1207,10 +1207,10 @@ export default function TradingChart({
               onClick={() => toggleMA('ma25')}
               className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-all cursor-pointer ${
                 visibleMAs.ma25
-                  ? 'bg-[#64D2FF]/15 text-[#64D2FF] border-[#64D2FF]/40 font-semibold'
+                  ? 'bg-apple-blue/15 text-apple-blue dark:text-[#0A84FF] border-apple-blue/40 font-semibold shadow-sm'
                   : 'bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06] text-apple-dim hover:text-apple-muted'
               }`}
-              title="Fast Moving Average 25 (Active by default)"
+              title="Fast Moving Average 25 (Blue - Active by default)"
             >
               MA25
             </button>
@@ -1218,10 +1218,10 @@ export default function TradingChart({
               onClick={() => toggleMA('ma50')}
               className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-all cursor-pointer ${
                 visibleMAs.ma50
-                  ? 'bg-[#0A84FF]/15 text-[#0A84FF] border-[#0A84FF]/40 font-semibold'
+                  ? 'bg-amber-400/15 text-amber-600 dark:text-[#FFD60A] border-amber-400/40 font-semibold shadow-sm'
                   : 'bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06] text-apple-dim hover:text-apple-muted'
               }`}
-              title="Trend Moving Average 50 (Active by default)"
+              title="Trend Moving Average 50 (Yellow - Active by default)"
             >
               MA50
             </button>
@@ -1314,13 +1314,13 @@ export default function TradingChart({
             )}
             {hoveredData.ma25 && visibleMAs.ma25 && (
               <div>
-                <span className="text-[#64D2FF]">MA25:</span>{' '}
+                <span className="text-[#0A84FF]">MA25:</span>{' '}
                 <span className="tabular-nums text-zinc-300">{formatPrice(hoveredData.ma25)}</span>
               </div>
             )}
             {hoveredData.ma50 && visibleMAs.ma50 && (
               <div>
-                <span className="text-[#0A84FF]">MA50:</span>{' '}
+                <span className="text-[#FFD60A] dark:text-[#FFD60A] text-amber-500">MA50:</span>{' '}
                 <span className="tabular-nums text-zinc-300">{formatPrice(hoveredData.ma50)}</span>
               </div>
             )}
@@ -1407,14 +1407,14 @@ export default function TradingChart({
           </div>
           {visibleMAs.ma25 && (
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-0.5 rounded bg-[#64D2FF]"></span>
-              <span>MA25</span>
+              <span className="w-2.5 h-0.5 rounded bg-[#0A84FF]"></span>
+              <span>MA25 (Blue)</span>
             </div>
           )}
           {visibleMAs.ma50 && (
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-0.5 rounded bg-[#0A84FF]"></span>
-              <span>MA50</span>
+              <span className="w-2.5 h-0.5 rounded bg-amber-400 dark:bg-[#FFD60A]"></span>
+              <span>MA50 (Yellow)</span>
             </div>
           )}
           {visibleMAs.ma55 && (

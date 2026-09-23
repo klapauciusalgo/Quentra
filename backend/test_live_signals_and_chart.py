@@ -226,6 +226,7 @@ def test_autonomous_buy_execution_and_breakeven_lock(client):
     )
     live_signal_engine.strategies["test-long-algo"] = model
     
+    # 1. Open Position (Simulate BUY signal)
     try:
         # 1. Open Position (Simulate BUY signal)
         entry_price = 80000.0
@@ -254,8 +255,8 @@ def test_autonomous_buy_execution_and_breakeven_lock(client):
         assert closed[0]["trade"]["reason"] == "Fast_Breakeven"
         assert closed[0]["trade"]["net_return_pct"] >= 0.0 # Profit preserved!
     finally:
-        if "test-long-algo" in live_signal_engine.strategies:
-            del live_signal_engine.strategies["test-long-algo"]
+        # Cleanup
+        live_signal_engine.strategies.pop("test-long-algo", None)
 
 def test_autonomous_short_execution_and_take_profit(client):
     """Verify that Short engines track PnL, lock Breakeven, and execute Take Profit autonomously on ETH."""
@@ -296,8 +297,8 @@ def test_autonomous_short_execution_and_take_profit(client):
         assert closed[0]["trade"]["reason"] == "Take_Profit"
         assert closed[0]["trade"]["net_return_pct"] > 9.0 # ~10% gain - fees!
     finally:
-        if "test-short-eth" in live_signal_engine.strategies_eth:
-            del live_signal_engine.strategies_eth["test-short-eth"]
+        # Cleanup
+        live_signal_engine.strategies_eth.pop("test-short-eth", None)
 
 def test_multi_asset_signals_endpoints(client):
     """Verify live telemetry and ticket endpoints respond with correct symbol metadata."""
@@ -334,7 +335,6 @@ def test_multi_asset_signals_endpoints(client):
     sim_data = res_sim.json()
     assert sim_data["ticket"]["symbol"] == "ETH/USDT"
     assert sim_data["ticket"]["asset"] == "ETHUSDT"
-
 
 
 

@@ -194,10 +194,12 @@ export default function TradingChart({
     ma8: false,
     ma25: true,
     ma50: true,
-    ma55: true, // Macro Weekly Anchor
-    ma111: true,
+    ma55: false, // Default inactive per user request
+    ma111: false, // Default inactive per user request
     volume: true
   });
+  const visibleMAsRef = useRef(visibleMAs);
+  visibleMAsRef.current = visibleMAs;
 
   const tradesList = activeStrategy?.trades || [];
   const activeTrade = tradesList[focusedTradeIndex] || tradesList[tradesList.length - 1];
@@ -691,12 +693,13 @@ export default function TradingChart({
     });
     volumeSeriesRef.current = volumeSeries;
 
-    // 3. Moving Average Series
+    // 3. Moving Average Series (Default: only MA25 and MA50 visible)
     const ma25Series = chart.addSeries(LineSeries, {
       color: isDark ? '#64D2FF' : '#0071E3',
       lineWidth: 1,
       title: 'MA25',
       priceLineVisible: false,
+      visible: Boolean(visibleMAsRef.current?.ma25),
     });
 
     const ma50Series = chart.addSeries(LineSeries, {
@@ -704,6 +707,7 @@ export default function TradingChart({
       lineWidth: 1.5,
       title: 'MA50',
       priceLineVisible: false,
+      visible: Boolean(visibleMAsRef.current?.ma50),
     });
 
     const ma55Series = chart.addSeries(LineSeries, {
@@ -711,6 +715,7 @@ export default function TradingChart({
       lineWidth: 2,
       title: 'MA55 (Macro)',
       priceLineVisible: false,
+      visible: Boolean(visibleMAsRef.current?.ma55),
     });
 
     const ma111Series = chart.addSeries(LineSeries, {
@@ -718,6 +723,7 @@ export default function TradingChart({
       lineWidth: 1.5,
       title: 'MA111',
       priceLineVisible: false,
+      visible: Boolean(visibleMAsRef.current?.ma111),
     });
 
     const ma8Series = chart.addSeries(LineSeries, {
@@ -725,6 +731,7 @@ export default function TradingChart({
       lineWidth: 1,
       title: 'MA8',
       priceLineVisible: false,
+      visible: Boolean(visibleMAsRef.current?.ma8),
     });
 
     maSeriesRef.current = {
@@ -818,6 +825,8 @@ export default function TradingChart({
 
       const candle = param.seriesData.get(candleSeries);
       const vol = param.seriesData.get(volumeSeries);
+      const ma25 = param.seriesData.get(ma25Series);
+      const ma50 = param.seriesData.get(ma50Series);
       const ma55 = param.seriesData.get(ma55Series);
       const ma111 = param.seriesData.get(ma111Series);
 
@@ -829,6 +838,8 @@ export default function TradingChart({
           low: candle.low,
           close: candle.close,
           volume: vol?.value,
+          ma25: ma25?.value,
+          ma50: ma50?.value,
           ma55: ma55?.value,
           ma111: ma111?.value,
         });
@@ -1186,19 +1197,46 @@ export default function TradingChart({
           {/* Indicators Toggle Pill */}
           <div className="flex items-center gap-1 pl-1 border-l border-black/10 dark:border-white/10">
             <button
+              onClick={() => toggleMA('ma25')}
+              className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-all cursor-pointer ${
+                visibleMAs.ma25
+                  ? 'bg-[#64D2FF]/15 text-[#64D2FF] border-[#64D2FF]/40 font-semibold'
+                  : 'bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06] text-apple-dim hover:text-apple-muted'
+              }`}
+              title="Fast Moving Average 25 (Active by default)"
+            >
+              MA25
+            </button>
+            <button
+              onClick={() => toggleMA('ma50')}
+              className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-all cursor-pointer ${
+                visibleMAs.ma50
+                  ? 'bg-[#0A84FF]/15 text-[#0A84FF] border-[#0A84FF]/40 font-semibold'
+                  : 'bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06] text-apple-dim hover:text-apple-muted'
+              }`}
+              title="Trend Moving Average 50 (Active by default)"
+            >
+              MA50
+            </button>
+            <button
               onClick={() => toggleMA('ma55')}
               className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-all cursor-pointer ${
-                visibleMAs.ma55 ? 'bg-apple-purple/15 text-apple-purple border-apple-purple/30' : 'bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06] text-apple-dim'
+                visibleMAs.ma55
+                  ? 'bg-apple-purple/15 text-apple-purple border-apple-purple/30 font-semibold'
+                  : 'bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06] text-apple-dim hover:text-apple-muted'
               }`}
-              title="Weekly MA55 Macro Regime Anchor"
+              title="Weekly MA55 Macro Regime Anchor (Inactive by default)"
             >
               MA55
             </button>
             <button
               onClick={() => toggleMA('ma111')}
               className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-all cursor-pointer ${
-                visibleMAs.ma111 ? 'bg-apple-orange/15 text-apple-orange border-apple-orange/30' : 'bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06] text-apple-dim'
+                visibleMAs.ma111
+                  ? 'bg-apple-orange/15 text-apple-orange border-apple-orange/30 font-semibold'
+                  : 'bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06] text-apple-dim hover:text-apple-muted'
               }`}
+              title="MA 111 Baseline (Inactive by default)"
             >
               MA111
             </button>
@@ -1265,6 +1303,18 @@ export default function TradingChart({
               <div>
                 <span className="text-apple-dim">VOL:</span>{' '}
                 <span className="text-apple-text tabular-nums">{Number(hoveredData.volume).toFixed(2)} {symbol === 'ETHUSDT' ? 'ETH' : 'BTC'}</span>
+              </div>
+            )}
+            {hoveredData.ma25 && visibleMAs.ma25 && (
+              <div>
+                <span className="text-[#64D2FF]">MA25:</span>{' '}
+                <span className="tabular-nums text-zinc-300">{formatPrice(hoveredData.ma25)}</span>
+              </div>
+            )}
+            {hoveredData.ma50 && visibleMAs.ma50 && (
+              <div>
+                <span className="text-[#0A84FF]">MA50:</span>{' '}
+                <span className="tabular-nums text-zinc-300">{formatPrice(hoveredData.ma50)}</span>
               </div>
             )}
             {hoveredData.ma55 && visibleMAs.ma55 && (
@@ -1348,6 +1398,30 @@ export default function TradingChart({
             <span className="w-2 h-2 rounded-full bg-apple-red"></span>
             <span>Short / Exit</span>
           </div>
+          {visibleMAs.ma25 && (
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-0.5 rounded bg-[#64D2FF]"></span>
+              <span>MA25</span>
+            </div>
+          )}
+          {visibleMAs.ma50 && (
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-0.5 rounded bg-[#0A84FF]"></span>
+              <span>MA50</span>
+            </div>
+          )}
+          {visibleMAs.ma55 && (
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-0.5 rounded bg-apple-purple"></span>
+              <span>MA55</span>
+            </div>
+          )}
+          {visibleMAs.ma111 && (
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-0.5 rounded bg-apple-orange"></span>
+              <span>MA111</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-0.5 rounded bg-apple-cyan"></span>
             <span>Price Levels</span>

@@ -2960,6 +2960,25 @@
         "text": "EXIT Fast_Breakeven #128",
         "tradeNo": 128,
         "isActive": false
+      },
+      {
+        "time": 1789759800,
+        "position": "aboveBar",
+        "color": "#FF9F0A",
+        "shape": "circle",
+        "text": "BE LOCKED @ $2,641.92 (+0.2%)",
+        "size": 2,
+        "exitPrice": 2641.92,
+        "isBreakeven": true
+      },
+      {
+        "time": "2026-09-23 16:02:00",
+        "position": "aboveBar",
+        "color": "#EF4444",
+        "shape": "arrowDown",
+        "text": "EXIT Fast_Breakeven #129",
+        "tradeNo": 129,
+        "isActive": false
       }
     ],
     "trades": [
@@ -4757,10 +4776,71 @@
         "exit_reason": "Fast_Breakeven",
         "be_activated": false,
         "status": "CLOSED"
+      },
+      {
+        "trade_no": 129,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 19:00:00",
+        "exit_time": "2026-09-23 16:02:00",
+        "entry_price": 2636.65,
+        "exit_price": 2641.51,
+        "gross_return_pct": 0.18,
+        "net_return_pct": 0.0,
+        "exit_reason": "Fast_Breakeven",
+        "be_activated": true,
+        "status": "CLOSED",
+        "stop_loss": 2641.92,
+        "take_profit": 4614.14,
+        "is_active": true
+      },
+      {
+        "trade_no": 130,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 19:00:00",
+        "exit_time": "RUNNING",
+        "entry_price": 2636.65,
+        "exit_price": 2636.65,
+        "gross_return_pct": 0.0,
+        "net_return_pct": -0.18,
+        "exit_reason": "Active Signal (BE Locked)",
+        "be_activated": true,
+        "status": "OPEN",
+        "stop_loss": 2641.92,
+        "take_profit": 4614.14,
+        "is_active": true
       }
     ],
-    "has_active_signal": false,
-    "active_ticket": null
+    "has_active_signal": true,
+    "active_ticket": {
+      "symbol": "ETH/USDT",
+      "asset": "ETHUSDT",
+      "direction": "LONG",
+      "action": "BUY",
+      "strategy_name": "Pippo 30M Alpha (Pure Runner)",
+      "strategy_id": "pippo-30m-alpha",
+      "timeframe": "30m",
+      "confidence_pct": 92,
+      "confidence_blocks": 9,
+      "entry_price": 2636.65,
+      "current_price": 2740.05,
+      "stop_loss": 2641.92,
+      "stop_loss_pct": -5.0,
+      "breakeven_trigger": 2715.75,
+      "breakeven_trigger_pct": 3.0,
+      "take_profit": 4614.14,
+      "take_profit_pct": 75.0,
+      "risk_reward_ratio": "15.0x",
+      "timestamp": "2026-09-18 19:00:00",
+      "contributing_agents": [
+        "quant",
+        "trader",
+        "informan"
+      ],
+      "status": "LIVE_SIGNAL",
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+    }
   },
   {
     "id": "pippo-30m-new-gen",
@@ -36033,6 +36113,37 @@
         "text": "EXIT Fast_Breakeven #94",
         "tradeNo": 94,
         "isActive": false
+      },
+      {
+        "time": 1789758000,
+        "position": "belowBar",
+        "color": "#30D158",
+        "shape": "arrowUp",
+        "text": "ACTIVE LONG @ $2,636.71",
+        "size": 3,
+        "entryPrice": 2636.71,
+        "side": "LONG",
+        "status": "OPEN",
+        "isActive": false
+      },
+      {
+        "time": 1789761600,
+        "position": "aboveBar",
+        "color": "#FF9F0A",
+        "shape": "circle",
+        "text": "BE LOCKED @ $2,641.98 (+0.2%)",
+        "size": 2,
+        "exitPrice": 2641.98,
+        "isBreakeven": true
+      },
+      {
+        "time": "2026-09-23 16:02:00",
+        "position": "aboveBar",
+        "color": "#EF4444",
+        "shape": "arrowDown",
+        "text": "EXIT Fast_Breakeven #95",
+        "tradeNo": 95,
+        "isActive": false
       }
     ],
     "trades": [
@@ -37354,10 +37465,71 @@
         "exit_reason": "Fast_Breakeven",
         "be_activated": false,
         "status": "CLOSED"
+      },
+      {
+        "trade_no": 95,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 19:00:00",
+        "exit_time": "2026-09-23 16:02:00",
+        "entry_price": 2636.71,
+        "exit_price": 2641.51,
+        "gross_return_pct": 0.18,
+        "net_return_pct": 0.0,
+        "exit_reason": "Fast_Breakeven",
+        "be_activated": true,
+        "status": "CLOSED",
+        "stop_loss": 2641.98,
+        "take_profit": 4614.24,
+        "is_active": true
+      },
+      {
+        "trade_no": 96,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 19:00:00",
+        "exit_time": "RUNNING",
+        "entry_price": 2636.71,
+        "exit_price": 2636.71,
+        "gross_return_pct": 0.0,
+        "net_return_pct": -0.18,
+        "exit_reason": "Active Signal (BE Locked)",
+        "be_activated": true,
+        "status": "OPEN",
+        "stop_loss": 2641.98,
+        "take_profit": 4614.24,
+        "is_active": true
       }
     ],
-    "has_active_signal": false,
-    "active_ticket": null
+    "has_active_signal": true,
+    "active_ticket": {
+      "symbol": "ETH/USDT",
+      "asset": "ETHUSDT",
+      "direction": "LONG",
+      "action": "BUY",
+      "strategy_name": "Pippo 1h Enhanced",
+      "strategy_id": "pippo-1h-enhanced",
+      "timeframe": "1h",
+      "confidence_pct": 92,
+      "confidence_blocks": 9,
+      "entry_price": 2636.71,
+      "current_price": 2740.05,
+      "stop_loss": 2641.98,
+      "stop_loss_pct": -8.0,
+      "breakeven_trigger": 2768.55,
+      "breakeven_trigger_pct": 5.0,
+      "take_profit": 4614.24,
+      "take_profit_pct": 75.0,
+      "risk_reward_ratio": "9.38x",
+      "timestamp": "2026-09-18 19:00:00",
+      "contributing_agents": [
+        "quant",
+        "trader",
+        "informan"
+      ],
+      "status": "LIVE_SIGNAL",
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+    }
   },
   {
     "id": "pippo-30m-scalp",
@@ -39929,6 +40101,25 @@
         "text": "EXIT Fast_Breakeven #111",
         "tradeNo": 111,
         "isActive": false
+      },
+      {
+        "time": 1789759800,
+        "position": "aboveBar",
+        "color": "#FF9F0A",
+        "shape": "circle",
+        "text": "BE LOCKED @ $2,641.92 (+0.2%)",
+        "size": 2,
+        "exitPrice": 2641.92,
+        "isBreakeven": true
+      },
+      {
+        "time": "2026-09-23 16:02:00",
+        "position": "aboveBar",
+        "color": "#EF4444",
+        "shape": "arrowDown",
+        "text": "EXIT Fast_Breakeven #112",
+        "tradeNo": 112,
+        "isActive": false
       }
     ],
     "trades": [
@@ -41488,10 +41679,71 @@
         "exit_reason": "Fast_Breakeven",
         "be_activated": false,
         "status": "CLOSED"
+      },
+      {
+        "trade_no": 112,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 19:00:00",
+        "exit_time": "2026-09-23 16:02:00",
+        "entry_price": 2636.65,
+        "exit_price": 2641.51,
+        "gross_return_pct": 0.18,
+        "net_return_pct": 0.0,
+        "exit_reason": "Fast_Breakeven",
+        "be_activated": true,
+        "status": "CLOSED",
+        "stop_loss": 2641.92,
+        "take_profit": 4614.14,
+        "is_active": true
+      },
+      {
+        "trade_no": 113,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 19:00:00",
+        "exit_time": "RUNNING",
+        "entry_price": 2636.65,
+        "exit_price": 2636.65,
+        "gross_return_pct": 0.0,
+        "net_return_pct": -0.18,
+        "exit_reason": "Active Signal (BE Locked)",
+        "be_activated": true,
+        "status": "OPEN",
+        "stop_loss": 2641.92,
+        "take_profit": 4614.14,
+        "is_active": true
       }
     ],
-    "has_active_signal": false,
-    "active_ticket": null
+    "has_active_signal": true,
+    "active_ticket": {
+      "symbol": "ETH/USDT",
+      "asset": "ETHUSDT",
+      "direction": "LONG",
+      "action": "BUY",
+      "strategy_name": "Pippo 30m Scalp-Runner",
+      "strategy_id": "pippo-30m-scalp",
+      "timeframe": "30m",
+      "confidence_pct": 92,
+      "confidence_blocks": 9,
+      "entry_price": 2636.65,
+      "current_price": 2740.05,
+      "stop_loss": 2641.92,
+      "stop_loss_pct": -5.0,
+      "breakeven_trigger": 2742.12,
+      "breakeven_trigger_pct": 4.0,
+      "take_profit": 4614.14,
+      "take_profit_pct": 75.0,
+      "risk_reward_ratio": "15.0x",
+      "timestamp": "2026-09-18 19:00:00",
+      "contributing_agents": [
+        "quant",
+        "trader",
+        "informan"
+      ],
+      "status": "LIVE_SIGNAL",
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+    }
   },
   {
     "id": "pure-macro-weekly-ma55",
@@ -45687,6 +45939,25 @@
         "text": "EXIT Fast_Breakeven #159",
         "tradeNo": 159,
         "isActive": false
+      },
+      {
+        "time": 1789761600,
+        "position": "aboveBar",
+        "color": "#FF9F0A",
+        "shape": "circle",
+        "text": "BE LOCKED @ $2,641.98 (+0.2%)",
+        "size": 2,
+        "exitPrice": 2641.98,
+        "isBreakeven": true
+      },
+      {
+        "time": "2026-09-23 16:02:00",
+        "position": "aboveBar",
+        "color": "#EF4444",
+        "shape": "arrowDown",
+        "text": "EXIT Fast_Breakeven #160",
+        "tradeNo": 160,
+        "isActive": false
       }
     ],
     "trades": [
@@ -47765,10 +48036,71 @@
         "exit_reason": "Fast_Breakeven",
         "be_activated": false,
         "status": "CLOSED"
+      },
+      {
+        "trade_no": 160,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 16:00:00",
+        "exit_time": "2026-09-23 16:02:00",
+        "entry_price": 2636.71,
+        "exit_price": 2641.51,
+        "gross_return_pct": 0.18,
+        "net_return_pct": 0.0,
+        "exit_reason": "Fast_Breakeven",
+        "be_activated": true,
+        "status": "CLOSED",
+        "stop_loss": 2641.98,
+        "take_profit": 4614.24,
+        "is_active": true
+      },
+      {
+        "trade_no": 161,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 16:00:00",
+        "exit_time": "RUNNING",
+        "entry_price": 2636.71,
+        "exit_price": 2636.71,
+        "gross_return_pct": 0.0,
+        "net_return_pct": -0.18,
+        "exit_reason": "Active Signal (BE Locked)",
+        "be_activated": true,
+        "status": "OPEN",
+        "stop_loss": 2641.98,
+        "take_profit": 4614.24,
+        "is_active": true
       }
     ],
-    "has_active_signal": false,
-    "active_ticket": null
+    "has_active_signal": true,
+    "active_ticket": {
+      "symbol": "ETH/USDT",
+      "asset": "ETHUSDT",
+      "direction": "LONG",
+      "action": "BUY",
+      "strategy_name": "Pippo 4h Original",
+      "strategy_id": "pippo-4h-original",
+      "timeframe": "4h",
+      "confidence_pct": 92,
+      "confidence_blocks": 9,
+      "entry_price": 2636.71,
+      "current_price": 2740.05,
+      "stop_loss": 2641.98,
+      "stop_loss_pct": -15.0,
+      "breakeven_trigger": 2768.55,
+      "breakeven_trigger_pct": 5.0,
+      "take_profit": 4614.24,
+      "take_profit_pct": 75.0,
+      "risk_reward_ratio": "5.0x",
+      "timestamp": "2026-09-18 16:00:00",
+      "contributing_agents": [
+        "quant",
+        "trader",
+        "informan"
+      ],
+      "status": "LIVE_SIGNAL",
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+    }
   },
   {
     "id": "pippo-30m-short-v2-a",

@@ -281,7 +281,12 @@ export default function TradingChart({
         const contentType = res.headers.get('content-type') || '';
         if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
-          if (data && Array.isArray(data.candles) && data.candles.length > 0) {
+          // Defensive guard: verify symbol matches current chart symbol
+          const isSymbolMatch = !data.symbol || data.symbol === symbol;
+          const lastBar = data.candles?.[data.candles.length - 1];
+          const isMagnitudeValid = !lastBar || (symbol === 'ETHUSDT' ? lastBar.close < 20000 : lastBar.close > 20000);
+
+          if (data && Array.isArray(data.candles) && data.candles.length > 0 && isSymbolMatch && isMagnitudeValid) {
             if (isMounted) {
               setCandles(data.candles);
               setLoading(false);

@@ -297,11 +297,16 @@ function TradingApp() {
         .then((r) => r.json())
         .then((data) => {
           if (data && data.price && typeof data.price === 'number') {
+            // Defensive guard: reject mismatched ticker
+            if (data.symbol && data.symbol !== curAsset) return;
+            if (curAsset === 'ETHUSDT' && data.price > 20000) return;
+            if (curAsset === 'BTCUSDT' && data.price < 20000) return;
+
             setTicker((prev) => {
-              if (prev.price !== data.price) return { ...prev, ...data };
+              if (prev.price !== data.price) return { ...prev, ...data, symbol: curAsset };
               return prev;
             });
-            setTickersMap((prev) => ({ ...prev, [curAsset]: data }));
+            setTickersMap((prev) => ({ ...prev, [curAsset]: { ...data, symbol: curAsset } }));
           }
         })
         .catch(() => {});
@@ -637,8 +642,11 @@ function TradingApp() {
       .then((r) => r.json())
       .then((t) => {
         if (t && t.price && t.price > 0 && selectedAssetRef.current === newAsset) {
-          setTicker(t);
-          setTickersMap((prev) => ({ ...prev, [newAsset]: t }));
+          if (t.symbol && t.symbol !== newAsset) return;
+          if (newAsset === 'ETHUSDT' && t.price > 20000) return;
+          if (newAsset === 'BTCUSDT' && t.price < 20000) return;
+          setTicker({ ...t, symbol: newAsset });
+          setTickersMap((prev) => ({ ...prev, [newAsset]: { ...t, symbol: newAsset } }));
         }
       })
       .catch(() => {

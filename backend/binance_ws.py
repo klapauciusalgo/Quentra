@@ -149,15 +149,14 @@ class BinanceManager:
                             "data": self.ticker_data_map[sym]
                         })
 
-                        # On-the-fly live signal ticker evaluation for BTC
-                        if sym == "BTCUSDT":
-                            try:
-                                from live_signal_engine import live_signal_engine
-                                events = live_signal_engine.on_ticker_tick(price, event_time)
-                                for ev in events:
-                                    await self.broadcast(ev)
-                            except Exception as ex:
-                                logger.debug(f"Ticker signal eval: {ex}")
+                        # On-the-fly live signal ticker evaluation for BTC and ETH
+                        try:
+                            from live_signal_engine import live_signal_engine
+                            events = live_signal_engine.on_ticker_tick(price, event_time, symbol=sym)
+                            for ev in events:
+                                await self.broadcast(ev)
+                        except Exception as ex:
+                            logger.debug(f"Ticker signal eval ({sym}): {ex}")
 
             except asyncio.CancelledError:
                 logger.info("Binance WS stream cancelled.")
@@ -177,8 +176,12 @@ class BinanceManager:
                 retry_delay = min(retry_delay * 1.5, 30)
 
     async def start_kline_stream(self):
-        """Multi-timeframe (30m, 1h, 4h, 1d, 1w) kline listener for real-time bar close and autonomous signal triggering"""
-        combined_kline_url = "wss://stream.binance.com:9443/stream?streams=btcusdt@kline_30m/btcusdt@kline_1h/btcusdt@kline_4h/btcusdt@kline_1d/btcusdt@kline_1w"
+        """Multi-timeframe (30m, 1h, 4h, 1d, 1w) kline listener for real-time bar close and autonomous signal triggering for BTC & ETH"""
+        combined_kline_url = (
+            "wss://stream.binance.com:9443/stream?streams="
+            "btcusdt@kline_30m/btcusdt@kline_1h/btcusdt@kline_4h/btcusdt@kline_1d/btcusdt@kline_1w/"
+            "ethusdt@kline_30m/ethusdt@kline_1h/ethusdt@kline_4h/ethusdt@kline_1d/ethusdt@kline_1w"
+        )
         retry_delay = 5
         while True:
             try:
@@ -187,6 +190,7 @@ class BinanceManager:
                     async for raw_msg in ws:
                         msg = json.loads(raw_msg)
                         stream = msg.get("stream", "")
+                        sym = "ETHUSDT" if "ethusdt" in stream else "BTCUSDT"
                         tf = None
                         for candidate in ["30m", "1h", "4h", "1d", "1w"]:
                             if f"kline_{candidate}" in stream:
@@ -208,9 +212,11 @@ class BinanceManager:
                                 "volume": float(k["v"]),
                                 "is_closed": bool(k["x"])
                             }
-                            self.latest_candles[tf] = candle
+                            if sym == "BTCUSDT":
+                                self.latest_candles[tf] = candle
                             await self.broadcast({
                                 "type": "KLINE",
+                                "symbol": sym,
                                 "timeframe": tf,
                                 "candle": candle
                             })
@@ -219,9 +225,9 @@ class BinanceManager:
                             if candle["is_closed"]:
                                 try:
                                     from live_signal_engine import live_signal_engine
-                                    await live_signal_engine.on_kline_closed(tf, candle, self)
+                                    await live_signal_engine.on_kline_closed(tf, candle, self, symbol=sym)
                                 except Exception as eval_err:
-                                    logger.error(f"Error evaluating closed {tf} candle: {eval_err}", exc_info=True)
+                                    logger.error(f"Error evaluating closed {sym} {tf} candle: {eval_err}", exc_info=True)
 
             except asyncio.CancelledError:
                 break

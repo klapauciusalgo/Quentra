@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Autonomous Live Signal Engine for Quentra.
-Executes quantitative algorithmic strategy rules on-the-fly:
-- Streams & monitors closed candles (30m, 1h, 4h, 1w)
+Autonomous Multi-Asset Live Signal Engine for Quentra.
+Executes quantitative algorithmic strategy rules on-the-fly for BTCUSDT and ETHUSDT:
+- Streams & monitors closed candles across timeframes (30m, 1h, 4h, 1w)
 - Computes Smart Money Concepts (SMC) swing highs/lows and market structure
 - Evaluates Macro Regime Filters (Weekly MA55, 4H SMA111, 1H EMA50)
-- Detects entry breakouts, dynamic breakeven locks, structural exits, and stop losses
+- Detects entry breakouts, dynamic breakeven locks (+0.2%), structural exits, and stop losses
 - Automatically dispatches signals to WebSocket clients and records them to Supabase
 """
 
@@ -61,12 +61,13 @@ def standardize_candle_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 class StrategyModel:
-    def __init__(self, strat_id: str, name: str, tf: str, direction: str, config: dict):
+    def __init__(self, strat_id: str, name: str, tf: str, direction: str, config: dict, symbol: str = "BTCUSDT"):
         self.strat_id = strat_id
         self.name = name
         self.timeframe = tf
         self.direction = direction.upper() # "LONG" or "SHORT"
         self.config = config
+        self.symbol = symbol.upper()
         
         # Position state
         self.position_status = "FLAT" # "FLAT" or "OPEN"
@@ -91,167 +92,184 @@ class StrategyModel:
         self.active_markers: List[dict] = []
         self.active_ticket: Optional[dict] = None
 
+def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]:
+    sym = symbol.upper()
+    return {
+        "pippo-1h-enhanced": StrategyModel(
+            strat_id="pippo-1h-enhanced",
+            name="Pippo 1h Enhanced",
+            tf="1h",
+            direction="LONG",
+            config={
+                "maj_swing": 50,
+                "ent_swing": 16,
+                "ex_swing": 48,
+                "sl_pct": 0.08,
+                "be_pct": 0.05,
+                "tp_pct": 0.75,
+                "regime": "4h_sma111"
+            },
+            symbol=sym
+        ),
+        "pippo-30m-alpha": StrategyModel(
+            strat_id="pippo-30m-alpha",
+            name="Pippo 30M Alpha (Pure Runner)",
+            tf="30m",
+            direction="LONG",
+            config={
+                "maj_swing": 100,
+                "ent_swing": 36,
+                "ex_swing": 96,
+                "sl_pct": 0.05,
+                "be_pct": 0.03,
+                "tp_pct": 0.75,
+                "regime": "4h_sma111_and_1h_ema50"
+            },
+            symbol=sym
+        ),
+        "pippo-30m-new-gen": StrategyModel(
+            strat_id="pippo-30m-new-gen",
+            name="Pippo 30m New Gen",
+            tf="30m",
+            direction="LONG",
+            config={
+                "sl_pct": 0.02,
+                "tp_pct": 0.20,
+                "fc_dist": 0.005,
+                "entry_dist": 0.008,
+                "regime_dist_1h": 0.015,
+                "spread_max": 0.0015,
+                "atr_max": 0.01,
+                "regime": "pippo_new_gen_ma_squeeze"
+            },
+            symbol=sym
+        ),
+        "pippo-30m-grd": StrategyModel(
+            strat_id="pippo-30m-grd",
+            name="Pippo 30m Grd",
+            tf="30m",
+            direction="LONG",
+            config={
+                "sl_pct": 0.02,
+                "tp_pct": 0.20,
+                "fc_dist": 0.005,
+                "entry_dist": 0.008,
+                "regime_dist_1h": 0.015,
+                "spread_max": 0.0015,
+                "atr_max": 0.01,
+                "regime": "pippo_grd_ma_squeeze"
+            },
+            symbol=sym
+        ),
+        "pippo-30m-short-v2-a": StrategyModel(
+            strat_id="pippo-30m-short-v2-a",
+            name="Pippo 30M Short V2 Type A (Active TP)",
+            tf="30m",
+            direction="SHORT",
+            config={
+                "maj_swing": 64,
+                "ent_swing": 32,
+                "ex_swing": 48,
+                "sl_pct": 0.05,
+                "be_pct": 0.015,
+                "tp_pct": 0.12,
+                "regime": "weekly_ma55_and_4h_sma111"
+            },
+            symbol=sym
+        ),
+        "pippo-30m-short-v2-b": StrategyModel(
+            strat_id="pippo-30m-short-v2-b",
+            name="Pippo 30M Short V2 Type B (Max Freq)",
+            tf="30m",
+            direction="SHORT",
+            config={
+                "maj_swing": 64,
+                "ent_swing": 28,
+                "ex_swing": 48,
+                "sl_pct": 0.05,
+                "be_pct": 0.025,
+                "tp_pct": 0.20,
+                "regime": "weekly_ma55"
+            },
+            symbol=sym
+        ),
+        "pippo-4h-original": StrategyModel(
+            strat_id="pippo-4h-original",
+            name="Pippo 4h Original",
+            tf="4h",
+            direction="LONG",
+            config={
+                "maj_swing": 50,
+                "ent_swing": 5,
+                "ex_swing": 5,
+                "sl_pct": 0.15,
+                "be_pct": 0.05,
+                "tp_pct": 0.75,
+                "regime": "4h_sma111"
+            },
+            symbol=sym
+        ),
+        "pippo-30m-scalp": StrategyModel(
+            strat_id="pippo-30m-scalp",
+            name="Pippo 30m Scalp-Runner",
+            tf="30m",
+            direction="LONG",
+            config={
+                "maj_swing": 100,
+                "ent_swing": 36,
+                "ex_swing": 96,
+                "sl_pct": 0.05,
+                "be_pct": 0.04,
+                "tp_pct": 0.75,
+                "partial_tp": 0.04,
+                "regime": "4h_sma111_and_1h_ema50"
+            },
+            symbol=sym
+        ),
+        "pippo-30m-short-v2-c": StrategyModel(
+            strat_id="pippo-30m-short-v2-c",
+            name="Pippo 30M Short V2 Type C (Defensive Fortress)",
+            tf="30m",
+            direction="SHORT",
+            config={
+                "maj_swing": 64,
+                "ent_swing": 32,
+                "ex_swing": 16,
+                "sl_pct": 0.06,
+                "be_pct": 0.025,
+                "tp_pct": 0.50,
+                "regime": "weekly_ma55_and_4h_sma111"
+            },
+            symbol=sym
+        ),
+        "pure-macro-weekly-ma55": StrategyModel(
+            strat_id="pure-macro-weekly-ma55",
+            name="Pure Macro Weekly MA55",
+            tf="1w",
+            direction="LONG",
+            config={
+                "regime": "weekly_ma55_close"
+            },
+            symbol=sym
+        )
+    }
+
 class LiveSignalEngine:
     def __init__(self):
         self.is_initialized = False
         self.last_price = 0.0
+        self.last_price_eth = 0.0
         self.last_eval_timestamp = 0
         
-        # Rolling candle history (last 500-1000 bars per timeframe)
+        # Rolling candle history per asset (last 500-1000 bars per timeframe)
         self.candle_buffers: Dict[str, pd.DataFrame] = {}
+        self.candle_buffers_eth: Dict[str, pd.DataFrame] = {}
         
         # Registered automated strategy models
-        self.strategies: Dict[str, StrategyModel] = {
-            "pippo-1h-enhanced": StrategyModel(
-                strat_id="pippo-1h-enhanced",
-                name="Pippo 1h Enhanced",
-                tf="1h",
-                direction="LONG",
-                config={
-                    "maj_swing": 50,
-                    "ent_swing": 16,
-                    "ex_swing": 48,
-                    "sl_pct": 0.08,
-                    "be_pct": 0.05,
-                    "tp_pct": 0.75,
-                    "regime": "4h_sma111"
-                }
-            ),
-            "pippo-30m-alpha": StrategyModel(
-                strat_id="pippo-30m-alpha",
-                name="Pippo 30M Alpha (Pure Runner)",
-                tf="30m",
-                direction="LONG",
-                config={
-                    "maj_swing": 100,
-                    "ent_swing": 36,
-                    "ex_swing": 96,
-                    "sl_pct": 0.05,
-                    "be_pct": 0.03,
-                    "tp_pct": 0.75,
-                    "regime": "4h_sma111_and_1h_ema50"
-                }
-            ),
-            "pippo-30m-new-gen": StrategyModel(
-                strat_id="pippo-30m-new-gen",
-                name="Pippo 30m New Gen",
-                tf="30m",
-                direction="LONG",
-                config={
-                    "sl_pct": 0.02,
-                    "tp_pct": 0.20,
-                    "fc_dist": 0.005,
-                    "entry_dist": 0.008,
-                    "regime_dist_1h": 0.015,
-                    "spread_max": 0.0015,
-                    "atr_max": 0.01,
-                    "regime": "pippo_new_gen_ma_squeeze"
-                }
-            ),
-            "pippo-30m-grd": StrategyModel(
-                strat_id="pippo-30m-grd",
-                name="Pippo 30m Grd",
-                tf="30m",
-                direction="LONG",
-                config={
-                    "sl_pct": 0.02,
-                    "tp_pct": 0.20,
-                    "fc_dist": 0.005,
-                    "entry_dist": 0.008,
-                    "regime_dist_1h": 0.015,
-                    "spread_max": 0.0015,
-                    "atr_max": 0.01,
-                    "regime": "pippo_grd_ma_squeeze"
-                }
-            ),
-            "pippo-30m-short-v2-a": StrategyModel(
-                strat_id="pippo-30m-short-v2-a",
-                name="Pippo 30M Short V2 Type A (Active TP)",
-                tf="30m",
-                direction="SHORT",
-                config={
-                    "maj_swing": 64,
-                    "ent_swing": 32,
-                    "ex_swing": 48,
-                    "sl_pct": 0.05,
-                    "be_pct": 0.015,
-                    "tp_pct": 0.12,
-                    "regime": "weekly_ma55_and_4h_sma111"
-                }
-            ),
-            "pippo-30m-short-v2-b": StrategyModel(
-                strat_id="pippo-30m-short-v2-b",
-                name="Pippo 30M Short V2 Type B (Max Freq)",
-                tf="30m",
-                direction="SHORT",
-                config={
-                    "maj_swing": 64,
-                    "ent_swing": 28,
-                    "ex_swing": 48,
-                    "sl_pct": 0.05,
-                    "be_pct": 0.025,
-                    "tp_pct": 0.20,
-                    "regime": "weekly_ma55"
-                }
-            ),
-            "pippo-4h-original": StrategyModel(
-                strat_id="pippo-4h-original",
-                name="Pippo 4h Original",
-                tf="4h",
-                direction="LONG",
-                config={
-                    "maj_swing": 50,
-                    "ent_swing": 5,
-                    "ex_swing": 5,
-                    "sl_pct": 0.15,
-                    "be_pct": 0.05,
-                    "tp_pct": 0.75,
-                    "regime": "4h_sma111"
-                }
-            ),
-            "pippo-30m-scalp": StrategyModel(
-                strat_id="pippo-30m-scalp",
-                name="Pippo 30m Scalp-Runner",
-                tf="30m",
-                direction="LONG",
-                config={
-                    "maj_swing": 100,
-                    "ent_swing": 36,
-                    "ex_swing": 96,
-                    "sl_pct": 0.05,
-                    "be_pct": 0.04,
-                    "tp_pct": 0.75,
-                    "partial_tp": 0.04,
-                    "regime": "4h_sma111_and_1h_ema50"
-                }
-            ),
-            "pippo-30m-short-v2-c": StrategyModel(
-                strat_id="pippo-30m-short-v2-c",
-                name="Pippo 30M Short V2 Type C (Defensive Fortress)",
-                tf="30m",
-                direction="SHORT",
-                config={
-                    "maj_swing": 64,
-                    "ent_swing": 32,
-                    "ex_swing": 16,
-                    "sl_pct": 0.06,
-                    "be_pct": 0.025,
-                    "tp_pct": 0.50,
-                    "regime": "weekly_ma55_and_4h_sma111"
-                }
-            ),
-            "pure-macro-weekly-ma55": StrategyModel(
-                strat_id="pure-macro-weekly-ma55",
-                name="Pure Macro Weekly MA55",
-                tf="1w",
-                direction="LONG",
-                config={
-                    "regime": "weekly_ma55_close"
-                }
-            )
-        }
+        self.strategies: Dict[str, StrategyModel] = create_strategy_catalog("BTCUSDT")
+        self.strategies_eth: Dict[str, StrategyModel] = create_strategy_catalog("ETHUSDT")
 
-        # Shared macro indicators
+        # Shared macro indicators for BTC
         self.macro_state = {
             "weekly_ma55": 83309.0,
             "weekly_close": 80341.0,
@@ -266,96 +284,141 @@ class LiveSignalEngine:
             "regime_description": "MACRO DISCOUNT (Bearish Bias below Weekly MA55)"
         }
 
-    def initialize_with_parquets(self, parquet_dfs: dict):
-        """Warm up engine with historical parquet bars and sync initial state."""
+        # Shared macro indicators for ETH
+        self.macro_state_eth = {
+            "weekly_ma55": 2648.68,
+            "weekly_close": 2645.20,
+            "is_weekly_bullish": False,
+            "sma111_4h": 2650.0,
+            "close_4h": 2645.20,
+            "is_4h_bullish": False,
+            "ema50_1h": 2640.0,
+            "close_1h": 2645.20,
+            "is_1h_bullish": False,
+            "distance_weekly_ma55_pct": -0.13,
+            "regime_description": "MACRO DISCOUNT (Bearish Bias below Weekly MA55)"
+        }
+
+    def get_models(self, symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]:
+        return self.strategies_eth if symbol.upper() == "ETHUSDT" else self.strategies
+
+    def get_model(self, strat_id: str, symbol: str = "BTCUSDT") -> Optional[StrategyModel]:
+        models = self.get_models(symbol)
+        return models.get(strat_id)
+
+    def get_candle_buffers(self, symbol: str = "BTCUSDT") -> Dict[str, pd.DataFrame]:
+        return self.candle_buffers_eth if symbol.upper() == "ETHUSDT" else self.candle_buffers
+
+    def get_macro_state(self, symbol: str = "BTCUSDT") -> dict:
+        return self.macro_state_eth if symbol.upper() == "ETHUSDT" else self.macro_state
+
+    def get_last_price(self, symbol: str = "BTCUSDT") -> float:
+        return self.last_price_eth if symbol.upper() == "ETHUSDT" else self.last_price
+
+    def initialize_with_parquets(self, parquet_dfs: dict, symbol: str = "BTCUSDT"):
+        """Warm up engine with historical parquet bars and sync initial state for the given asset."""
+        sym = symbol.upper()
+        buffers = self.get_candle_buffers(sym)
         try:
             for tf, df in parquet_dfs.items():
                 if df is not None and not df.empty:
                     std_df = standardize_candle_df(df.tail(1000))
-                    self.candle_buffers[tf] = std_df.reset_index(drop=True)
+                    buffers[tf] = std_df.reset_index(drop=True)
             
             # Initialize last_price from the latest available closed bar
             for tf_pref in ["30m", "1h", "4h", "1d", "1w"]:
-                if tf_pref in self.candle_buffers and not self.candle_buffers[tf_pref].empty:
-                    self.last_price = float(self.candle_buffers[tf_pref]["close"].iloc[-1])
+                if tf_pref in buffers and not buffers[tf_pref].empty:
+                    p = float(buffers[tf_pref]["close"].iloc[-1])
+                    if sym == "ETHUSDT":
+                        self.last_price_eth = p
+                    else:
+                        self.last_price = p
                     break
 
             # Recalculate macro state
-            self._update_macro_indicators()
+            self._update_macro_indicators(sym)
             
             # Synchronize active open trades from recent history
-            self.sync_active_positions()
+            self.sync_active_positions(sym)
 
             # Evaluate current market state across all strategies
-            self._evaluate_all_models_initial()
-            self.is_initialized = True
-            logger.info("Autonomous Live Signal Engine initialized successfully with historical buffers and active trade sync!")
+            self._evaluate_all_models_initial(sym)
+            if sym == "BTCUSDT":
+                self.is_initialized = True
+            logger.info(f"Autonomous Live Signal Engine initialized for {sym}. Latest price: ${self.get_last_price(sym):,.2f}")
         except Exception as e:
-            logger.error(f"Failed to initialize Live Signal Engine: {e}", exc_info=True)
+            logger.error(f"Failed to initialize Live Signal Engine for {sym}: {e}", exc_info=True)
 
-    def _update_macro_indicators(self):
+    def _update_macro_indicators(self, symbol: str = "BTCUSDT"):
         """Update Weekly MA55, 4H SMA111, and 1H EMA50 dynamically from rolling buffers."""
+        sym = symbol.upper()
+        buffers = self.get_candle_buffers(sym)
+        macro = self.get_macro_state(sym)
+        last_p = self.get_last_price(sym)
         try:
             # 1. Weekly MA55
-            if "1w" in self.candle_buffers and not self.candle_buffers["1w"].empty:
-                df_w = self.candle_buffers["1w"]
+            if "1w" in buffers and not buffers["1w"].empty:
+                df_w = buffers["1w"]
                 if "MA55" in df_w.columns and not pd.isna(df_w["MA55"].iloc[-1]):
-                    self.macro_state["weekly_ma55"] = float(df_w["MA55"].iloc[-1])
+                    macro["weekly_ma55"] = float(df_w["MA55"].iloc[-1])
                 else:
-                    self.macro_state["weekly_ma55"] = float(df_w["close"].rolling(55).mean().iloc[-1])
-                self.macro_state["weekly_close"] = float(df_w["close"].iloc[-1])
-                effective_weekly_p = self.last_price if self.last_price > 0 else self.macro_state["weekly_close"]
-                self.macro_state["is_weekly_bullish"] = effective_weekly_p >= self.macro_state["weekly_ma55"]
+                    macro["weekly_ma55"] = float(df_w["close"].rolling(55).mean().iloc[-1])
+                macro["weekly_close"] = float(df_w["close"].iloc[-1])
+                effective_weekly_p = last_p if last_p > 0 else macro["weekly_close"]
+                macro["is_weekly_bullish"] = effective_weekly_p >= macro["weekly_ma55"]
 
             # 2. 4H SMA111
-            if "4h" in self.candle_buffers and not self.candle_buffers["4h"].empty:
-                df_4h = self.candle_buffers["4h"]
+            if "4h" in buffers and not buffers["4h"].empty:
+                df_4h = buffers["4h"]
                 if "MA111" in df_4h.columns and not pd.isna(df_4h["MA111"].iloc[-1]):
-                    self.macro_state["sma111_4h"] = float(df_4h["MA111"].iloc[-1])
+                    macro["sma111_4h"] = float(df_4h["MA111"].iloc[-1])
                 else:
-                    self.macro_state["sma111_4h"] = float(df_4h["close"].rolling(111).mean().iloc[-1])
-                self.macro_state["close_4h"] = float(df_4h["close"].iloc[-1])
-                effective_4h_p = self.last_price if self.last_price > 0 else self.macro_state["close_4h"]
-                self.macro_state["is_4h_bullish"] = effective_4h_p >= self.macro_state["sma111_4h"]
+                    macro["sma111_4h"] = float(df_4h["close"].rolling(111).mean().iloc[-1])
+                macro["close_4h"] = float(df_4h["close"].iloc[-1])
+                effective_4h_p = last_p if last_p > 0 else macro["close_4h"]
+                macro["is_4h_bullish"] = effective_4h_p >= macro["sma111_4h"]
 
             # 3. 1H EMA50
-            if "1h" in self.candle_buffers and not self.candle_buffers["1h"].empty:
-                df_1h = self.candle_buffers["1h"]
-                self.macro_state["ema50_1h"] = float(df_1h["close"].ewm(span=50, adjust=False).mean().iloc[-1])
-                self.macro_state["close_1h"] = float(df_1h["close"].iloc[-1])
-                effective_1h_p = self.last_price if self.last_price > 0 else self.macro_state["close_1h"]
-                self.macro_state["is_1h_bullish"] = effective_1h_p >= self.macro_state["ema50_1h"]
+            if "1h" in buffers and not buffers["1h"].empty:
+                df_1h = buffers["1h"]
+                macro["ema50_1h"] = float(df_1h["close"].ewm(span=50, adjust=False).mean().iloc[-1])
+                macro["close_1h"] = float(df_1h["close"].iloc[-1])
+                effective_1h_p = last_p if last_p > 0 else macro["close_1h"]
+                macro["is_1h_bullish"] = effective_1h_p >= macro["ema50_1h"]
 
             # Macro regime summary
-            ma55 = self.macro_state["weekly_ma55"]
-            effective_p = self.last_price if self.last_price > 0 else self.macro_state["weekly_close"]
+            ma55 = macro["weekly_ma55"]
+            effective_p = last_p if last_p > 0 else macro["weekly_close"]
             diff_pct = ((effective_p - ma55) / ma55) * 100.0 if ma55 > 0 else 0.0
-            self.macro_state["distance_weekly_ma55_pct"] = round(diff_pct, 2)
-            if self.macro_state["is_weekly_bullish"]:
-                self.macro_state["regime_description"] = f"BULLISH EXPANSION (+{diff_pct:.1f}% vs Weekly MA55)"
+            macro["distance_weekly_ma55_pct"] = round(diff_pct, 2)
+            if macro["is_weekly_bullish"]:
+                macro["regime_description"] = f"BULLISH EXPANSION (+{diff_pct:.1f}% vs Weekly MA55)"
             else:
-                self.macro_state["regime_description"] = f"MACRO DISCOUNT ({diff_pct:.1f}% vs Weekly MA55)"
+                macro["regime_description"] = f"MACRO DISCOUNT ({diff_pct:.1f}% vs Weekly MA55)"
 
         except Exception as ex:
-            logger.warning(f"Error calculating macro indicators: {ex}")
+            logger.warning(f"Error calculating macro indicators for {sym}: {ex}")
 
-
-    def sync_active_positions(self):
+    def sync_active_positions(self, symbol: str = "BTCUSDT"):
         """
         Replays recent market bars for each strategy to restore active OPEN positions,
         exact entry prices, breakeven status, and trailing stops.
         """
+        sym = symbol.upper()
+        buffers = self.get_candle_buffers(sym)
+        models = self.get_models(sym)
+        macro = self.get_macro_state(sym)
         try:
-            for strat_id, model in self.strategies.items():
+            for strat_id, model in models.items():
                 if strat_id in ["pippo-30m-new-gen", "pippo-30m-grd"]:
-                    self._sync_pippo_new_gen(model)
+                    self._sync_pippo_new_gen(model, sym)
                     continue
 
                 tf = model.timeframe
-                if tf not in self.candle_buffers or self.candle_buffers[tf].empty:
+                if tf not in buffers or buffers[tf].empty:
                     continue
 
-                df = self.candle_buffers[tf]
+                df = buffers[tf]
                 highs = df["high"].values
                 lows = df["low"].values
                 closes = df["close"].values
@@ -376,8 +439,8 @@ class LiveSignalEngine:
                 top_ent, btm_ent = compute_swings_arr(highs, lows, min(ent_len, n - 1))
                 top_ex, btm_ex = compute_swings_arr(highs, lows, min(ex_len, n - 1))
 
-                sma111_4h = self.macro_state.get("sma111_4h", 0.0)
-                weekly_ma55 = self.macro_state.get("weekly_ma55", 0.0)
+                sma111_4h = macro.get("sma111_4h", 0.0)
+                weekly_ma55 = macro.get("weekly_ma55", 0.0)
 
                 in_pos = False
                 entry_p = 0.0
@@ -443,6 +506,8 @@ class LiveSignalEngine:
                                 raw_ret = (exit_p - entry_p) / entry_p
                                 net_ret = (raw_ret - 0.0018) * 100.0
                                 replayed_closed.append({
+                                    "symbol": "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT",
+                                    "asset": sym,
                                     "side": direction,
                                     "type": direction,
                                     "entry_time": entry_time,
@@ -485,6 +550,8 @@ class LiveSignalEngine:
                                 raw_ret = (entry_p - exit_p) / entry_p
                                 net_ret = (raw_ret - 0.0018) * 100.0
                                 replayed_closed.append({
+                                    "symbol": "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT",
+                                    "asset": sym,
                                     "side": direction,
                                     "type": direction,
                                     "entry_time": entry_time,
@@ -515,7 +582,7 @@ class LiveSignalEngine:
                     model.be_active = be_active
                     if model.active_ticket:
                         model.active_ticket["stop_loss"] = curr_sl
-                    logger.info(f"🚀 [STATE SYNC] Restored active {direction} trade for {model.name}: Entry ${entry_p:,.2f} at {entry_time} (SL: ${curr_sl:,.2f}, BE: {be_active})")
+                    logger.info(f"🚀 [STATE SYNC] Restored active {direction} trade for [{sym}] {model.name}: Entry ${entry_p:,.2f} at {entry_time} (SL: ${curr_sl:,.2f}, BE: {be_active})")
                 else:
                     model.position_status = "FLAT"
                     model.entry_price = 0.0
@@ -523,27 +590,22 @@ class LiveSignalEngine:
                     model.active_markers = []
 
         except Exception as e:
-            logger.warning(f"Error in sync_active_positions: {e}", exc_info=True)
+            logger.warning(f"Error in sync_active_positions ({sym}): {e}", exc_info=True)
 
-    def _sync_pippo_new_gen(self, model: StrategyModel):
-        """
-        Replays Pippo 30m New Gen MA squeeze & multi-timeframe rules across recent bars:
-        - 1H Regime: price > MA25 & MA50, dist < 1.5%
-        - 4H Regime: price > MA111
-        - 30M Entry: price > MA25 & MA50, dist < 0.8%, MA25/50 spread < 0.15%, ATR < 1.0%
-        - Force Close: price < MA25 & MA50 and 0.5% below each
-        - SL: -2%, TP: +20%
-        """
+    def _sync_pippo_new_gen(self, model: StrategyModel, symbol: str = "BTCUSDT"):
+        """Replays Pippo 30m New Gen MA squeeze & multi-timeframe rules across recent bars."""
+        sym = symbol.upper()
+        buffers = self.get_candle_buffers(sym)
         try:
-            if "30m" not in self.candle_buffers or self.candle_buffers["30m"].empty:
+            if "30m" not in buffers or buffers["30m"].empty:
                 return
 
-            d30 = self.candle_buffers["30m"].copy()
+            d30 = buffers["30m"].copy()
             if len(d30) < 50:
                 return
 
-            d1h = self.candle_buffers.get("1h", pd.DataFrame()).copy()
-            d4h = self.candle_buffers.get("4h", pd.DataFrame()).copy()
+            d1h = buffers.get("1h", pd.DataFrame()).copy()
+            d4h = buffers.get("4h", pd.DataFrame()).copy()
 
             if not d1h.empty:
                 d1h["ma25"] = d1h["close"].rolling(25).mean()
@@ -597,6 +659,8 @@ class LiveSignalEngine:
                         raw_ret = (xp - ep) / ep
                         net_ret = (raw_ret - 0.0018) * 100.0
                         replayed_closed.append({
+                            "symbol": "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT",
+                            "asset": sym,
                             "side": "LONG",
                             "type": "LONG",
                             "entry_time": entry_time,
@@ -648,27 +712,32 @@ class LiveSignalEngine:
                 if model.active_ticket:
                     model.active_ticket["stop_loss"] = model.current_sl
                     model.active_ticket["take_profit"] = model.target_tp
-                logger.info(f"🚀 [STATE SYNC] Restored active {model.direction} trade for {model.name}: Entry ${ep:,.2f} at {entry_time} (SL: ${model.current_sl:,.2f}, TP: ${model.target_tp:,.2f})")
+                logger.info(f"🚀 [STATE SYNC] Restored active {model.direction} trade for [{sym}] {model.name}: Entry ${ep:,.2f} at {entry_time} (SL: ${model.current_sl:,.2f}, TP: ${model.target_tp:,.2f})")
             else:
                 model.position_status = "FLAT"
                 model.entry_price = 0.0
                 model.active_ticket = None
                 model.active_markers = []
         except Exception as e:
-            logger.warning(f"Error syncing {model.strat_id}: {e}", exc_info=True)
+            logger.warning(f"Error syncing {model.strat_id} ({sym}): {e}", exc_info=True)
 
-    def _evaluate_all_models_initial(self):
+    def _evaluate_all_models_initial(self, symbol: str = "BTCUSDT"):
         """Compute swing levels and set initial telemetry for all strategies."""
-        for strat_id, model in self.strategies.items():
-            self._evaluate_strategy_levels(model)
+        sym = symbol.upper()
+        models = self.get_models(sym)
+        for strat_id, model in models.items():
+            self._evaluate_strategy_levels(model, sym)
 
-    def _evaluate_strategy_levels(self, model: StrategyModel):
+    def _evaluate_strategy_levels(self, model: StrategyModel, symbol: str = "BTCUSDT"):
         """Recalculate swing triggers, structural floors, and regime alignment."""
+        sym = symbol.upper()
+        buffers = self.get_candle_buffers(sym)
+        macro = self.get_macro_state(sym)
         tf = model.timeframe
-        if tf not in self.candle_buffers or self.candle_buffers[tf].empty:
+        if tf not in buffers or buffers[tf].empty:
             return
 
-        df = self.candle_buffers[tf]
+        df = buffers[tf]
         highs = df["high"].values
         lows = df["low"].values
         closes = df["close"].values
@@ -681,8 +750,8 @@ class LiveSignalEngine:
             ma50_30 = float(df["MA50"].iloc[-1]) if ("MA50" in df and not pd.isna(df["MA50"].iloc[-1])) else float(df["close"].rolling(50).mean().iloc[-1])
 
             reg_1h_ok = False
-            if "1h" in self.candle_buffers and not self.candle_buffers["1h"].empty:
-                df1h = self.candle_buffers["1h"]
+            if "1h" in buffers and not buffers["1h"].empty:
+                df1h = buffers["1h"]
                 c1h = float(df1h["close"].iloc[-1])
                 m25h = float(df1h["MA25"].iloc[-1]) if ("MA25" in df1h and not pd.isna(df1h["MA25"].iloc[-1])) else float(df1h["close"].rolling(25).mean().iloc[-1])
                 m50h = float(df1h["MA50"].iloc[-1]) if ("MA50" in df1h and not pd.isna(df1h["MA50"].iloc[-1])) else float(df1h["close"].rolling(50).mean().iloc[-1])
@@ -690,12 +759,12 @@ class LiveSignalEngine:
                     reg_1h_ok = True
 
             if model.strat_id == "pippo-30m-new-gen":
-                reg_4h_ok = self.macro_state.get("is_4h_bullish", False)
+                reg_4h_ok = macro.get("is_4h_bullish", False)
                 model.regime_ok = reg_1h_ok and reg_4h_ok
             else:
                 model.regime_ok = reg_1h_ok
 
-            curr_p = self.last_price if self.last_price > 0 else float(closes[-1])
+            curr_p = self.get_last_price(sym) if self.get_last_price(sym) > 0 else float(closes[-1])
             model.next_entry_trigger = round(max(ma25_30, ma50_30) * 1.001, 2)
             model.structural_floor = round(min(ma25_30, ma50_30) * 0.995, 2)
             dist_pct = ((model.next_entry_trigger - curr_p) / curr_p) * 100.0 if curr_p > 0 else 0.0
@@ -719,20 +788,20 @@ class LiveSignalEngine:
         last_top_ex = [t for t in top_ex if t > 0][-1] if any(top_ex > 0) else float(highs[-1])
         last_btm_ex = [b for b in btm_ex if b > 0][-1] if any(btm_ex > 0) else float(lows[-1])
 
-        curr_p = self.last_price if self.last_price > 0 else float(closes[-1])
+        curr_p = self.get_last_price(sym) if self.get_last_price(sym) > 0 else float(closes[-1])
 
         # Check regime alignment
         regime_rule = cfg.get("regime", "")
         if regime_rule == "4h_sma111":
-            model.regime_ok = self.macro_state["is_4h_bullish"]
+            model.regime_ok = macro["is_4h_bullish"]
         elif regime_rule == "4h_sma111_and_1h_ema50":
-            model.regime_ok = self.macro_state["is_4h_bullish"] and self.macro_state["is_1h_bullish"]
+            model.regime_ok = macro["is_4h_bullish"] and macro["is_1h_bullish"]
         elif regime_rule == "weekly_ma55_and_4h_sma111":
-            model.regime_ok = (not self.macro_state["is_weekly_bullish"]) and (not self.macro_state["is_4h_bullish"])
+            model.regime_ok = (not macro["is_weekly_bullish"]) and (not macro["is_4h_bullish"])
         elif regime_rule == "weekly_ma55":
-            model.regime_ok = not self.macro_state["is_weekly_bullish"]
+            model.regime_ok = not macro["is_weekly_bullish"]
         elif regime_rule == "weekly_ma55_close":
-            model.regime_ok = self.macro_state["is_weekly_bullish"]
+            model.regime_ok = macro["is_weekly_bullish"]
         else:
             model.regime_ok = True
 
@@ -748,12 +817,19 @@ class LiveSignalEngine:
             dist_pct = ((curr_p - model.next_entry_trigger) / curr_p) * 100.0 if curr_p > 0 else 0.0
             model.distance_to_trigger_pct = round(dist_pct, 2)
 
-    def on_ticker_tick(self, price: float, timestamp: int):
+    def on_ticker_tick(self, price: float, timestamp: int, symbol: str = "BTCUSDT"):
         """Called upon every live ticker price tick from Binance WebSocket."""
-        self.last_price = price
-        events = []
+        sym = symbol.upper()
+        if sym == "ETHUSDT":
+            self.last_price_eth = price
+        else:
+            self.last_price = price
 
-        for strat_id, model in self.strategies.items():
+        models = self.get_models(sym)
+        events = []
+        fmt_sym = "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT"
+
+        for strat_id, model in models.items():
             if model.position_status == "OPEN":
                 # 1. Update floating PnL
                 if model.direction == "LONG":
@@ -783,14 +859,16 @@ class LiveSignalEngine:
                             "position": "aboveBar" if model.direction == "LONG" else "belowBar",
                             "color": "#FF9F0A",
                             "shape": "circle",
-                            "text": f"BE LOCKED @ ${model.current_sl:,.0f} (+0.2%)",
+                            "text": f"BE LOCKED @ ${model.current_sl:,.2f} (+0.2%)",
                             "size": 2,
                             "exitPrice": model.current_sl,
                             "isBreakeven": True
                         })
-                        logger.info(f"⚡ [BREAKEVEN ACTIVATED] {model.name} locked BE stop at ${model.current_sl:,.2f}")
+                        logger.info(f"⚡ [BREAKEVEN ACTIVATED] [{sym}] {model.name} locked BE stop at ${model.current_sl:,.2f}")
                         events.append({
                             "type": "BREAKEVEN_LOCKED",
+                            "symbol": fmt_sym,
+                            "asset": sym,
                             "strategy_id": model.strat_id,
                             "strategy_name": model.name,
                             "new_stop_loss": model.current_sl,
@@ -819,9 +897,20 @@ class LiveSignalEngine:
                     exit_trade = self._close_position(model, price, exit_reason)
                     events.append({
                         "type": "POSITION_CLOSED",
+                        "symbol": fmt_sym,
+                        "asset": sym,
                         "strategy_id": model.strat_id,
                         "strategy_name": model.name,
                         "trade": exit_trade
+                    })
+                    events.append({
+                        "type": "SIGNAL_EXIT",
+                        "symbol": fmt_sym,
+                        "asset": sym,
+                        "strategy_id": model.strat_id,
+                        "strategy_name": model.name,
+                        "trade": exit_trade,
+                        "autonomous": True
                     })
             else:
                 # Update distance to trigger dynamically for flat models
@@ -833,15 +922,24 @@ class LiveSignalEngine:
 
         return events
 
-    async def on_kline_closed(self, timeframe: str, candle: dict, binance_manager: Any):
+    async def on_kline_closed(self, timeframe: str, candle: dict, binance_manager: Any, symbol: str = "BTCUSDT"):
         """
         Called on-the-fly when a candle officially finishes (is_closed == True).
         Evaluates structural entries and structural exits without human intervention.
         """
+        sym = symbol.upper()
         tf = timeframe.lower()
         t_sec = candle.get("time") or (candle.get("timestamp", 0) // 1000)
         ts_ms = candle.get("timestamp") or (t_sec * 1000)
-        self.last_price = float(candle["close"])
+        curr_price = float(candle["close"])
+        if sym == "ETHUSDT":
+            self.last_price_eth = curr_price
+        else:
+            self.last_price = curr_price
+
+        buffers = self.get_candle_buffers(sym)
+        models = self.get_models(sym)
+        fmt_sym = "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT"
 
         new_bar = {
             "time": t_sec,
@@ -850,39 +948,39 @@ class LiveSignalEngine:
             "open": float(candle["open"]),
             "high": float(candle["high"]),
             "low": float(candle["low"]),
-            "close": float(candle["close"]),
-            "volume": float(candle["volume"])
+            "close": curr_price,
+            "volume": float(candle.get("volume", 0.0))
         }
 
         # 1. Update candle buffer safely
-        if tf in self.candle_buffers:
-            df = self.candle_buffers[tf]
+        if tf in buffers:
+            df = buffers[tf]
             last_t = df["time"].iloc[-1] if "time" in df.columns else (df["timestamp"].iloc[-1] // 1000)
             if not df.empty and last_t == t_sec:
                 for col, val in new_bar.items():
                     df.at[df.index[-1], col] = val
             else:
-                self.candle_buffers[tf] = pd.concat([df, pd.DataFrame([new_bar])], ignore_index=True).tail(1000).reset_index(drop=True)
+                buffers[tf] = pd.concat([df, pd.DataFrame([new_bar])], ignore_index=True).tail(1000).reset_index(drop=True)
         else:
-            self.candle_buffers[tf] = pd.DataFrame([new_bar])
+            buffers[tf] = pd.DataFrame([new_bar])
 
         # Recompute moving averages
         for w in [8, 25, 50, 55, 111]:
-            if len(self.candle_buffers[tf]) >= w:
-                self.candle_buffers[tf][f"MA{w}"] = self.candle_buffers[tf]["close"].rolling(w).mean()
+            if len(buffers[tf]) >= w:
+                buffers[tf][f"MA{w}"] = buffers[tf]["close"].rolling(w).mean()
 
         # 2. Update rolling macro indicators
-        self._update_macro_indicators()
+        self._update_macro_indicators(sym)
 
         # 3. Evaluate each strategy configured for this timeframe
-        for strat_id, model in self.strategies.items():
+        for strat_id, model in models.items():
             if model.timeframe != tf:
                 continue
 
-            self._evaluate_strategy_levels(model)
-            closes = self.candle_buffers[tf]["close"].values
-            highs = self.candle_buffers[tf]["high"].values
-            lows = self.candle_buffers[tf]["low"].values
+            self._evaluate_strategy_levels(model, sym)
+            closes = buffers[tf]["close"].values
+            highs = buffers[tf]["high"].values
+            lows = buffers[tf]["low"].values
             n = len(closes)
             if n < 3:
                 continue
@@ -891,7 +989,7 @@ class LiveSignalEngine:
             curr_close = closes[-1]
 
             if model.strat_id in ["pippo-30m-new-gen", "pippo-30m-grd"]:
-                df_cur = self.candle_buffers[tf]
+                df_cur = buffers[tf]
                 m25_30 = float(df_cur["MA25"].iloc[-1]) if ("MA25" in df_cur and not pd.isna(df_cur["MA25"].iloc[-1])) else float(curr_close)
                 m50_30 = float(df_cur["MA50"].iloc[-1]) if ("MA50" in df_cur and not pd.isna(df_cur["MA50"].iloc[-1])) else float(curr_close)
 
@@ -904,12 +1002,12 @@ class LiveSignalEngine:
 
                     if a30 and sp and at and model.regime_ok:
                         ticket = self._open_position(model, curr_close)
-                        logger.info(f"🚀 [AUTONOMOUS SIGNAL TRIGGERED] {model.direction} {model.name} @ ${curr_close:,.2f}")
+                        logger.info(f"🚀 [AUTONOMOUS SIGNAL TRIGGERED] [{sym}] {model.direction} {model.name} @ ${curr_close:,.2f}")
                         try:
                             from supabase_client import record_live_signal
                             record_live_signal({
                                 "strategy_id": model.strat_id,
-                                "symbol": "BTCUSDT",
+                                "symbol": sym,
                                 "type": model.direction,
                                 "price": curr_close,
                                 "confidence": ticket["confidence_pct"],
@@ -920,6 +1018,8 @@ class LiveSignalEngine:
 
                         await binance_manager.broadcast({
                             "type": "NEW_SIGNAL",
+                            "symbol": fmt_sym,
+                            "asset": sym,
                             "ticket": ticket,
                             "autonomous": True
                         })
@@ -927,9 +1027,11 @@ class LiveSignalEngine:
                     fc = (curr_close < m25_30) and (curr_close < m50_30) and ((m25_30 - curr_close) / m25_30 >= 0.005) and ((m50_30 - curr_close) / m50_30 >= 0.005)
                     if fc:
                         exit_trade = self._close_position(model, curr_close, "Force_Close_MA")
-                        logger.info(f"⏹️ [AUTONOMOUS SIGNAL EXIT] {model.name} closed by Force Close MA @ ${curr_close:,.2f}")
+                        logger.info(f"⏹️ [AUTONOMOUS SIGNAL EXIT] [{sym}] {model.name} closed by Force Close MA @ ${curr_close:,.2f}")
                         await binance_manager.broadcast({
                             "type": "SIGNAL_EXIT",
+                            "symbol": fmt_sym,
+                            "asset": sym,
                             "strategy_id": model.strat_id,
                             "strategy_name": model.name,
                             "trade": exit_trade,
@@ -953,14 +1055,14 @@ class LiveSignalEngine:
 
                 if entry_triggered:
                     ticket = self._open_position(model, curr_close)
-                    logger.info(f"🚀 [AUTONOMOUS SIGNAL TRIGGERED] {model.direction} {model.name} @ ${curr_close:,.2f}")
+                    logger.info(f"🚀 [AUTONOMOUS SIGNAL TRIGGERED] [{sym}] {model.direction} {model.name} @ ${curr_close:,.2f}")
                     
                     # Record to Supabase
                     try:
                         from supabase_client import record_live_signal
                         record_live_signal({
                             "strategy_id": model.strat_id,
-                            "symbol": "BTCUSDT",
+                            "symbol": sym,
                             "type": model.direction,
                             "price": curr_close,
                             "confidence": ticket["confidence_pct"],
@@ -972,6 +1074,8 @@ class LiveSignalEngine:
                     # Broadcast NEW_SIGNAL automatically to all frontend WebSocket clients
                     await binance_manager.broadcast({
                         "type": "NEW_SIGNAL",
+                        "symbol": fmt_sym,
+                        "asset": sym,
                         "ticket": ticket,
                         "autonomous": True
                     })
@@ -992,11 +1096,13 @@ class LiveSignalEngine:
 
                 if struct_exit:
                     exit_trade = self._close_position(model, curr_close, "Structure_Exit")
-                    logger.info(f"⏹️ [AUTONOMOUS SIGNAL EXIT] {model.name} closed by Structure Exit @ ${curr_close:,.2f}")
+                    logger.info(f"⏹️ [AUTONOMOUS SIGNAL EXIT] [{sym}] {model.name} closed by Structure Exit @ ${curr_close:,.2f}")
 
                     # Broadcast SIGNAL_EXIT
                     await binance_manager.broadcast({
                         "type": "SIGNAL_EXIT",
+                        "symbol": fmt_sym,
+                        "asset": sym,
                         "strategy_id": model.strat_id,
                         "strategy_name": model.name,
                         "trade": exit_trade,
@@ -1026,15 +1132,22 @@ class LiveSignalEngine:
         model.target_tp = round(entry_p * (1.0 + tp_pct if model.direction == "LONG" else 1.0 - tp_pct), 2)
         be_trigger_val = round(entry_p * (1.0 + be_pct if model.direction == "LONG" else 1.0 - be_pct), 2)
 
+        sym = getattr(model, "symbol", "BTCUSDT")
+        fmt_sym = "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT"
+        curr_price = self.get_last_price(sym) or entry_p
+
         ticket = {
-            "symbol": "BTC/USDT",
+            "symbol": fmt_sym,
+            "asset": sym,
             "direction": model.direction,
+            "action": "BUY" if model.direction == "LONG" else "SELL",
             "strategy_name": model.name,
             "strategy_id": model.strat_id,
+            "timeframe": model.timeframe,
             "confidence_pct": 92 if model.direction == "LONG" else 88,
             "confidence_blocks": 9 if model.direction == "LONG" else 8,
             "entry_price": entry_p,
-            "current_price": self.last_price or entry_p,
+            "current_price": curr_price,
             "stop_loss": model.current_sl,
             "stop_loss_pct": -round(sl_pct * 100, 1) if model.direction == "LONG" else round(sl_pct * 100, 1),
             "breakeven_trigger": be_trigger_val,
@@ -1062,7 +1175,7 @@ class LiveSignalEngine:
                 "position": "belowBar" if model.direction == "LONG" else "aboveBar",
                 "color": "#30D158" if model.direction == "LONG" else "#FF453A",
                 "shape": "arrowUp" if model.direction == "LONG" else "arrowDown",
-                "text": f"ACTIVE {model.direction} @ ${entry_p:,.0f}",
+                "text": f"ACTIVE {model.direction} @ ${entry_p:,.2f}",
                 "size": 3,
                 "entryPrice": entry_p,
                 "side": model.direction,
@@ -1077,7 +1190,7 @@ class LiveSignalEngine:
                 "position": "aboveBar" if model.direction == "LONG" else "belowBar",
                 "color": "#FF9F0A",
                 "shape": "circle",
-                "text": f"BE LOCKED @ ${model.current_sl:,.0f} (+0.2%)",
+                "text": f"BE LOCKED @ ${model.current_sl:,.2f} (+0.2%)",
                 "size": 2,
                 "exitPrice": model.current_sl,
                 "isBreakeven": True
@@ -1085,7 +1198,6 @@ class LiveSignalEngine:
         model.active_markers = markers
 
         return ticket
-
 
     def _close_position(self, model: StrategyModel, exit_p: float, reason: str) -> dict:
         """Helper to close a position and calculate finalized trade metrics."""
@@ -1098,10 +1210,16 @@ class LiveSignalEngine:
         fee = 0.0009 * 2 # roundtrip commission
         net_ret = (gross_ret - fee) * 100.0
 
+        sym = getattr(model, "symbol", "BTCUSDT")
+        fmt_sym = "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT"
+
         trade_record = {
+            "symbol": fmt_sym,
+            "asset": sym,
             "strategy_id": model.strat_id,
             "strategy_name": model.name,
             "side": model.direction,
+            "action": "CLOSE_BUY" if model.direction == "LONG" else "CLOSE_SELL",
             "entry_price": entry_p,
             "exit_price": exit_p,
             "entry_time": model.entry_time,
@@ -1122,16 +1240,21 @@ class LiveSignalEngine:
 
         return trade_record
 
-    def get_live_telemetry(self) -> dict:
-        """Returns the full autonomous engine status across all strategies."""
+    def get_live_telemetry(self, symbol: str = "BTCUSDT") -> dict:
+        """Returns the full autonomous engine status across all strategies for the symbol."""
+        sym = symbol.upper()
+        models = self.get_models(sym)
+        macro = self.get_macro_state(sym)
+        last_p = self.get_last_price(sym)
+
         results = []
-        for sid, m in self.strategies.items():
+        for sid, m in models.items():
             flt_pnl = 0.0
             if m.position_status == "OPEN" and m.entry_price > 0:
                 if m.direction == "LONG":
-                    flt_pnl = ((self.last_price - m.entry_price) / m.entry_price) * 100.0
+                    flt_pnl = ((last_p - m.entry_price) / m.entry_price) * 100.0
                 else:
-                    flt_pnl = ((m.entry_price - self.last_price) / m.entry_price) * 100.0
+                    flt_pnl = ((m.entry_price - last_p) / m.entry_price) * 100.0
 
             results.append({
                 "strategy_id": m.strat_id,
@@ -1139,7 +1262,7 @@ class LiveSignalEngine:
                 "timeframe": m.timeframe,
                 "direction": m.direction,
                 "position_status": m.position_status, # "FLAT" or "OPEN"
-                "current_price": self.last_price,
+                "current_price": last_p,
                 "entry_price": m.entry_price if m.position_status == "OPEN" else None,
                 "entry_time": m.entry_time,
                 "floating_pnl_pct": round(flt_pnl, 2),
@@ -1155,33 +1278,42 @@ class LiveSignalEngine:
 
         return {
             "status": "AUTONOMOUS_ENGINE_LIVE",
+            "symbol": sym,
+            "current_price": last_p,
             "current_btc_price": self.last_price,
-            "macro_state": self.macro_state,
+            "current_eth_price": self.last_price_eth,
+            "macro_state": macro,
             "strategies": results,
             "timestamp": int(time.time() * 1000)
         }
 
-    def get_active_or_latest_ticket(self, strategy_id: Optional[str] = None) -> dict:
+    def get_active_or_latest_ticket(self, strategy_id: Optional[str] = None, symbol: str = "BTCUSDT") -> dict:
         """Get the active signal ticket or an intelligent watch ticket for the strategy."""
+        sym = symbol.upper()
+        models = self.get_models(sym)
         sid = strategy_id or "pippo-1h-enhanced"
-        model = self.strategies.get(sid) or self.strategies["pippo-1h-enhanced"]
+        model = models.get(sid) or models["pippo-1h-enhanced"]
+        last_p = self.get_last_price(sym)
 
         if model.active_ticket:
             ticket = dict(model.active_ticket)
-            ticket["current_price"] = self.last_price
+            ticket["current_price"] = last_p
             return ticket
 
-        # Return real-time ACTIVE_WATCH ticket
-        curr_p = self.last_price
+        curr_p = last_p
         sl_pct = model.config.get("sl_pct", 0.05)
         tp_pct = model.config.get("tp_pct", 0.75)
         be_pct = model.config.get("be_pct", 0.03)
+        fmt_sym = "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT"
 
         return {
-            "symbol": "BTC/USDT",
+            "symbol": fmt_sym,
+            "asset": sym,
             "direction": model.direction,
+            "action": "BUY" if model.direction == "LONG" else "SELL",
             "strategy_name": model.name,
             "strategy_id": model.strat_id,
+            "timeframe": model.timeframe,
             "confidence_pct": 88 if model.direction == "LONG" else 85,
             "confidence_blocks": 8,
             "entry_price": model.next_entry_trigger if model.next_entry_trigger > 0 else curr_p,

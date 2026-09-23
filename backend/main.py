@@ -250,14 +250,22 @@ def load_data_into_memory():
             binance_manager.ticker_data_map["ETHUSDT"]["price"] = eth_last_close
             binance_manager.ticker_data_map["ETHUSDT"]["status"] = "READY"
 
-    # 5. Warm up autonomous live signal engine
+    # 5. Warm up autonomous live signal engine for BTC and ETH
     try:
         from live_signal_engine import live_signal_engine
-        live_signal_engine.initialize_with_parquets(PARQUET_DFS)
+        live_signal_engine.initialize_with_parquets(PARQUET_DFS, symbol="BTCUSDT")
         if live_signal_engine.last_price > 0:
             binance_manager.ticker_data["price"] = live_signal_engine.last_price
             binance_manager.ticker_data["status"] = "READY"
-        logger.info(f"Autonomous Live Signal Engine initialized with historical buffers. Latest price: ${live_signal_engine.last_price:,.2f}")
+            binance_manager.ticker_data_map["BTCUSDT"]["price"] = live_signal_engine.last_price
+            binance_manager.ticker_data_map["BTCUSDT"]["status"] = "READY"
+
+        live_signal_engine.initialize_with_parquets(PARQUET_DFS_ETH, symbol="ETHUSDT")
+        if live_signal_engine.last_price_eth > 0:
+            binance_manager.ticker_data_map["ETHUSDT"]["price"] = live_signal_engine.last_price_eth
+            binance_manager.ticker_data_map["ETHUSDT"]["status"] = "READY"
+
+        logger.info(f"Autonomous Live Signal Engine initialized for BTC (${live_signal_engine.last_price:,.2f}) & ETH (${live_signal_engine.last_price_eth:,.2f})")
     except Exception as e:
         logger.warning(f"Could not warm up live signal engine: {e}")
 
@@ -403,15 +411,17 @@ async def get_klines(
         "candles": sliced
     }
 
-def enrich_strategy_with_live(s: dict) -> dict:
+def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
     from live_signal_engine import live_signal_engine
-    model = live_signal_engine.strategies.get(s["id"])
+    sym = symbol.upper()
+    model = live_signal_engine.get_model(s["id"], symbol=sym)
     if not model:
         return s
 
     s_copy = dict(s)
-    base_trades = list(s.get("trades", []))
-    base_markers = list(s.get("markers", []))
+    # Strip any previously stored OPEN / RUNNING trades to avoid duplication
+    base_trades = [t for t in s.get("trades", []) if t.get("status") != "OPEN" and t.get("exit_time") != "RUNNING"]
+    base_markers = [m for m in s.get("markers", []) if not m.get("isActive")]
 
     # Existing trade timestamps to avoid duplicates
     existing_entries = {str(t.get("entry_time")) for t in base_trades}
@@ -438,7 +448,7 @@ def enrich_strategy_with_live(s: dict) -> dict:
                     "position": "belowBar" if side == "LONG" else "aboveBar",
                     "color": "#39FF88" if side == "LONG" else "#FF4B5C",
                     "shape": "arrowUp" if side == "LONG" else "arrowDown",
-                    "text": f"{side} #{last_trade_no} @ ${rc['entry_price']:,.0f}",
+                    "text": f"{side} #{last_trade_no} @ ${rc['entry_price']:,.2f}",
                     "size": 2,
                     "entryPrice": rc["entry_price"],
                     "tradeNo": last_trade_no,
@@ -461,7 +471,7 @@ def enrich_strategy_with_live(s: dict) -> dict:
 
     # 2. Inject active OPEN trade & active markers
     if model.position_status == "OPEN" and model.entry_price > 0:
-        live_price = binance_manager.ticker_data.get("price") or live_signal_engine.last_price or model.entry_price
+        live_price = binance_manager.get_ticker(sym).get("price") or live_signal_engine.get_last_price(sym) or model.entry_price
         if model.direction == "LONG":
             flt_gross = ((live_price - model.entry_price) / model.entry_price) * 100.0
         else:
@@ -504,12 +514,11 @@ def enrich_strategy_with_live(s: dict) -> dict:
 @app.get("/api/strategies")
 async def list_strategies(symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")):
     sym = symbol.upper()
-    if sym == "ETHUSDT":
-        return STRATEGIES_CATALOG_ETH
+    target_catalog = STRATEGIES_CATALOG_ETH if sym == "ETHUSDT" else STRATEGIES_CATALOG
 
     summaries = []
-    for s in STRATEGIES_CATALOG:
-        enriched = enrich_strategy_with_live(s)
+    for s in target_catalog:
+        enriched = enrich_strategy_with_live(s, symbol=sym)
         summary = {
             "id": enriched["id"],
             "name": enriched["name"],
@@ -536,14 +545,10 @@ async def list_strategies(symbol: str = Query(default="BTCUSDT", description="Sy
 @app.get("/api/strategies/{strategy_id}")
 async def get_strategy_detail(strategy_id: str, symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")):
     sym = symbol.upper()
-    if sym == "ETHUSDT":
-        if strategy_id not in STRATEGIES_MAP_ETH:
-            raise HTTPException(status_code=404, detail=f"ETH Strategy '{strategy_id}' not found")
-        return STRATEGIES_MAP_ETH[strategy_id]
-
-    if strategy_id not in STRATEGIES_MAP:
-        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
-    return enrich_strategy_with_live(STRATEGIES_MAP[strategy_id])
+    target_map = STRATEGIES_MAP_ETH if sym == "ETHUSDT" else STRATEGIES_MAP
+    if strategy_id not in target_map:
+        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found for symbol {sym}")
+    return enrich_strategy_with_live(target_map[strategy_id], symbol=sym)
 
 @app.get("/api/floor")
 async def get_floor_state():
@@ -564,22 +569,37 @@ async def select_agent(agent_id: str = Query(...)):
     return {"status": "SUCCESS", "active_agent": agent_id, "floor": state}
 
 @app.post("/api/floor/simulate-signal")
-async def simulate_signal(strategy_id: Optional[str] = Query(default=None)):
-    strat = STRATEGIES_MAP.get(strategy_id) if strategy_id else STRATEGIES_CATALOG[0]
-    if not strat:
-        strat = STRATEGIES_CATALOG[0]
+async def simulate_signal(
+    strategy_id: Optional[str] = Query(default=None),
+    symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")
+):
+    sym = symbol.upper()
+    target_catalog = STRATEGIES_CATALOG_ETH if sym == "ETHUSDT" else STRATEGIES_CATALOG
+    target_map = STRATEGIES_MAP_ETH if sym == "ETHUSDT" else STRATEGIES_MAP
     
-    price = binance_manager.ticker_data.get("price", 77300.0)
+    strat = target_map.get(strategy_id) if strategy_id else target_catalog[0]
+    if not strat:
+        strat = target_catalog[0]
+    
+    ticker = binance_manager.get_ticker(sym)
+    price = ticker.get("price") or (2645.20 if sym == "ETHUSDT" else 77300.0)
+    
     ticket = floor_engine.trigger_signal(
         strategy_id=strat["id"],
         strategy_name=strat["name"],
         direction=strat["type"],
-        current_price=price
+        current_price=price,
+        symbol=sym
     )
-    floor_state = floor_engine.get_floor_state(price)
+    btc_p = binance_manager.get_ticker("BTCUSDT").get("price", 77300.0)
+    eth_p = binance_manager.get_ticker("ETHUSDT").get("price", 2645.20)
+    floor_state = floor_engine.get_floor_state(current_btc_price=btc_p, current_eth_price=eth_p)
+    fmt_sym = "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT"
     
     await binance_manager.broadcast({
         "type": "NEW_SIGNAL",
+        "symbol": fmt_sym,
+        "asset": sym,
         "ticket": ticket,
         "floor": floor_state
     })
@@ -588,7 +608,7 @@ async def simulate_signal(strategy_id: Optional[str] = Query(default=None)):
         from supabase_client import record_live_signal
         record_live_signal({
             "strategy_id": strat["id"],
-            "symbol": "BTCUSDT",
+            "symbol": sym,
             "type": strat["type"],
             "price": price,
             "confidence": ticket.get("confidence", 95),
@@ -600,16 +620,19 @@ async def simulate_signal(strategy_id: Optional[str] = Query(default=None)):
     return {"message": "Signal triggered successfully", "ticket": ticket}
 
 @app.get("/api/signals/live")
-async def get_live_signals_telemetry():
-    """Returns autonomous live signal telemetry across all active strategies"""
+async def get_live_signals_telemetry(symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")):
+    """Returns autonomous live signal telemetry across all active strategies for the symbol"""
     from live_signal_engine import live_signal_engine
-    return live_signal_engine.get_live_telemetry()
+    return live_signal_engine.get_live_telemetry(symbol=symbol)
 
 @app.get("/api/signals/ticket")
-async def get_strategy_live_ticket(strategy_id: Optional[str] = Query(default=None)):
+async def get_strategy_live_ticket(
+    strategy_id: Optional[str] = Query(default=None),
+    symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")
+):
     """Returns real-time watch or execution ticket for a strategy"""
     from live_signal_engine import live_signal_engine
-    return live_signal_engine.get_active_or_latest_ticket(strategy_id)
+    return live_signal_engine.get_active_or_latest_ticket(strategy_id, symbol=symbol)
 
 @app.get("/api/db-status")
 async def get_db_status():

@@ -217,13 +217,15 @@ class PixelFloorEngine:
         if agent_id in valid_ids:
             self.active_agent_id = agent_id
 
-    def trigger_signal(self, strategy_id: str, strategy_name: str, direction: str, current_price: float):
+    def trigger_signal(self, strategy_id: str, strategy_name: str, direction: str, current_price: float, symbol: str = "BTCUSDT"):
         self.last_signal_time = int(time.time())
         self.active_agent_id = "trader"
+        sym = symbol.upper()
+        fmt_sym = "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT"
         
         try:
             from live_signal_engine import live_signal_engine
-            model = live_signal_engine.strategies.get(strategy_id)
+            model = live_signal_engine.get_model(strategy_id, symbol=sym)
             if model:
                 ticket = live_signal_engine._open_position(model, current_price)
                 ticket["execution_mode"] = "DIAGNOSTIC_TRIGGER"
@@ -233,7 +235,8 @@ class PixelFloorEngine:
             pass
 
         self.signal_ticket = {
-            "symbol": "BTC/USDT",
+            "symbol": fmt_sym,
+            "asset": sym,
             "direction": direction,
             "strategy_name": strategy_name,
             "strategy_id": strategy_id,

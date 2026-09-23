@@ -48079,10 +48079,54 @@
         "stop_loss": 2641.98,
         "take_profit": 4614.24,
         "is_active": true
+      },
+      {
+        "trade_no": 162,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-18 16:00:00",
+        "exit_time": "RUNNING",
+        "entry_price": 2636.71,
+        "exit_price": 2636.71,
+        "gross_return_pct": 0.0,
+        "net_return_pct": -0.18,
+        "exit_reason": "Active Signal (BE Locked)",
+        "be_activated": true,
+        "status": "OPEN",
+        "stop_loss": 2641.98,
+        "take_profit": 4614.24,
+        "is_active": true
       }
     ],
-    "has_active_signal": false,
-    "active_ticket": null
+    "has_active_signal": true,
+    "active_ticket": {
+      "symbol": "ETH/USDT",
+      "asset": "ETHUSDT",
+      "direction": "LONG",
+      "action": "BUY",
+      "strategy_name": "Pippo 4h Original",
+      "strategy_id": "pippo-4h-original",
+      "timeframe": "4h",
+      "confidence_pct": 92,
+      "confidence_blocks": 9,
+      "entry_price": 2636.71,
+      "current_price": 2740.05,
+      "stop_loss": 2641.98,
+      "stop_loss_pct": -15.0,
+      "breakeven_trigger": 2768.55,
+      "breakeven_trigger_pct": 5.0,
+      "take_profit": 4614.24,
+      "take_profit_pct": 75.0,
+      "risk_reward_ratio": "5.0x",
+      "timestamp": "2026-09-18 16:00:00",
+      "contributing_agents": [
+        "quant",
+        "trader",
+        "informan"
+      ],
+      "status": "LIVE_SIGNAL",
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+    }
   },
   {
     "id": "pippo-30m-short-v2-a",

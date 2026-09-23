@@ -676,21 +676,35 @@ async def websocket_endpoint(websocket: WebSocket):
         binance_manager.unregister(websocket)
 
 # -----------------------------------------------------------------------------
-# Frontend SPA Routes (/app, /landing, etc.)
+# Frontend SPA Routes (/app, /landing, /, /index.html)
 # -----------------------------------------------------------------------------
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0"
+}
+
+@app.get("/")
+@app.get("/index.html")
+async def serve_root_spa():
+    index_file = os.path.join(FRONTEND_DIST_DIR, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file, headers=NO_CACHE_HEADERS)
+    raise HTTPException(status_code=404, detail="Frontend build not found")
+
 @app.get("/app")
 @app.get("/app/{full_path:path}")
 async def serve_app_spa(full_path: str = ""):
     index_file = os.path.join(FRONTEND_DIST_DIR, "index.html")
     if os.path.exists(index_file):
-        return FileResponse(index_file)
+        return FileResponse(index_file, headers=NO_CACHE_HEADERS)
     raise HTTPException(status_code=404, detail="Frontend build not found")
 
 @app.get("/landing")
 async def serve_landing_spa():
     index_file = os.path.join(FRONTEND_DIST_DIR, "index.html")
     if os.path.exists(index_file):
-        return FileResponse(index_file)
+        return FileResponse(index_file, headers=NO_CACHE_HEADERS)
     raise HTTPException(status_code=404, detail="Frontend build not found")
 
 # -----------------------------------------------------------------------------

@@ -742,6 +742,13 @@ export default function TradingChart({
       ma111: ma111Series,
     };
 
+    // Explicitly enforce visibility states on lightweight-charts series
+    ma8Series.applyOptions({ visible: Boolean(visibleMAsRef.current?.ma8) });
+    ma25Series.applyOptions({ visible: Boolean(visibleMAsRef.current?.ma25) });
+    ma50Series.applyOptions({ visible: Boolean(visibleMAsRef.current?.ma50) });
+    ma55Series.applyOptions({ visible: Boolean(visibleMAsRef.current?.ma55) });
+    ma111Series.applyOptions({ visible: Boolean(visibleMAsRef.current?.ma111) });
+
     // Populate data
     if (candles.length > 0) {
       const formattedCandles = [];

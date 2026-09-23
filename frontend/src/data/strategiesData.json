@@ -13225,6 +13225,17 @@
         "reason": "Force Close MA (-0.5%)"
       },
       {
+        "time": 1789932600,
+        "position": "belowBar",
+        "color": "#39FF88",
+        "shape": "arrowUp",
+        "text": "LONG #443 @ 1,177",
+        "size": 2,
+        "entryPrice": 81177.32,
+        "tradeNo": 443,
+        "side": "LONG"
+      },
+      {
         "time": 1790155800,
         "position": "aboveBar",
         "color": "#39FF88",
@@ -36204,6 +36215,17 @@
         "tradeNo": 724,
         "pnlPct": 5.35,
         "reason": "Force Close MA (-0.5%)"
+      },
+      {
+        "time": 1789932600,
+        "position": "belowBar",
+        "color": "#39FF88",
+        "shape": "arrowUp",
+        "text": "LONG #725 @ 1,177",
+        "size": 2,
+        "entryPrice": 81177.32,
+        "tradeNo": 725,
+        "side": "LONG"
       },
       {
         "time": 1790155800,

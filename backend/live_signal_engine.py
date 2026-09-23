@@ -10,6 +10,7 @@ Executes quantitative algorithmic strategy rules on-the-fly for BTCUSDT and ETHU
 """
 
 import os
+import json
 import time
 import logging
 from datetime import datetime, timezone
@@ -1229,6 +1230,8 @@ class LiveSignalEngine:
             "status": "CLOSED"
         }
         model.recent_trades.append(trade_record)
+        if hasattr(model, "synced_recent_trades"):
+            model.synced_recent_trades.append(trade_record)
 
         # Reset model state to FLAT
         model.position_status = "FLAT"
@@ -1238,7 +1241,140 @@ class LiveSignalEngine:
         model.active_ticket = None
         model.active_markers = []
 
+        # Auto-persist to disk so disk is always 1:1 with engine RAM (Countermeasure 1)
+        try:
+            self._persist_closed_trade(model, trade_record)
+        except Exception as e:
+            logger.error(f"Error persisting closed trade for {model.strat_id}: {e}", exc_info=True)
+
         return trade_record
+
+    def _persist_closed_trade(self, model: StrategyModel, trade_record: dict):
+        """
+        Persists closed trade into strategies.json and strategiesData.json automatically,
+        and triggers metric recalculation to maintain Single Source of Truth between RAM & Disk.
+        """
+        if model.strat_id.startswith("test-"):
+            return
+
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(backend_dir)
+        sym = getattr(model, "symbol", "BTCUSDT").upper()
+        is_eth = (sym == "ETHUSDT")
+        
+        backend_filename = "strategies_eth.json" if is_eth else "strategies.json"
+        frontend_filename = "strategiesData_eth.json" if is_eth else "strategiesData.json"
+        
+        backend_path = os.path.join(backend_dir, "data", backend_filename)
+        frontend_path = os.path.join(project_root, "frontend", "src", "data", frontend_filename)
+
+        paths_to_update = [p for p in [backend_path, frontend_path] if os.path.exists(p)]
+        updated_any = False
+
+        for path in paths_to_update:
+            try:
+                with open(path, "r") as f:
+                    strategies = json.load(f)
+
+                strat = next((s for s in strategies if s.get("id") == model.strat_id), None)
+                if not strat:
+                    continue
+
+                strat["has_active_signal"] = False
+                strat["active_ticket"] = None
+
+                trades = strat.get("trades", [])
+                matching_trade = None
+                for t in reversed(trades):
+                    if t.get("status") in ["OPEN", "RUNNING"] or t.get("exit_time") in [None, "RUNNING"]:
+                        matching_trade = t
+                        break
+
+                if not matching_trade and trades:
+                    last_t = trades[-1]
+                    if last_t.get("status") != "CLOSED":
+                        matching_trade = last_t
+
+                exit_time_str = trade_record.get("exit_time") or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                if " UTC" in exit_time_str:
+                    exit_time_str = exit_time_str.replace(" UTC", ":00")
+
+                trade_no = matching_trade.get("trade_no", len(trades)) if matching_trade else (len(trades) + 1)
+
+                if matching_trade:
+                    matching_trade["status"] = "CLOSED"
+                    matching_trade["exit_price"] = trade_record["exit_price"]
+                    matching_trade["exit_time"] = exit_time_str
+                    matching_trade["net_return_pct"] = trade_record["net_return_pct"]
+                    matching_trade["gross_return_pct"] = round(trade_record["net_return_pct"] + 0.18, 2)
+                    matching_trade["exit_reason"] = trade_record.get("reason", "Force Close MA (-0.5%)")
+                else:
+                    new_trade = {
+                        "trade_no": trade_no,
+                        "side": model.direction,
+                        "type": model.direction,
+                        "entry_time": trade_record.get("entry_time") or exit_time_str,
+                        "exit_time": exit_time_str,
+                        "entry_price": trade_record.get("entry_price") or trade_record["exit_price"],
+                        "exit_price": trade_record["exit_price"],
+                        "gross_return_pct": round(trade_record["net_return_pct"] + 0.18, 2),
+                        "net_return_pct": trade_record["net_return_pct"],
+                        "exit_reason": trade_record.get("reason", "Force Close MA (-0.5%)"),
+                        "be_activated": getattr(model, "be_active", False),
+                        "status": "CLOSED"
+                    }
+                    trades.append(new_trade)
+
+                # Markers handling: deactivate active entry marker and append exit marker
+                markers = strat.get("markers", [])
+                for m in markers:
+                    if m.get("tradeNo") == trade_no or m.get("isActive") is True:
+                        m["isActive"] = False
+
+                exit_marker = {
+                    "time": exit_time_str,
+                    "position": "aboveBar" if model.direction == "LONG" else "belowBar",
+                    "color": "#EF4444" if model.direction == "LONG" else "#10B981",
+                    "shape": "arrowDown" if model.direction == "LONG" else "arrowUp",
+                    "text": f"EXIT {trade_record.get('reason', 'Exit')} #{trade_no}",
+                    "tradeNo": trade_no,
+                    "isActive": False
+                }
+                markers.append(exit_marker)
+                strat["markers"] = markers
+
+                with open(path, "w") as f:
+                    json.dump(strategies, f, indent=2)
+
+                updated_any = True
+                logger.info(f"💾 [AUTO-PERSIST] Updated disk strategy file: {path} for {model.strat_id}")
+
+            except Exception as e:
+                logger.error(f"Error persisting trade to {path}: {e}", exc_info=True)
+
+        if not updated_any:
+            return
+
+        # Trigger metric recalculation for BTC
+        if not is_eth:
+            try:
+                from recalculate_btc_metrics import process_strategies
+                for path in paths_to_update:
+                    updated = process_strategies(path)
+                    with open(path, "w") as f:
+                        json.dump(updated, f, indent=2)
+                logger.info(f"📊 [AUTO-RECALCULATE] Successfully harmonized metrics across disk files for {model.strat_id}")
+            except Exception as e:
+                logger.warning(f"Could not automatically recalculate BTC metrics: {e}")
+
+        # Fast in-memory catalog reload in main.py without network latency
+        try:
+            import main as backend_main
+            if hasattr(backend_main, "reload_local_catalog"):
+                backend_main.reload_local_catalog(sym)
+                logger.info("🔄 [AUTO-SYNC] Fast reloaded in-memory catalog for backend API")
+        except Exception:
+            pass
 
     def get_live_telemetry(self, symbol: str = "BTCUSDT") -> dict:
         """Returns the full autonomous engine status across all strategies for the symbol."""

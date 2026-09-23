@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "cd frontend && npm install && npm run build",
-    "deploy": "npx wrangler deploy"
+    "deploy": "npx wrangler deploy",
+    "ship": "bash scripts/ship.sh"
   }
 }

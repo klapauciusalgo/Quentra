@@ -274,6 +274,22 @@ def load_data_into_memory():
     except Exception as e:
         logger.warning(f"Could not warm up live signal engine: {e}")
 
+def reload_local_catalog(symbol: str = "BTCUSDT"):
+    global STRATEGIES_CATALOG, STRATEGIES_MAP, STRATEGIES_CATALOG_ETH, STRATEGIES_MAP_ETH
+    sym = symbol.upper()
+    if sym == "ETHUSDT":
+        strat_path = os.path.join(DATA_DIR, "strategies_eth.json")
+        if os.path.exists(strat_path):
+            with open(strat_path, "r") as f:
+                STRATEGIES_CATALOG_ETH = json.load(f)
+                STRATEGIES_MAP_ETH = {s["id"]: s for s in STRATEGIES_CATALOG_ETH}
+    else:
+        strat_path = os.path.join(DATA_DIR, "strategies.json")
+        if os.path.exists(strat_path):
+            with open(strat_path, "r") as f:
+                STRATEGIES_CATALOG = json.load(f)
+                STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -519,8 +535,22 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
         s_copy["has_active_signal"] = False
         s_copy["active_ticket"] = None
 
+    def _marker_sort_key(m):
+        t = m.get("time", 0)
+        if isinstance(t, (int, float)):
+            return float(t)
+        if isinstance(t, str):
+            try:
+                return float(t)
+            except ValueError:
+                try:
+                    return pd.to_datetime(t).timestamp()
+                except Exception:
+                    return 0.0
+        return 0.0
+
     s_copy["trades"] = base_trades
-    s_copy["markers"] = sorted(base_markers, key=lambda m: m.get("time", 0))
+    s_copy["markers"] = sorted(base_markers, key=_marker_sort_key)
     s_copy["trades_count"] = len([t for t in base_trades if t.get("status") == "CLOSED"])
     if "metrics" in s_copy and isinstance(s_copy["metrics"], dict):
         s_copy["metrics"]["total_trades"] = s_copy["trades_count"]

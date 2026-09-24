@@ -102,10 +102,16 @@ def build_yearly_stats(df_trades, time_col="entry_dt", ret_col="net_ret_pct"):
         wins = group[group[ret_col] > 0]
         losses = group[group[ret_col] <= 0]
         wr = (len(wins) / len(group) * 100) if len(group) > 0 else 0
-        tot_ret = group[ret_col].sum()
+        # Yearly performance must use the same sequential compounding model
+        # as the catalog-level total return.  Summing per-trade percentages
+        # understated/overstated the displayed yearly equity result.
+        year_cap = 1.0
+        for ret in group[ret_col]:
+            year_cap *= (1.0 + float(ret) / 100.0)
+        tot_ret = (year_cap - 1.0) * 100.0
         w_sum = wins[ret_col].sum()
         l_sum = abs(losses[ret_col].sum())
-        pf = (w_sum / l_sum) if l_sum > 0 else (99.0 if w_sum > 0 else 0.0)
+        pf = (w_sum / l_sum) if l_sum > 0 else (99.0 if w_sum > 0 else 1.0)
         
         stats.append({
             "year": int(year),

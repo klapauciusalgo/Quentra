@@ -164,7 +164,7 @@ def compute_yearly_metrics(trades):
         wr = round(float(len(wins) / len(grp) * 100), 2)
         w_sum = wins["net_return_pct"].sum()
         l_sum = abs(losses["net_return_pct"].sum())
-        pf = round(float(w_sum / l_sum) if l_sum > 0 else 99.0, 2)
+        pf = round(float(w_sum / l_sum) if l_sum > 0 else (99.0 if w_sum > 0 else 1.0), 2)
         
         # Compounded return for this specific year
         yr_cap = 1.0

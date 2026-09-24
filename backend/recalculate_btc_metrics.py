@@ -17,6 +17,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DATA = os.path.join(BASE_DIR, "..", "frontend", "src", "data", "strategiesData.json")
 BACKEND_DATA = os.path.join(BASE_DIR, "data", "strategies.json")
 
+
+def _parse_datetime(value):
+    """Parse the mixed timestamp formats present in historical/live logs."""
+    return pd.to_datetime(value, format="mixed", utc=True)
+
 def recalculate_metrics_for_trades(closed_trades):
     if not closed_trades:
         return {
@@ -47,7 +52,10 @@ def recalculate_metrics_for_trades(closed_trades):
     max_dd = round(float(np.min(dd_arr)), 2)
     compounded_total_ret = round(float((cap - 10000.0) / 10000.0 * 100.0), 2)
 
-    years = (pd.to_datetime(df_t["exit_time"].iloc[-1]) - pd.to_datetime(df_t["entry_time"].iloc[0])).total_seconds() / (86400 * 365.25)
+    years = (
+        _parse_datetime(df_t["exit_time"].iloc[-1])
+        - _parse_datetime(df_t["entry_time"].iloc[0])
+    ).total_seconds() / (86400 * 365.25)
     years = max(years, 1.0)
     cagr = round(float(((cap / 10000.0) ** (1.0 / years) - 1.0) * 100.0), 2)
     calmar = round(abs(cagr / max_dd) if abs(max_dd) > 0 else 1.0, 2)
@@ -72,7 +80,7 @@ def recalculate_yearly_stats(closed_trades):
     if not closed_trades:
         return []
     df_t = pd.DataFrame(closed_trades)
-    df_t["year"] = pd.to_datetime(df_t["entry_time"]).dt.year
+    df_t["year"] = _parse_datetime(df_t["entry_time"]).dt.year
     yearly = []
 
     for yr, grp in df_t.groupby("year"):
@@ -99,7 +107,20 @@ def recalculate_yearly_stats(closed_trades):
         })
     return sorted(yearly, key=lambda x: x["year"])
 
-def process_strategies(input_file):
+def process_strategies(
+    input_file,
+    *,
+    clean_pure_macro=True,
+    apply_btc_metadata=True,
+):
+    """Recalculate one strategy catalog from its trade log.
+
+    The metric math is symbol agnostic.  The old implementation was named
+    ``recalculate_btc_metrics`` and also applied a few BTC-only catalog
+    cleanup/badge overrides, which made it unsafe to call for ETH.  Callers
+    handling another symbol disable those catalog overrides while retaining
+    the same metric calculation.
+    """
     with open(input_file, "r") as f:
         strategies = json.load(f)
 
@@ -107,8 +128,9 @@ def process_strategies(input_file):
         strat_id = strat["id"]
         trades = strat.get("trades", [])
 
-        # Clean stray mock trades from pure-macro-weekly-ma55
-        if strat_id == "pure-macro-weekly-ma55":
+        # Clean stray mock trades from pure-macro-weekly-ma55.  This is a
+        # one-time BTC data migration and must not mutate the ETH catalog.
+        if clean_pure_macro and strat_id == "pure-macro-weekly-ma55":
             trades = [t for t in trades if t.get("trade_no", 999) <= 6]
             strat["trades"] = trades
             # Clean markers
@@ -118,14 +140,15 @@ def process_strategies(input_file):
             if "logic_summary" in strat:
                 strat["logic_summary"] = strat["logic_summary"].replace("+2,067.6%", "+1,751.1%").replace("+2,067%", "+1,751%")
 
-        if strat_id == "pippo-30m-grd":
-            strat["badge"] = "+1,649.6% Return (CAGR 53.2%)"
+        if apply_btc_metadata:
+            if strat_id == "pippo-30m-grd":
+                strat["badge"] = "+1,649.6% Return (CAGR 53.2%)"
 
-        if strat_id == "pippo-1h-enhanced":
-            strat["badge"] = "Top Performer (+2,392%)"
+            if strat_id == "pippo-1h-enhanced":
+                strat["badge"] = "Top Performer (+2,392%)"
 
-        if strat_id == "pippo-4h-original":
-            strat["badge"] = "Original Classic (+1,240%)"
+            if strat_id == "pippo-4h-original":
+                strat["badge"] = "Original Classic (+1,240%)"
 
         # Separate closed vs open trades
         closed_trades = [

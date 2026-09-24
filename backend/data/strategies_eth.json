@@ -11,17 +11,17 @@
     "recommended_for": "Traders looking to capture prolonged Ethereum multi-week macro expansions.",
     "badge": "+1,620.53% Return (CAGR 53.53%)",
     "metrics": {
-      "total_return_pct": 1620.53,
-      "cagr_pct": 53.53,
-      "win_rate_pct": 65.29,
-      "profit_factor": 3.01,
+      "total_return_pct": 1302.56,
+      "cagr_pct": 48.67,
+      "win_rate_pct": 63.2,
+      "profit_factor": 2.76,
       "max_drawdown_pct": -44.11,
-      "calmar_ratio": 1.21,
-      "total_trades": 121,
+      "calmar_ratio": 1.1,
+      "total_trades": 125,
       "win_trades": 79,
-      "loss_trades": 42,
+      "loss_trades": 46,
       "avg_win_pct": 8.14,
-      "avg_loss_pct": -5.08,
+      "avg_loss_pct": -5.07,
       "best_trade_pct": 74.69,
       "worst_trade_pct": -5.17
     },
@@ -93,12 +93,12 @@
       },
       {
         "year": 2026,
-        "trades": 18,
-        "win_rate": 50.0,
-        "total_return_pct": -21.28,
-        "profit_factor": 0.58,
+        "trades": 22,
+        "win_rate": 40.91,
+        "total_return_pct": -35.83,
+        "profit_factor": 0.4,
         "wins": 9,
-        "losses": 9
+        "losses": 13
       }
     ],
     "markers": [
@@ -3153,6 +3153,19 @@
         "size": 2,
         "exitPrice": 2641.92,
         "isBreakeven": true
+      },
+      {
+        "time": 1790257860,
+        "position": "belowBar",
+        "color": "#30D158",
+        "shape": "arrowUp",
+        "text": "ACTIVE LONG @ $2,660.57",
+        "size": 3,
+        "entryPrice": 2660.57,
+        "side": "LONG",
+        "status": "OPEN",
+        "isActive": true,
+        "tradeNo": 126
       }
     ],
     "trades": [
@@ -4947,16 +4960,19 @@
       "timeframe": "30m",
       "confidence_pct": 92,
       "confidence_blocks": 9,
-      "entry_price": 2682.29,
-      "current_price": 2682.29,
-      "stop_loss": 2641.92,
+      "entry_price": 2660.57,
+      "current_price": 2660.57,
+      "stop_loss": 2527.54,
       "stop_loss_pct": -5.0,
-      "breakeven_trigger": 2762.76,
+      "breakeven_trigger": 2740.39,
       "breakeven_trigger_pct": 3.0,
-      "take_profit": 4694.01,
+      "take_profit": 4656.0,
       "take_profit_pct": 75.0,
       "risk_reward_ratio": "15.0x",
-      "timestamp": "2026-09-24 01:10 UTC",
+      "partial_take_profit": null,
+      "partial_position_pct": 0.0,
+      "partial_taken": false,
+      "timestamp": "2026-09-24 13:51 UTC",
       "contributing_agents": [
         "quant",
         "trader",
@@ -4964,7 +4980,12 @@
       ],
       "status": "LIVE_SIGNAL",
       "execution_mode": "AUTONOMOUS_ON_THE_FLY"
-    }
+    },
+    "total_return_pct": 1302.56,
+    "win_rate_pct": 63.2,
+    "profit_factor": 2.76,
+    "max_drawdown_pct": -44.11,
+    "trades_count": 125
   },
   {
     "id": "pippo-30m-new-gen",
@@ -15694,7 +15715,12 @@
       }
     ],
     "has_active_signal": false,
-    "active_ticket": null
+    "active_ticket": null,
+    "total_return_pct": 124.36,
+    "win_rate_pct": 28.47,
+    "profit_factor": 1.4,
+    "max_drawdown_pct": -27.55,
+    "trades_count": 295
   },
   {
     "id": "pippo-30m-grd",
@@ -34056,7 +34082,12 @@
       }
     ],
     "has_active_signal": false,
-    "active_ticket": null
+    "active_ticket": null,
+    "total_return_pct": 90.93,
+    "win_rate_pct": 28.8,
+    "profit_factor": 1.21,
+    "max_drawdown_pct": -36.96,
+    "trades_count": 507
   },
   {
     "id": "pippo-1h-enhanced",
@@ -34070,17 +34101,17 @@
     "recommended_for": "Swing traders looking for balanced execution with intermediate macro filtering.",
     "badge": "+2,100.61% Return (CAGR 62.16%)",
     "metrics": {
-      "total_return_pct": 2100.61,
-      "cagr_pct": 62.16,
-      "win_rate_pct": 59.77,
-      "profit_factor": 2.76,
+      "total_return_pct": 1990.8,
+      "cagr_pct": 58.44,
+      "win_rate_pct": 59.09,
+      "profit_factor": 2.71,
       "max_drawdown_pct": -44.88,
-      "calmar_ratio": 1.39,
-      "total_trades": 87,
+      "calmar_ratio": 1.3,
+      "total_trades": 88,
       "win_trades": 52,
-      "loss_trades": 35,
+      "loss_trades": 36,
       "avg_win_pct": 14.92,
-      "avg_loss_pct": -8.04,
+      "avg_loss_pct": -7.96,
       "best_trade_pct": 74.69,
       "worst_trade_pct": -8.17
     },
@@ -34152,12 +34183,12 @@
       },
       {
         "year": 2026,
-        "trades": 7,
-        "win_rate": 71.43,
-        "total_return_pct": -15.59,
-        "profit_factor": 0.01,
+        "trades": 8,
+        "win_rate": 62.5,
+        "total_return_pct": -19.8,
+        "profit_factor": 0.0,
         "wins": 5,
-        "losses": 2
+        "losses": 3
       }
     ],
     "markers": [
@@ -37588,7 +37619,12 @@
       ],
       "status": "LIVE_SIGNAL",
       "execution_mode": "AUTONOMOUS_ON_THE_FLY"
-    }
+    },
+    "total_return_pct": 1990.8,
+    "win_rate_pct": 59.09,
+    "profit_factor": 2.71,
+    "max_drawdown_pct": -44.88,
+    "trades_count": 88
   },
   {
     "id": "pippo-30m-scalp",
@@ -41728,7 +41764,12 @@
       "partial_taken": false,
       "partial_take_profit": 2742.12,
       "partial_position_pct": 30.0
-    }
+    },
+    "total_return_pct": 847.9,
+    "win_rate_pct": 59.62,
+    "profit_factor": 2.47,
+    "max_drawdown_pct": -33.54,
+    "trades_count": 104
   },
   {
     "id": "pure-macro-weekly-ma55",
@@ -42305,7 +42346,12 @@
       ],
       "status": "LIVE_SIGNAL",
       "execution_mode": "AUTONOMOUS_ON_THE_FLY"
-    }
+    },
+    "total_return_pct": 480.9,
+    "win_rate_pct": 25.0,
+    "profit_factor": 10.8,
+    "max_drawdown_pct": -37.81,
+    "trades_count": 12
   },
   {
     "id": "pippo-4h-original",
@@ -42319,16 +42365,16 @@
     "recommended_for": "Macro trend followers seeking minimal trade frequency and maximum ride time.",
     "badge": "+2,252.19% Return (CAGR 60.29%)",
     "metrics": {
-      "total_return_pct": 2252.19,
-      "cagr_pct": 60.29,
-      "win_rate_pct": 38.16,
+      "total_return_pct": 2285.59,
+      "cagr_pct": 60.3,
+      "win_rate_pct": 38.56,
       "profit_factor": 2.06,
       "max_drawdown_pct": -45.52,
       "calmar_ratio": 1.32,
-      "total_trades": 152,
-      "win_trades": 58,
+      "total_trades": 153,
+      "win_trades": 59,
       "loss_trades": 94,
-      "avg_win_pct": 14.99,
+      "avg_win_pct": 14.76,
       "avg_loss_pct": -4.49,
       "best_trade_pct": 74.69,
       "worst_trade_pct": -15.15
@@ -42401,11 +42447,11 @@
       },
       {
         "year": 2026,
-        "trades": 15,
-        "win_rate": 33.33,
-        "total_return_pct": 10.19,
-        "profit_factor": 1.43,
-        "wins": 5,
+        "trades": 16,
+        "win_rate": 37.5,
+        "total_return_pct": 11.76,
+        "profit_factor": 1.47,
+        "wins": 6,
         "losses": 10
       }
     ],
@@ -48043,7 +48089,12 @@
       }
     ],
     "has_active_signal": false,
-    "active_ticket": null
+    "active_ticket": null,
+    "total_return_pct": 2285.59,
+    "win_rate_pct": 38.56,
+    "profit_factor": 2.06,
+    "max_drawdown_pct": -45.52,
+    "trades_count": 153
   },
   {
     "id": "pippo-30m-short-v2-a",
@@ -51851,7 +51902,12 @@
       }
     ],
     "has_active_signal": false,
-    "active_ticket": null
+    "active_ticket": null,
+    "total_return_pct": -71.56,
+    "win_rate_pct": 67.96,
+    "profit_factor": 0.17,
+    "max_drawdown_pct": -71.84,
+    "trades_count": 103
   },
   {
     "id": "pippo-30m-short-v2-b",
@@ -57747,7 +57803,12 @@
       }
     ],
     "has_active_signal": false,
-    "active_ticket": null
+    "active_ticket": null,
+    "total_return_pct": -81.0,
+    "win_rate_pct": 59.01,
+    "profit_factor": 0.51,
+    "max_drawdown_pct": -81.01,
+    "trades_count": 161
   },
   {
     "id": "pippo-30m-short-v2-c",
@@ -60176,7 +60237,19 @@
         "entryPrice": 2715.74,
         "side": "SHORT",
         "status": "OPEN",
-        "isActive": true
+        "isActive": true,
+        "tradeNo": 102
+      },
+      {
+        "time": 1790249400,
+        "position": "belowBar",
+        "color": "#FF9F0A",
+        "shape": "circle",
+        "text": "BE LOCKED @ $2,710.31 (+0.2%)",
+        "size": 2,
+        "exitPrice": 2710.31,
+        "isBreakeven": true,
+        "tradeNo": 102
       }
     ],
     "trades": [
@@ -61503,12 +61576,15 @@
         "exit_price": 2715.74,
         "gross_return_pct": 0.0,
         "net_return_pct": -0.18,
-        "exit_reason": "Active Signal (Trailing)",
-        "be_activated": false,
+        "exit_reason": "Active Signal (BE Locked)",
+        "be_activated": true,
         "status": "OPEN",
-        "stop_loss": 2878.68,
+        "stop_loss": 2710.31,
         "take_profit": 1357.87,
-        "is_active": true
+        "is_active": true,
+        "partial_taken": false,
+        "partial_exit_price": null,
+        "partial_position_pct": 0.0
       }
     ],
     "has_active_signal": true,
@@ -61524,7 +61600,7 @@
       "confidence_blocks": 8,
       "entry_price": 2715.74,
       "current_price": 2682.29,
-      "stop_loss": 2878.68,
+      "stop_loss": 2710.31,
       "stop_loss_pct": 6.0,
       "breakeven_trigger": 2647.85,
       "breakeven_trigger_pct": -2.5,
@@ -61538,7 +61614,14 @@
         "informan"
       ],
       "status": "LIVE_SIGNAL",
-      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
-    }
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY",
+      "be_active": false,
+      "partial_taken": false
+    },
+    "total_return_pct": -60.52,
+    "win_rate_pct": 50.5,
+    "profit_factor": 0.51,
+    "max_drawdown_pct": -61.57,
+    "trades_count": 101
   }
 ]

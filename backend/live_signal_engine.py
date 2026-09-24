@@ -1588,17 +1588,24 @@ class LiveSignalEngine:
         if not updated_any:
             return
 
-        # Trigger metric recalculation for BTC
-        if not is_eth:
-            try:
-                from recalculate_btc_metrics import process_strategies
-                for path in paths_to_update:
-                    updated = process_strategies(path)
-                    with open(path, "w") as f:
-                        json.dump(updated, f, indent=2)
-                logger.info(f"📊 [AUTO-RECALCULATE] Successfully harmonized metrics across disk files for {model.strat_id}")
-            except Exception as e:
-                logger.warning(f"Could not automatically recalculate BTC metrics: {e}")
+        # Recalculate the symbol's catalog immediately after a close.  This
+        # keeps overview/detail/yearly metrics in sync with the trade log for
+        # both BTC and ETH; previously ETH was persisted but never recalculated.
+        try:
+            from recalculate_btc_metrics import process_strategies
+            recalc_kwargs = {} if not is_eth else {
+                "clean_pure_macro": False,
+                "apply_btc_metadata": False,
+            }
+            for path in paths_to_update:
+                updated = process_strategies(path, **recalc_kwargs)
+                with open(path, "w") as f:
+                    json.dump(updated, f, indent=2)
+            logger.info(
+                f"📊 [AUTO-RECALCULATE] Harmonized {sym} metrics across disk files for {model.strat_id}"
+            )
+        except Exception as e:
+            logger.warning(f"Could not automatically recalculate {sym} metrics: {e}")
 
         # Fast in-memory catalog reload in main.py without network latency
         try:

@@ -33,7 +33,7 @@ git add backend/ frontend/ worker.js package.json scripts/
 if git diff --staged --quiet; then
     echo "ℹ️ No unstaged/staged code changes to commit."
 else
-    COMMIT_MSG="chore(release): automated sync & build $(date -u '+%Y-%m-%d %H:%M:%S UTC') [skip ci]"
+    COMMIT_MSG="chore(release): automated sync & build $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
     git commit -m "$COMMIT_MSG"
     git push origin main
     echo "✅ Git push origin main complete! Cloudflare Edge Workers updated."

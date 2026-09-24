@@ -1197,6 +1197,13 @@ class LiveSignalEngine:
                 "isBreakeven": True
             })
         model.active_markers = markers
+        model.active_ticket = ticket
+
+        # Auto-persist to disk so disk reflects the newly opened position
+        try:
+            self._persist_opened_trade(model, ticket)
+        except Exception as e:
+            logger.error(f"Error persisting opened trade for {model.strat_id}: {e}", exc_info=True)
 
         return ticket
 
@@ -1373,6 +1380,86 @@ class LiveSignalEngine:
             if hasattr(backend_main, "reload_local_catalog"):
                 backend_main.reload_local_catalog(sym)
                 logger.info("🔄 [AUTO-SYNC] Fast reloaded in-memory catalog for backend API")
+        except Exception:
+            pass
+
+    def _persist_opened_trade(self, model: StrategyModel, ticket: dict):
+        """Persists newly opened trade into disk files and updates in-memory catalog."""
+        if model.strat_id.startswith("test-"):
+            return
+
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        sym = getattr(model, "symbol", "BTCUSDT").upper()
+        is_eth = (sym == "ETHUSDT")
+
+        backend_filename = "strategies_eth.json" if is_eth else "strategies.json"
+        frontend_filename = "strategiesData_eth.json" if is_eth else "strategiesData.json"
+
+        project_root = os.path.dirname(backend_dir)
+        backend_path = os.path.join(backend_dir, "data", backend_filename)
+        frontend_path = os.path.join(project_root, "frontend", "src", "data", frontend_filename)
+        paths_to_update = [p for p in [backend_path, frontend_path] if os.path.exists(p)]
+        updated_any = False
+
+        for path in paths_to_update:
+            try:
+                with open(path, "r") as f:
+                    strategies = json.load(f)
+
+                strat = next((s for s in strategies if s.get("id") == model.strat_id), None)
+                if not strat:
+                    continue
+
+                strat["has_active_signal"] = True
+                strat["active_ticket"] = ticket
+
+                trades = strat.get("trades", [])
+                has_open = any(t.get("status") in ["OPEN", "RUNNING"] or t.get("exit_time") in [None, "RUNNING"] for t in trades)
+                if not has_open:
+                    trade_no = len(trades) + 1
+                    open_trade = {
+                        "trade_no": trade_no,
+                        "side": model.direction,
+                        "type": model.direction,
+                        "entry_time": model.entry_time,
+                        "exit_time": "RUNNING",
+                        "entry_price": model.entry_price,
+                        "exit_price": model.entry_price,
+                        "gross_return_pct": 0.0,
+                        "net_return_pct": -0.18,
+                        "exit_reason": f"Active Signal ({'BE Locked' if model.be_active else 'Trailing'})",
+                        "be_activated": model.be_active,
+                        "status": "OPEN",
+                        "stop_loss": model.current_sl,
+                        "take_profit": model.target_tp,
+                        "is_active": True
+                    }
+                    trades.append(open_trade)
+
+                # Add active markers
+                if hasattr(model, "active_markers") and model.active_markers:
+                    markers = strat.get("markers", [])
+                    for am in model.active_markers:
+                        if not any(m.get("time") == am.get("time") and m.get("text") == am.get("text") for m in markers):
+                            markers.append(am)
+                    strat["markers"] = markers
+
+                with open(path, "w") as f:
+                    json.dump(strategies, f, indent=2)
+
+                updated_any = True
+                logger.info(f"💾 [AUTO-PERSIST] Persisted OPEN trade to {path} for {model.strat_id}")
+            except Exception as e:
+                logger.error(f"Error persisting open trade to {path}: {e}", exc_info=True)
+
+        if not updated_any:
+            return
+
+        try:
+            import main as backend_main
+            if hasattr(backend_main, "reload_local_catalog"):
+                backend_main.reload_local_catalog(sym)
+                logger.info("🔄 [AUTO-SYNC] Fast reloaded in-memory catalog for OPEN trade")
         except Exception:
             pass
 

@@ -83,6 +83,7 @@ export default function TradingChart({
   const markersPrimitiveRef = useRef(null);
   const priceLinesRef = useRef([]);
   const shouldResetViewportRef = useRef(true);
+  const candlesRef = useRef([]);
 
   const [loading, setLoading] = useState(false);
   const [candles, setCandles] = useState([]);
@@ -187,6 +188,34 @@ export default function TradingChart({
     window.addEventListener('resize', handleReposition);
     return () => window.removeEventListener('resize', handleReposition);
   }, [isHudExpanded, hudPos.x]);
+
+  candlesRef.current = candles;
+
+  const anchorToLatest = (chart = chartRef.current) => {
+    const totalBars = candlesRef.current.length;
+    if (!chart || totalBars === 0) return;
+
+    const applyLatestRange = () => {
+      const latestTotal = candlesRef.current.length;
+      if (!chartRef.current || latestTotal === 0) return;
+      const defaultBarsVisible = Math.min(latestTotal, 85);
+      chartRef.current.timeScale().setVisibleLogicalRange({
+        from: Math.max(0, latestTotal - defaultBarsVisible),
+        to: latestTotal + 6,
+      });
+      chartRef.current.timeScale().scrollToPosition(0, false);
+    };
+
+    // Hidden tabs/modals can report zero width during first render. Apply once
+    // now and twice after layout so the initial viewport reliably lands on the
+    // latest bar without affecting later user zoom/scroll actions.
+    applyLatestRange();
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(applyLatestRange);
+      });
+    }
+  };
 
   const [visibleMAs, setVisibleMAs] = useState({
     ma8: false,
@@ -640,16 +669,9 @@ export default function TradingChart({
         }
       }
 
-      // Always anchor viewport on the latest/live bar first with clean breathing room
-      const totalBars = formattedCandles.length;
-      if (totalBars > 0) {
-        const defaultBarsVisible = Math.min(totalBars, 85);
-        chart.timeScale().setVisibleLogicalRange({
-          from: Math.max(0, totalBars - defaultBarsVisible),
-          to: totalBars + 6,
-        });
-        chart.timeScale().scrollToPosition(0, false);
-      }
+      // Anchor the first populated dataset to the latest/live bar. The helper
+      // retries after layout so this also works inside hidden tabs/modals.
+      anchorToLatest(chart);
     }
 
     // Crosshair listener for tooltip & signal detection
@@ -716,6 +738,10 @@ export default function TradingChart({
         const entryWidth = Math.floor(entries[0].contentRect.width);
         if (entryWidth > 50) {
           chartRef.current.applyOptions({ width: entryWidth });
+          if (shouldResetViewportRef.current && candlesRef.current.length > 0) {
+            anchorToLatest(chartRef.current);
+            shouldResetViewportRef.current = false;
+          }
         }
       });
       resizeObserver.observe(container);
@@ -725,6 +751,10 @@ export default function TradingChart({
     const handleResize = () => {
       if (chartRef.current && container) {
         chartRef.current.applyOptions({ width: container.clientWidth });
+        if (shouldResetViewportRef.current && candlesRef.current.length > 0) {
+          anchorToLatest(chartRef.current);
+          shouldResetViewportRef.current = false;
+        }
       }
     };
     window.addEventListener('resize', handleResize);
@@ -781,13 +811,7 @@ export default function TradingChart({
     });
 
     if (shouldResetViewportRef.current || !previousRange) {
-      const totalBars = formattedCandles.length;
-      const defaultBarsVisible = Math.min(totalBars, 85);
-      chart.timeScale().setVisibleLogicalRange({
-        from: Math.max(0, totalBars - defaultBarsVisible),
-        to: totalBars + 6,
-      });
-      chart.timeScale().scrollToPosition(0, false);
+      anchorToLatest(chart);
       shouldResetViewportRef.current = false;
     } else {
       chart.timeScale().setVisibleLogicalRange(previousRange);

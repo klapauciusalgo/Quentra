@@ -63641,6 +63641,19 @@
         "tradeNo": 104,
         "pnlPct": -1.12,
         "reason": ""
+      },
+      {
+        "time": 1790240400,
+        "position": "aboveBar",
+        "color": "#FF453A",
+        "shape": "arrowDown",
+        "text": "ACTIVE SHORT @ $83,364.00",
+        "size": 3,
+        "entryPrice": 83364.0,
+        "side": "SHORT",
+        "status": "OPEN",
+        "isActive": true,
+        "tradeNo": 105
       }
     ],
     "trades": [
@@ -64996,10 +65009,54 @@
         "be_activated": false,
         "status": "CLOSED",
         "trade_no": 104
+      },
+      {
+        "trade_no": 105,
+        "side": "SHORT",
+        "type": "SHORT",
+        "entry_time": "2026-09-24 09:00:00",
+        "exit_time": "RUNNING",
+        "entry_price": 83364.0,
+        "exit_price": 83364.0,
+        "gross_return_pct": 0.0,
+        "net_return_pct": -0.18,
+        "exit_reason": "Active Signal (Trailing)",
+        "be_activated": false,
+        "status": "OPEN",
+        "stop_loss": 87532.2,
+        "take_profit": 66691.2,
+        "is_active": true
       }
     ],
-    "has_active_signal": false,
-    "active_ticket": null,
+    "has_active_signal": true,
+    "active_ticket": {
+      "symbol": "BTC/USDT",
+      "asset": "BTCUSDT",
+      "direction": "SHORT",
+      "action": "SELL",
+      "strategy_name": "Pippo 30M Short V2 Type B (Max Freq)",
+      "strategy_id": "pippo-30m-short-v2-b",
+      "timeframe": "30m",
+      "confidence_pct": 88,
+      "confidence_blocks": 8,
+      "entry_price": 83364.0,
+      "current_price": 83364.0,
+      "stop_loss": 87532.2,
+      "stop_loss_pct": 5.0,
+      "breakeven_trigger": 81279.9,
+      "breakeven_trigger_pct": -2.5,
+      "take_profit": 66691.2,
+      "take_profit_pct": -20.0,
+      "risk_reward_ratio": "4.0x",
+      "timestamp": "2026-09-24 09:00:00",
+      "contributing_agents": [
+        "quant",
+        "trader",
+        "informan"
+      ],
+      "status": "LIVE_SIGNAL",
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+    },
     "total_return_pct": 71.19,
     "win_rate_pct": 61.54,
     "profit_factor": 1.49,

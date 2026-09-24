@@ -170,30 +170,39 @@ function TradingApp() {
   const wsRef = useRef(null);
   const directBinanceWsRef = useRef(null);
   const lastWsTickTimeRef = useRef(0);
+  const liveRefreshIdRef = useRef(0);
+  const selectedStrategyRef = useRef(selectedStrategyId);
+  useEffect(() => {
+    selectedStrategyRef.current = selectedStrategyId;
+  }, [selectedStrategyId]);
   const [liveKline, setLiveKline] = useState(null);
 
   const refreshLiveState = async (asset, replaceCatalog = true) => {
     const symbol = asset || selectedAssetRef.current;
+    const refreshId = ++liveRefreshIdRef.current;
     const [strategiesResult, signalsResult] = await Promise.allSettled([
-      fetch(`${API_BASE}/api/strategies?symbol=${symbol}`),
+      replaceCatalog ? fetch(`${API_BASE}/api/strategies?symbol=${symbol}`) : Promise.resolve(null),
       fetch(`${API_BASE}/api/signals/live?symbol=${symbol}`),
     ]);
+    const isCurrentRefresh = () => (
+      refreshId === liveRefreshIdRef.current && selectedAssetRef.current === symbol
+    );
 
-    if (replaceCatalog && strategiesResult.status === 'fulfilled' && strategiesResult.value.ok) {
+    if (replaceCatalog && strategiesResult.status === 'fulfilled' && strategiesResult.value?.ok && isCurrentRefresh()) {
       const catalog = await strategiesResult.value.json();
-      if (selectedAssetRef.current === symbol && Array.isArray(catalog) && catalog.length > 0) {
+      if (isCurrentRefresh() && Array.isArray(catalog) && catalog.length > 0) {
         setStrategies(catalog);
-        const selected = catalog.find((strategy) => strategy.id === selectedStrategyId) || catalog[0];
+        const selected = catalog.find((strategy) => strategy.id === selectedStrategyRef.current) || catalog[0];
         if (selected?.timeframe) setTimeframe(selected.timeframe.toLowerCase());
       }
-    } else if (replaceCatalog && selectedAssetRef.current === symbol) {
+    } else if (replaceCatalog && isCurrentRefresh()) {
       const fallbackCatalog = symbol === 'ETHUSDT' ? strategiesDataEth : strategiesData;
       setStrategies(fallbackCatalog);
     }
 
-    if (signalsResult.status === 'fulfilled' && signalsResult.value.ok) {
+    if (signalsResult.status === 'fulfilled' && signalsResult.value?.ok && isCurrentRefresh()) {
       const data = await signalsResult.value.json();
-      if (selectedAssetRef.current === symbol && Array.isArray(data?.strategies)) {
+      if (isCurrentRefresh() && Array.isArray(data?.strategies)) {
         const price = data.current_price || (symbol === 'ETHUSDT' ? data.current_eth_price : data.current_btc_price);
         setActiveSignals(
           data.strategies
@@ -333,7 +342,16 @@ function TradingApp() {
         .catch(() => {});
     }, 3000);
 
-    return () => clearInterval(tickerPollInterval);
+    // Periodic authoritative signal sync repairs missed WebSocket events and
+    // keeps the UI aligned with backend state after reconnects or tab sleep.
+    const liveStateSyncInterval = setInterval(() => {
+      refreshLiveState(selectedAssetRef.current, false);
+    }, 15000);
+
+    return () => {
+      clearInterval(tickerPollInterval);
+      clearInterval(liveStateSyncInterval);
+    };
   }, []);
 
   // 2. Establish WebSocket connection to backend or fallback to Binance Direct
@@ -443,6 +461,9 @@ function TradingApp() {
           directBinanceWsRef.current = null;
         }
         setStatus((prev) => ({ ...prev, binance_ws_connected: true }));
+        // Reconcile state after every reconnect in case a signal event was
+        // emitted while this browser was offline.
+        refreshLiveState(selectedAssetRef.current, true);
       };
 
       ws.onmessage = (event) => {
@@ -529,6 +550,15 @@ function TradingApp() {
               price: msg.ticket?.entry_price,
             });
             setTimeout(() => setBannerAlert(null), 7000);
+          } else if (msg.type === 'POSITION_CLOSED') {
+            // Protection exits emit POSITION_CLOSED followed by SIGNAL_EXIT.
+            // Reconcile immediately without creating a duplicate notification;
+            // SIGNAL_EXIT remains the user-facing event.
+            const asset = msg.asset || msg.trade?.asset || 'BTCUSDT';
+            if (msg.strategy_id && asset === selectedAssetRef.current) {
+              setActiveSignals((prev) => prev.filter((s) => s.strategy_id !== msg.strategy_id));
+              refreshLiveState(asset, false);
+            }
           } else if (msg.type === 'SIGNAL_EXIT') {
             playRetroSound('alert');
             const asset = msg.asset || 'BTCUSDT';

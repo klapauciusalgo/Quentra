@@ -59,6 +59,16 @@ export default {
       }
     }
 
+    // Never let a WebSocket request fall through to the SPA asset handler.
+    // A successful HTML response looks like a connected endpoint to some
+    // clients but can never deliver autonomous signal events.
+    if (url.pathname.startsWith('/ws')) {
+      return new Response(JSON.stringify({
+        error: 'Live signal WebSocket backend is not configured',
+        code: 'BACKEND_UNAVAILABLE',
+      }), { status: 503, headers: CORS_HEADERS });
+    }
+
     // 2. Edge handler: /api/status
     if (url.pathname === '/api/status') {
       return new Response(JSON.stringify({

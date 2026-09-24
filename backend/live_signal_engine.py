@@ -527,16 +527,24 @@ class LiveSignalEngine:
                 model.partial_exit_price = partial_exit_price
                 model.active_ticket = strat_data.get("active_ticket")
 
-                # Strategies without a breakeven rule must always restore the
-                # configured hard stop. Older persisted records may contain a
-                # stop from a previous generic BE implementation.
-                if model.config.get("be_pct", 0.0) <= 0:
+                sl_pct = model.config.get("sl_pct", 0.0)
+                normalized_sl = round(
+                    entry_p * (1.0 - sl_pct if model.direction == "LONG" else 1.0 + sl_pct),
+                    2,
+                ) if sl_pct > 0 else 0.0
+                partial_tp_cfg = float(model.config.get("partial_tp", 0.0) or 0.0)
+
+                # Scalp-Runner's BE is coupled to its partial TP. Older
+                # records may contain a generic BE without the 30% harvest.
+                if partial_tp_cfg > 0 and not partial_taken:
+                    protection_normalized = bool(be_active or abs(curr_sl - normalized_sl) > 0.01)
                     model.be_active = False
-                    sl_pct = model.config.get("sl_pct", 0.0)
-                    normalized_sl = round(
-                        entry_p * (1.0 - sl_pct if model.direction == "LONG" else 1.0 + sl_pct),
-                        2,
-                    ) if sl_pct > 0 else 0.0
+                    model.current_sl = normalized_sl
+                # Strategies without a breakeven rule must always restore the
+                # configured hard stop. Older records may contain a stop from
+                # a previous generic BE implementation.
+                elif model.config.get("be_pct", 0.0) <= 0:
+                    model.be_active = False
                     protection_normalized = bool(be_active or abs(curr_sl - normalized_sl) > 0.01)
                     model.current_sl = normalized_sl
                     if model.active_ticket:
@@ -544,6 +552,19 @@ class LiveSignalEngine:
                         model.active_ticket["be_active"] = False
                         model.active_ticket["breakeven_trigger"] = None
                         model.active_ticket["breakeven_trigger_pct"] = 0.0
+                if model.active_ticket:
+                    model.active_ticket["stop_loss"] = model.current_sl
+                    model.active_ticket["be_active"] = model.be_active
+                    model.active_ticket["partial_taken"] = model.partial_taken
+                    if partial_tp_cfg > 0:
+                        model.active_ticket["partial_take_profit"] = round(
+                            entry_p * (1.0 + partial_tp_cfg if model.direction == "LONG" else 1.0 - partial_tp_cfg),
+                            2,
+                        )
+                        model.active_ticket["partial_position_pct"] = round(
+                            float(model.config.get("partial_weight", 0.0) or 0.0) * 100.0,
+                            2,
+                        )
                 
                 # Restore only the markers that belong to the current open trade.
                 # Older inactive OPEN records must not be revived after a restart.

@@ -51206,28 +51206,6 @@
         "isActive": false
       },
       {
-        "time": 1789738200,
-        "position": "belowBar",
-        "color": "#30D158",
-        "shape": "arrowUp",
-        "text": "ACTIVE LONG @ $80,073.09",
-        "size": 3,
-        "entryPrice": 80073.09,
-        "side": "LONG",
-        "status": "OPEN",
-        "isActive": false
-      },
-      {
-        "time": 1789740000,
-        "position": "aboveBar",
-        "color": "#FF9F0A",
-        "shape": "circle",
-        "text": "BE LOCKED @ $80,233.24 (+0.2%)",
-        "size": 2,
-        "exitPrice": 80233.24,
-        "isBreakeven": true
-      },
-      {
         "time": "2026-09-23 23:12:00",
         "position": "aboveBar",
         "color": "#EF4444",
@@ -52413,12 +52391,15 @@
         "exit_price": 80073.09,
         "gross_return_pct": 0.0,
         "net_return_pct": -0.18,
-        "exit_reason": "Active Signal (BE Locked)",
-        "be_activated": true,
+        "exit_reason": "Active Signal (Trailing)",
+        "be_activated": false,
         "status": "OPEN",
-        "stop_loss": 80233.24,
+        "stop_loss": 76069.44,
         "take_profit": 140127.91,
-        "is_active": true
+        "is_active": true,
+        "partial_taken": false,
+        "partial_exit_price": null,
+        "partial_position_pct": 30.0
       }
     ],
     "has_active_signal": true,
@@ -52434,7 +52415,7 @@
       "confidence_blocks": 9,
       "entry_price": 80073.09,
       "current_price": 84318.0,
-      "stop_loss": 80233.24,
+      "stop_loss": 76069.44,
       "stop_loss_pct": -5.0,
       "breakeven_trigger": 83276.01,
       "breakeven_trigger_pct": 4.0,
@@ -52448,7 +52429,11 @@
         "informan"
       ],
       "status": "LIVE_SIGNAL",
-      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY",
+      "be_active": false,
+      "partial_taken": false,
+      "partial_take_profit": 83276.01,
+      "partial_position_pct": 30.0
     },
     "total_return_pct": 1458.24,
     "win_rate_pct": 73.33,

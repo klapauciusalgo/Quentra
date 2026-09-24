@@ -9,6 +9,7 @@ import {
   createSeriesMarkers 
 } from 'lightweight-charts';
 import { formatPrice, formatPercent, playRetroSound } from '../utils/formatters';
+import { getProcessedMarkers } from '../utils/chartMarkers';
 import { API_BASE } from '../config';
 import klinesBaseline from '../data/klinesBaseline.json';
 import klinesBaselineEth from '../data/klinesBaseline_eth.json';
@@ -516,96 +517,6 @@ export default function TradingChart({
         }
       }
     }
-  };
-
-  // Helper to format markers dynamically based on selected label mode
-  const formatMarkersForDisplay = (rawMarkers, mode) => {
-    return rawMarkers.map((m) => {
-      let text = '';
-      const isEntry = m.shape === 'arrowUp' || m.shape === 'arrowDown';
-      const isLong = m.side === 'LONG' || m.shape === 'arrowUp';
-      const isActive = m.isActive || m.status === 'OPEN';
-
-      if (mode === 'minimal') {
-        text = isActive ? (isLong ? 'BUY' : 'SELL') : '';
-      } else if (mode === 'prices') {
-        if (isEntry && m.entryPrice) text = `$${Math.round(m.entryPrice).toLocaleString()}`;
-        else if (!isEntry && m.exitPrice) text = `$${Math.round(m.exitPrice).toLocaleString()}`;
-      } else if (mode === 'full') {
-        text = m.text || '';
-      } else {
-        // 'compact' - Default anti-slop mode
-        if (isActive && isEntry) {
-          text = isLong ? `ACTIVE BUY #${m.tradeNo || ''}` : `ACTIVE SELL #${m.tradeNo || ''}`;
-        } else if (m.isBreakeven) {
-          text = 'BE LOCKED';
-        } else if (isEntry) {
-          text = isLong ? `BUY #${m.tradeNo || ''}` : `SELL #${m.tradeNo || ''}`;
-        } else {
-          const pnl = m.pnlPct !== undefined ? m.pnlPct : null;
-          text = pnl !== null ? `${pnl > 0 ? '+' : ''}${Number(pnl).toFixed(1)}%` : 'EXIT';
-        }
-      }
-
-      return {
-        ...m,
-        text,
-        size: isActive ? 3 : (isEntry ? 2 : 1.5),
-        color: isActive ? (isLong ? '#30D158' : '#FF453A') : (m.isBreakeven ? '#FF9F0A' : m.color),
-      };
-    });
-  };
-
-  // Snaps marker timestamps to candle bar timestamps so markers NEVER drop across timeframes
-  const getProcessedMarkers = (rawMarkers, candleArr, mode) => {
-    if (!rawMarkers || rawMarkers.length === 0 || !candleArr || candleArr.length === 0) return [];
-
-    const cTimes = candleArr.map((c) => c.time);
-    const minTime = cTimes[0];
-    const maxTime = cTimes[cTimes.length - 1];
-    const avgInterval = cTimes.length > 1 ? (cTimes[cTimes.length - 1] - cTimes[0]) / (cTimes.length - 1) : 1800;
-
-    // Filter markers within candle timeframe span
-    const inRange = rawMarkers.filter((m) => m.time >= minTime - avgInterval && m.time <= maxTime + avgInterval * 2);
-    if (inRange.length === 0) return [];
-
-    const mapped = inRange.map((m) => {
-      let low = 0, high = cTimes.length - 1, bestIdx = 0;
-      while (low <= high) {
-        const mid = Math.floor((low + high) / 2);
-        if (cTimes[mid] <= m.time) {
-          bestIdx = mid;
-          low = mid + 1;
-        } else {
-          high = mid - 1;
-        }
-      }
-      return {
-        ...m,
-        time: cTimes[bestIdx],
-        originalTime: m.time,
-      };
-    });
-
-    mapped.sort((a, b) => {
-      if (a.time !== b.time) return a.time - b.time;
-      if (a.isActive && !b.isActive) return 1;
-      if (!a.isActive && b.isActive) return -1;
-      return (a.tradeNo || 0) - (b.tradeNo || 0);
-    });
-
-    const deduplicated = [];
-    const seenTimes = new Set();
-    mapped.forEach((m) => {
-      let mTime = m.time;
-      while (seenTimes.has(mTime)) {
-        mTime += 1;
-      }
-      seenTimes.add(mTime);
-      deduplicated.push({ ...m, time: mTime });
-    });
-
-    return formatMarkersForDisplay(deduplicated, mode);
   };
 
   // Initialize and Render Lightweight Charts Canvas

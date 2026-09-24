@@ -21,6 +21,57 @@ import pandas as pd
 logger = logging.getLogger("live_signal_engine")
 logger.setLevel(logging.INFO)
 
+
+def _marker_event_type(marker: dict) -> str:
+    if marker.get("isBreakeven"):
+        return "breakeven"
+    if marker.get("entryPrice") is not None:
+        return "entry"
+    if marker.get("exitPrice") is not None or marker.get("pnlPct") is not None:
+        return "exit"
+    if str(marker.get("text", "")).upper().startswith("EXIT"):
+        return "exit"
+    return "entry" if marker.get("shape") in ["arrowUp", "arrowDown"] else "exit"
+
+
+def _marker_identity(marker: dict) -> tuple:
+    event_type = _marker_event_type(marker)
+    side = marker.get("side") or ("LONG" if marker.get("shape") == "arrowUp" else "SHORT" if marker.get("shape") == "arrowDown" else "")
+    raw_price = marker.get("entryPrice") if marker.get("entryPrice") is not None else marker.get("exitPrice")
+    try:
+        price = f"{float(raw_price):.8f}"
+    except (TypeError, ValueError):
+        price = ""
+    fallback_trade_no = "" if price else marker.get("tradeNo", "")
+    return (str(marker.get("time", "")), event_type, side, price, fallback_trade_no)
+
+
+def _marker_priority(marker: dict) -> int:
+    priority = 0
+    if marker.get("isActive") is True:
+        priority += 8
+    if marker.get("tradeNo") is not None:
+        priority += 4
+    if marker.get("status") == "OPEN":
+        priority += 2
+    if marker.get("isActive") is False:
+        priority += 1
+    return priority
+
+
+def deduplicate_markers(markers: List[dict]) -> List[dict]:
+    """Keep one canonical record for each logical chart event."""
+    unique = {}
+    order = []
+    for marker in markers:
+        key = _marker_identity(marker)
+        if key not in unique:
+            unique[key] = marker
+            order.append(key)
+        elif _marker_priority(marker) > _marker_priority(unique[key]):
+            unique[key] = marker
+    return [unique[key] for key in order]
+
 def compute_swings_arr(high_arr: np.ndarray, low_arr: np.ndarray, len_p: int):
     n = len(high_arr)
     top = np.zeros(n)
@@ -444,9 +495,33 @@ class LiveSignalEngine:
                 model.be_active = be_active
                 model.active_ticket = strat_data.get("active_ticket")
                 
-                # Active markers from strat_data
+                # Restore only the markers that belong to the current open trade.
+                # Older inactive OPEN records must not be revived after a restart.
+                trade_no = last_trade.get("trade_no")
                 markers = strat_data.get("markers", [])
-                model.active_markers = [m for m in markers if m.get("isActive") or m.get("isBreakeven")]
+                active_markers = []
+                for marker in markers:
+                    marker_trade_no = marker.get("tradeNo")
+                    try:
+                        matches_current_stop = abs(float(marker.get("exitPrice")) - curr_sl) < 0.01
+                    except (TypeError, ValueError):
+                        matches_current_stop = False
+                    is_current_entry = (
+                        marker.get("isActive") is True
+                        or (marker.get("isActive") is None and marker.get("status") == "OPEN")
+                    ) and (marker_trade_no in [None, trade_no])
+                    is_current_breakeven = marker.get("isBreakeven") is True and (
+                        marker_trade_no == trade_no
+                        or (
+                            marker_trade_no is None
+                            and matches_current_stop
+                        )
+                    )
+                    if is_current_entry or is_current_breakeven:
+                        normalized = dict(marker)
+                        normalized["tradeNo"] = trade_no
+                        active_markers.append(normalized)
+                model.active_markers = deduplicate_markers(active_markers)
                 logger.info(f"🚀 [STATE SYNC] Restored active {model.direction} trade for [{sym}] {model.name}: Entry  at {entry_time} (SL: , BE: {be_active})")
             else:
                 model.position_status = "FLAT"
@@ -1198,6 +1273,8 @@ class LiveSignalEngine:
                 for m in markers:
                     if m.get("tradeNo") == trade_no or m.get("isActive") is True:
                         m["isActive"] = False
+                        if m.get("status") == "OPEN":
+                            m["status"] = "CLOSED"
 
                 exit_marker = {
                     "time": exit_time_str,
@@ -1209,7 +1286,7 @@ class LiveSignalEngine:
                     "isActive": False
                 }
                 markers.append(exit_marker)
-                strat["markers"] = markers
+                strat["markers"] = deduplicate_markers(markers)
 
                 with open(path, "w") as f:
                     json.dump(strategies, f, indent=2)
@@ -1283,6 +1360,7 @@ class LiveSignalEngine:
                 strat["active_ticket"] = ticket
 
                 has_open = any(t.get("status") in ["OPEN", "RUNNING"] or t.get("exit_time") in [None, "RUNNING"] for t in trades)
+                active_trade = existing_entry
                 if not has_open and not existing_entry:
                     trade_no = len(trades) + 1
                     open_trade = {
@@ -1303,6 +1381,7 @@ class LiveSignalEngine:
                         "is_active": True
                     }
                     trades.append(open_trade)
+                    active_trade = open_trade
                 elif existing_entry and existing_entry.get("status") in ["OPEN", "RUNNING"]:
                     # Update active parameters on the existing open trade
                     existing_entry["stop_loss"] = model.current_sl
@@ -1310,13 +1389,21 @@ class LiveSignalEngine:
                     existing_entry["be_activated"] = model.be_active
                     existing_entry["exit_reason"] = f"Active Signal ({'BE Locked' if model.be_active else 'Trailing'})"
 
+                if active_trade is None:
+                    active_trade = next((
+                        trade for trade in reversed(trades)
+                        if trade.get("status") in ["OPEN", "RUNNING"] or trade.get("exit_time") in [None, "RUNNING"]
+                    ), None)
+
                 # Add active markers
                 if hasattr(model, "active_markers") and model.active_markers:
                     markers = strat.get("markers", [])
                     for am in model.active_markers:
-                        if not any(m.get("time") == am.get("time") and m.get("text") == am.get("text") for m in markers):
-                            markers.append(am)
-                    strat["markers"] = markers
+                        normalized = dict(am)
+                        if active_trade:
+                            normalized["tradeNo"] = active_trade.get("trade_no")
+                        markers.append(normalized)
+                    strat["markers"] = deduplicate_markers(markers)
 
                 with open(path, "w") as f:
                     json.dump(strategies, f, indent=2)

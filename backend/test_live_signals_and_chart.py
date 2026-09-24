@@ -62,14 +62,14 @@ def test_strategy_catalog_enrichment(client):
 
     # Check that active markers are present
     active_entry_markers = [m for m in markers if m.get("isActive") is True]
-    assert len(active_entry_markers) >= 1
+    assert len(active_entry_markers) == 1
     assert active_entry_markers[0]["shape"] == "arrowUp"
     assert active_entry_markers[0]["color"] == "#30D158"
     assert "ACTIVE LONG" in active_entry_markers[0]["text"]
 
     # Check Breakeven marker
     be_markers = [m for m in markers if m.get("isBreakeven") is True]
-    assert len(be_markers) >= 1
+    assert len(be_markers) == 1
     assert be_markers[0]["shape"] == "circle"
     assert be_markers[0]["color"] == "#FF9F0A"
     assert "BE LOCKED" in be_markers[0]["text"]
@@ -341,7 +341,6 @@ def test_multi_asset_signals_endpoints(client):
     sim_data = res_sim.json()
     assert sim_data["ticket"]["symbol"] == "ETH/USDT"
     assert sim_data["ticket"]["asset"] == "ETHUSDT"
-
 
 
 

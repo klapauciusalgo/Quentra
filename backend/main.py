@@ -454,7 +454,7 @@ async def get_klines(
     }
 
 def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
-    from live_signal_engine import live_signal_engine
+    from live_signal_engine import deduplicate_markers, live_signal_engine
     sym = symbol.upper()
     model = live_signal_engine.get_model(s["id"], symbol=sym)
     if not model:
@@ -463,7 +463,10 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
     s_copy = dict(s)
     # Strip any previously stored OPEN / RUNNING trades to avoid duplication
     base_trades = [t for t in s.get("trades", []) if t.get("status") != "OPEN" and t.get("exit_time") != "RUNNING"]
-    base_markers = [m for m in s.get("markers", []) if not m.get("isActive")]
+    base_markers = [
+        m for m in s.get("markers", [])
+        if m.get("isActive") is not True and m.get("status") != "OPEN"
+    ]
 
     # Existing trade timestamps to avoid duplicates
     existing_entries = {str(t.get("entry_time")) for t in base_trades}
@@ -544,7 +547,7 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
 
         # Inject active markers from model
         if hasattr(model, "active_markers") and model.active_markers:
-            for am in model.active_markers:
+            for am in deduplicate_markers(model.active_markers):
                 m_copy = dict(am)
                 m_copy["tradeNo"] = last_trade_no
                 base_markers.append(m_copy)
@@ -571,7 +574,7 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
         return 0.0
 
     s_copy["trades"] = base_trades
-    s_copy["markers"] = sorted(base_markers, key=_marker_sort_key)
+    s_copy["markers"] = sorted(deduplicate_markers(base_markers), key=_marker_sort_key)
     s_copy["trades_count"] = len([t for t in base_trades if t.get("status") == "CLOSED"])
     if "metrics" in s_copy and isinstance(s_copy["metrics"], dict):
         s_copy["metrics"]["total_trades"] = s_copy["trades_count"]

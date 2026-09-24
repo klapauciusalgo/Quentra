@@ -84,6 +84,7 @@ export default function TradingChart({
   const maSeriesRef = useRef({});
   const markersPrimitiveRef = useRef(null);
   const priceLinesRef = useRef([]);
+  const shouldResetViewportRef = useRef(true);
 
   const [loading, setLoading] = useState(false);
   const [candles, setCandles] = useState(() => {
@@ -268,6 +269,10 @@ export default function TradingChart({
   // Fetch Klines whenever timeframe changes with multi-tier edge fallback
   useEffect(() => {
     let isMounted = true;
+    // A timeframe or symbol change is a deliberate navigation event, so the
+    // next data update should use the default latest-bars viewport. Ordinary
+    // live candle updates must preserve the user's current zoom and position.
+    shouldResetViewportRef.current = true;
 
     // 0. Instantly populate baseline candles for zero-latency initial paint (BTC or ETH)
     const baselineSource = symbol === 'ETHUSDT' ? klinesBaselineEth : klinesBaseline;
@@ -840,7 +845,60 @@ export default function TradingChart({
         priceLinesRef.current = [];
       }
     };
-  }, [candles, theme]);
+  }, [theme]);
+
+  // Update series data without recreating the chart. Recreating the chart on
+  // every live KLINE event resets Lightweight Charts to the default range,
+  // which makes a user zooming out snap back into a zoomed-in view.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const candleSeries = candleSeriesRef.current;
+    const volumeSeries = volumeSeriesRef.current;
+    if (!chart || !candleSeries || !volumeSeries || candles.length === 0) return;
+
+    const formattedCandles = candles.map((c) => ({
+      time: c.time,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+    }));
+    const formattedVolumes = candles.map((c) => ({
+      time: c.time,
+      value: c.volume,
+      color: c.close >= c.open
+        ? (isDark ? 'rgba(48, 209, 88, 0.25)' : 'rgba(40, 167, 69, 0.3)')
+        : (isDark ? 'rgba(255, 69, 58, 0.25)' : 'rgba(229, 57, 53, 0.3)'),
+    }));
+
+    const previousRange = chart.timeScale().getVisibleLogicalRange();
+    candleSeries.setData(formattedCandles);
+    volumeSeries.setData(formattedVolumes);
+
+    const maKeys = ['ma8', 'ma25', 'ma50', 'ma55', 'ma111'];
+    maKeys.forEach((key) => {
+      const series = maSeriesRef.current[key];
+      if (!series) return;
+      series.setData(
+        candles
+          .filter((c) => c[key])
+          .map((c) => ({ time: c.time, value: c[key] }))
+      );
+    });
+
+    if (shouldResetViewportRef.current || !previousRange) {
+      const totalBars = formattedCandles.length;
+      const defaultBarsVisible = Math.min(totalBars, 85);
+      chart.timeScale().setVisibleLogicalRange({
+        from: Math.max(0, totalBars - defaultBarsVisible),
+        to: totalBars + 6,
+      });
+      chart.timeScale().scrollToPosition(0, false);
+      shouldResetViewportRef.current = false;
+    } else {
+      chart.timeScale().setVisibleLogicalRange(previousRange);
+    }
+  }, [candles, isDark]);
 
   // Reset focused trade index when active strategy changes
   useEffect(() => {

@@ -17,8 +17,7 @@ export const supabase = (SUPABASE_URL && SUPABASE_ANON_KEY)
   : null;
 
 /**
- * Translate raw error messages into user-friendly Indonesian messages
- * according to PRD 05-edge-case-dan-error-handling.md (§5.2)
+ * Translate auth errors into user-friendly English messages.
  */
 export function mapAuthError(error) {
   if (!error) return '';
@@ -26,37 +25,22 @@ export function mapAuthError(error) {
   const code = (error.code || error.error || '').toLowerCase();
 
   if (code === 'access_denied' || msg.includes('access_denied') || msg.includes('user cancelled')) {
-    return 'Login dengan Google dibatalkan.';
+    return 'Google sign-in was cancelled.';
   }
   if (code === 'redirect_uri_mismatch' || msg.includes('redirect_uri_mismatch')) {
-    return 'Layanan login sedang bermasalah (konfigurasi redirect). Tim kami sudah diberi tahu.';
+    return 'Sign-in is temporarily unavailable because the redirect URL is misconfigured.';
   }
   if (code === 'disallowed_useragent' || msg.includes('disallowed_useragent')) {
-    return 'Google memblokir login dari dalam aplikasi ini. Silakan buka di browser (Chrome/Safari) untuk melanjutkan.';
+    return 'Google blocked sign-in from this in-app browser. Open the page in Chrome or Safari to continue.';
   }
   if (msg.includes('invalid flow state') || msg.includes('code verifier')) {
-    return 'Sesi login kedaluwarsa. Silakan coba lagi.';
-  }
-  if (code === 'email_exists' || msg.includes('already registered') || msg.includes('already in use') || msg.includes('user already registered')) {
-    return 'Email ini sudah terdaftar. Masuk dengan password atau gunakan opsi Masuk.';
-  }
-  if (msg.includes('invalid login credentials') || msg.includes('invalid grant') || msg.includes('invalid password')) {
-    return 'Email atau password yang Anda masukkan salah. Periksa kembali dan coba lagi.';
-  }
-  if (msg.includes('password should be at least') || msg.includes('weak_password')) {
-    return 'Password terlalu pendek. Gunakan minimal 6 karakter.';
-  }
-  if (code === 'over_email_send_rate_limit' || msg.includes('rate limit') || msg.includes('rate_limit')) {
-    return 'Batas pengiriman email verifikasi tercapai (kuota email gratis Supabase). Mohon tunggu beberapa saat sebelum mencoba lagi, atau konfigurasikan Custom SMTP di dashboard Supabase.';
-  }
-  if (code === 'email_address_invalid' || (msg.includes('email') && msg.includes('invalid'))) {
-    return 'Format alamat email tidak valid atau domain tidak didukung. Gunakan alamat email aktif seperti @gmail.com.';
+    return 'The sign-in session expired. Please try again.';
   }
   if (msg.includes('network') || msg.includes('failed to fetch') || msg.includes('521') || msg.includes('offline')) {
-    return 'Koneksi ke server auth terputus atau origin sedang standby. Silakan coba lagi.';
+    return 'The authentication service is unavailable. Please check your connection and try again.';
   }
 
-  return error.message || 'Terjadi kendala saat proses autentikasi. Silakan coba lagi.';
+  return error.message || 'Something went wrong during sign-in. Please try again.';
 }
 
 /**

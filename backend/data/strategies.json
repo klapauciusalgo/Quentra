@@ -3111,7 +3111,7 @@
     "archetype": "Volatility Contraction & Momentum Sniper",
     "risk_tier": "Conservative-Moderate",
     "recommended_for": "Traders looking for maximum capital preservation, low drawdown (-17.6%), and high consistency (7/7 positive years) via multi-timeframe moving average compression.",
-    "badge": "7/7 Profitable Years (Max DD -17.6%)",
+    "badge": "7/7 Profitable Years (Max DD -11.20%)",
     "metrics": {
       "total_return_pct": 1327.19,
       "cagr_pct": 48.95,
@@ -19617,7 +19617,7 @@
     "archetype": "High-Frequency Volatility Squeeze Sniper",
     "risk_tier": "Moderate",
     "recommended_for": "Traders seeking high cumulative returns (+1719.7%, CAGR 54.0%) with active market participation (724 trades) through 30M MA compression and 1H proximity regimes without 4H macro filters.",
-    "badge": "+1,649.6% Return (CAGR 53.2%)",
+    "badge": "+1,747.24% Return (CAGR 54.36%)",
     "metrics": {
       "total_return_pct": 1747.24,
       "cagr_pct": 54.36,
@@ -46557,7 +46557,7 @@
     "archetype": "High Sharpe Flagship",
     "risk_tier": "Balanced",
     "recommended_for": "Traders seeking exceptional consistency, premier risk-adjusted returns, and superior multi-year compounding on the 1-hour timeframe.",
-    "badge": "Top Performer (+2,392%)",
+    "badge": "Top Performer (+2,392.04%)",
     "metrics": {
       "total_return_pct": 2392.04,
       "cagr_pct": 63.17,
@@ -52451,7 +52451,7 @@
     "archetype": "Sleep-Well Trendmaster",
     "risk_tier": "Low (Zero Screen Time)",
     "recommended_for": "Long-term investors & macro funds requiring minimal screen time, rebalancing only once per week upon Sunday midnight UTC candle close.",
-    "badge": "Macro Master (+1,751%)",
+    "badge": "Macro Master (+1,751.05%)",
     "metrics": {
       "total_return_pct": 1751.05,
       "cagr_pct": 64.75,
@@ -52757,7 +52757,7 @@
     "archetype": "Classic Swing King",
     "risk_tier": "Moderate",
     "recommended_for": "Swing traders who favor the original Pine Script v5 Smart Money Concepts architecture with relaxed trade frequencies.",
-    "badge": "Original Classic (+1,240%)",
+    "badge": "Original Classic (+1,240.26%)",
     "metrics": {
       "total_return_pct": 1240.26,
       "cagr_pct": 48.06,
@@ -61141,7 +61141,7 @@
     "archetype": "Volume Trader",
     "risk_tier": "Moderate",
     "recommended_for": "Active traders seeking maximum trade volume during bear trends (103 trades) with a generous 20% take profit target.",
-    "badge": "Max Trades (103 Trades)",
+    "badge": "Max Trades (104 Trades)",
     "metrics": {
       "total_return_pct": 71.19,
       "cagr_pct": 8.61,

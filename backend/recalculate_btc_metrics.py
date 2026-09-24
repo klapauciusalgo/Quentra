@@ -10,6 +10,7 @@ Ensures 100% mathematical consistency across:
 
 import os
 import json
+import re
 import pandas as pd
 import numpy as np
 
@@ -107,6 +108,55 @@ def recalculate_yearly_stats(closed_trades):
         })
     return sorted(yearly, key=lambda x: x["year"])
 
+
+def _format_signed_pct(value, decimals=2):
+    return f"{float(value):+,.{decimals}f}%"
+
+
+def _refresh_metric_badge(strat, metrics, yearly_stats):
+    """Keep numeric performance badges aligned with recalculated metrics."""
+    strat_id = strat.get("id")
+    badge = strat.get("badge")
+    if not badge:
+        return
+
+    total = _format_signed_pct(metrics["total_return_pct"])
+    cagr = f"{float(metrics['cagr_pct']):,.2f}%"
+    max_dd = f"{float(metrics['max_drawdown_pct']):+,.2f}%"
+    win_rate = f"{float(metrics['win_rate_pct']):,.1f}%"
+
+    if strat_id == "pippo-30m-alpha":
+        if "Return" in badge:
+            badge = re.sub(r"[+-]?\d[\d,]*(?:\.\d+)?%", total, badge, count=1)
+            badge = re.sub(r"CAGR\s+[+-]?\d[\d,]*(?:\.\d+)?%", f"CAGR {cagr}", badge)
+        else:
+            badge = re.sub(r"\d[\d,]*(?:\.\d+)?x", f"{float(metrics['profit_factor']):.2f}x", badge, count=1)
+    elif strat_id == "pippo-30m-new-gen":
+        profitable_years = sum(1 for row in yearly_stats if row["total_return_pct"] > 0)
+        badge = re.sub(r"\d+\/\d+\s+Profitable Years", f"{profitable_years}/{len(yearly_stats)} Profitable Years", badge)
+        badge = re.sub(r"Max DD\s+[+-]?\d[\d,]*(?:\.\d+)?%", f"Max DD {max_dd}", badge)
+    elif strat_id == "pippo-30m-grd":
+        badge = re.sub(r"[+-]?\d[\d,]*(?:\.\d+)?%", total, badge, count=1)
+        badge = re.sub(r"CAGR\s+[+-]?\d[\d,]*(?:\.\d+)?%", f"CAGR {cagr}", badge)
+        if "Trades" in badge:
+            badge = re.sub(r"\d[\d,]*\s+Trades", f"{metrics['total_trades']} Trades", badge, count=1)
+    elif strat_id == "pippo-1h-enhanced":
+        badge = re.sub(r"[+-]?\d[\d,]*(?:\.\d+)?%", total, badge, count=1)
+        badge = re.sub(r"CAGR\s+[+-]?\d[\d,]*(?:\.\d+)?%", f"CAGR {cagr}", badge)
+    elif strat_id == "pippo-30m-scalp":
+        badge = re.sub(r"\d[\d,]*(?:\.\d+)?%\s+WR", f"{win_rate} WR", badge, count=1)
+    elif strat_id == "pure-macro-weekly-ma55":
+        badge = re.sub(r"[+-]?\d[\d,]*(?:\.\d+)?%", total, badge, count=1)
+    elif strat_id == "pippo-4h-original":
+        badge = re.sub(r"[+-]?\d[\d,]*(?:\.\d+)?%", total, badge, count=1)
+        badge = re.sub(r"CAGR\s+[+-]?\d[\d,]*(?:\.\d+)?%", f"CAGR {cagr}", badge)
+    elif strat_id == "pippo-30m-short-v2-a":
+        badge = re.sub(r"\d[\d,]*(?:\.\d+)?%\s+WR", f"{win_rate} WR", badge, count=1)
+    elif strat_id == "pippo-30m-short-v2-b":
+        badge = re.sub(r"\d[\d,]*\s+Trades", f"{metrics['total_trades']} Trades", badge, count=1)
+
+    strat["badge"] = badge
+
 def process_strategies(
     input_file,
     *,
@@ -169,6 +219,7 @@ def process_strategies(
         strat["profit_factor"] = metrics["profit_factor"]
         strat["max_drawdown_pct"] = metrics["max_drawdown_pct"]
         strat["trades_count"] = metrics["total_trades"]
+        _refresh_metric_badge(strat, metrics, yearly_stats)
 
     return strategies
 

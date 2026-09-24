@@ -9,7 +9,7 @@
     "archetype": "Alpha Trend Rider",
     "risk_tier": "Moderate",
     "recommended_for": "Traders looking to capture prolonged Ethereum multi-week macro expansions.",
-    "badge": "+1,620.53% Return (CAGR 53.53%)",
+    "badge": "+1,302.56% Return (CAGR 48.67%)",
     "metrics": {
       "total_return_pct": 1302.56,
       "cagr_pct": 48.67,
@@ -3166,6 +3166,19 @@
         "status": "OPEN",
         "isActive": true,
         "tradeNo": 126
+      },
+      {
+        "time": 1790258280,
+        "position": "belowBar",
+        "color": "#30D158",
+        "shape": "arrowUp",
+        "text": "ACTIVE LONG @ $2,660.57",
+        "size": 3,
+        "entryPrice": 2660.57,
+        "side": "LONG",
+        "status": "OPEN",
+        "isActive": true,
+        "tradeNo": 126
       }
     ],
     "trades": [
@@ -4972,7 +4985,7 @@
       "partial_take_profit": null,
       "partial_position_pct": 0.0,
       "partial_taken": false,
-      "timestamp": "2026-09-24 13:51 UTC",
+      "timestamp": "2026-09-24 13:58 UTC",
       "contributing_agents": [
         "quant",
         "trader",
@@ -34099,7 +34112,7 @@
     "archetype": "Trend Continuation Engine",
     "risk_tier": "Moderate",
     "recommended_for": "Swing traders looking for balanced execution with intermediate macro filtering.",
-    "badge": "+2,100.61% Return (CAGR 62.16%)",
+    "badge": "+1,990.80% Return (CAGR 58.44%)",
     "metrics": {
       "total_return_pct": 1990.8,
       "cagr_pct": 58.44,
@@ -42363,7 +42376,7 @@
     "archetype": "High-Timeframe Trend Engine",
     "risk_tier": "Conservative-Moderate",
     "recommended_for": "Macro trend followers seeking minimal trade frequency and maximum ride time.",
-    "badge": "+2,252.19% Return (CAGR 60.29%)",
+    "badge": "+2,285.59% Return (CAGR 60.30%)",
     "metrics": {
       "total_return_pct": 2285.59,
       "cagr_pct": 60.3,

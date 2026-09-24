@@ -458,6 +458,7 @@ async def get_klines(
         return {
             "symbol": sym,
             "timeframe": tf,
+            "data_source": "local_parquet",
             "count": len(candles),
             "candles": candles
         }
@@ -482,6 +483,7 @@ async def get_klines(
     return {
         "symbol": sym,
         "timeframe": tf,
+        "data_source": "local_parquet",
         "count": len(sliced),
         "candles": sliced
     }

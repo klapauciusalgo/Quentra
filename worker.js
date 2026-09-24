@@ -50,13 +50,26 @@ export default {
         return await fetch(new Request(target.toString(), request));
       } catch (err) {
         console.error('Proxy to backend failed:', err);
-        if (url.pathname.startsWith('/api/signals/') || url.pathname.startsWith('/ws')) {
+        if (
+          url.pathname.startsWith('/api/signals/') ||
+          url.pathname === '/api/klines' ||
+          url.pathname.startsWith('/ws')
+        ) {
           return new Response(JSON.stringify({
-            error: 'Live signal backend is unavailable',
+            error: 'Local data backend is unavailable',
             code: 'BACKEND_UNAVAILABLE',
           }), { status: 503, headers: CORS_HEADERS });
         }
       }
+    }
+
+    // Chart history is authoritative in the local parquet backend. Never
+    // silently replace it with Binance/Bybit candles at the edge.
+    if (url.pathname === '/api/klines' && !(env && env.BACKEND_URL)) {
+      return new Response(JSON.stringify({
+        error: 'Local chart data backend is not configured',
+        code: 'LOCAL_DATA_BACKEND_REQUIRED',
+      }), { status: 503, headers: CORS_HEADERS });
     }
 
     // Never let a WebSocket request fall through to the SPA asset handler.
@@ -224,102 +237,6 @@ export default {
         price: defaultPrice,
         change_24h_pct: 0.0,
         status: 'STANDBY',
-      }), { headers: CORS_HEADERS });
-    }
-
-    // 6. Edge handler: /api/klines (Multi-asset candlestick feed)
-    if (url.pathname === '/api/klines') {
-      const sym = (url.searchParams.get('symbol') || 'BTCUSDT').toUpperCase();
-      const tf = (url.searchParams.get('timeframe') || '1h').toLowerCase();
-      const limit = Math.min(parseInt(url.searchParams.get('limit') || '1000', 10), 1000);
-      
-      // Tier 1: Try Binance API first
-      try {
-        const binanceRes = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${tf}&limit=${limit}`);
-        if (binanceRes.ok) {
-          const raw = await binanceRes.json();
-          if (Array.isArray(raw) && raw.length > 0) {
-            const parsed = raw.map((c) => ({
-              time: Math.floor(c[0] / 1000),
-              open: parseFloat(c[1]),
-              high: parseFloat(c[2]),
-              low: parseFloat(c[3]),
-              close: parseFloat(c[4]),
-              volume: parseFloat(c[5]),
-            }));
-
-            const ma8Arr = calculateMAs(parsed, 8);
-            const ma25Arr = calculateMAs(parsed, 25);
-            const ma50Arr = calculateMAs(parsed, 50);
-            const ma55Arr = calculateMAs(parsed, 55);
-            const ma111Arr = calculateMAs(parsed, 111);
-
-            const enriched = parsed.map((c, idx) => ({
-              ...c,
-              ma8: ma8Arr[idx],
-              ma25: ma25Arr[idx],
-              ma50: ma50Arr[idx],
-              ma55: ma55Arr[idx],
-              ma111: ma111Arr[idx],
-            }));
-
-            return new Response(JSON.stringify({
-              symbol: sym,
-              timeframe: tf,
-              count: enriched.length,
-              candles: enriched,
-            }), { headers: CORS_HEADERS });
-          }
-        }
-      } catch (err) {}
-
-      // Tier 2: Try Bybit fallback
-      try {
-        const bybitTfMap = { '30m': '30', '1h': '60', '4h': '240', '1d': 'D', '1w': 'W' };
-        const bybitInterval = bybitTfMap[tf] || '60';
-        const bybitRes = await fetch(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${sym}&interval=${bybitInterval}&limit=${limit}`);
-        if (bybitRes.ok) {
-          const data = await bybitRes.json();
-          if (data?.result?.list && Array.isArray(data.result.list)) {
-            const reversed = [...data.result.list].reverse();
-            const parsed = reversed.map((c) => ({
-              time: Math.floor(parseInt(c[0], 10) / 1000),
-              open: parseFloat(c[1]),
-              high: parseFloat(c[2]),
-              low: parseFloat(c[3]),
-              close: parseFloat(c[4]),
-              volume: parseFloat(c[5]),
-            }));
-
-            const ma8Arr = calculateMAs(parsed, 8);
-            const ma25Arr = calculateMAs(parsed, 25);
-            const ma50Arr = calculateMAs(parsed, 50);
-            const ma55Arr = calculateMAs(parsed, 55);
-            const ma111Arr = calculateMAs(parsed, 111);
-
-            const enriched = parsed.map((c, idx) => ({
-              ...c,
-              ma8: ma8Arr[idx],
-              ma25: ma25Arr[idx],
-              ma50: ma50Arr[idx],
-              ma55: ma55Arr[idx],
-              ma111: ma111Arr[idx],
-            }));
-
-            return new Response(JSON.stringify({
-              symbol: sym,
-              timeframe: tf,
-              count: enriched.length,
-              candles: enriched,
-            }), { headers: CORS_HEADERS });
-          }
-        }
-      } catch (err) {}
-
-      return new Response(JSON.stringify({
-        symbol: sym,
-        timeframe: tf,
-        candles: [],
       }), { headers: CORS_HEADERS });
     }
 

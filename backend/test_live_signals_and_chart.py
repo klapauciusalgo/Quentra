@@ -144,6 +144,7 @@ def test_klines_endpoint(client):
         res = client.get(f"/api/klines?timeframe={tf}&limit=100")
         assert res.status_code == 200
         data = res.json()
+        assert data["data_source"] == "local_parquet"
         assert len(data["candles"]) == 100
         assert data["candles"][-1]["close"] > 50000.0
 

@@ -425,7 +425,6 @@ class LiveSignalEngine:
         sym = symbol.upper()
         buffers = self.get_candle_buffers(sym)
         macro = self.get_macro_state(sym)
-        last_p = self.get_last_price(sym)
         try:
             # 1. Weekly MA55
             if "1w" in buffers and not buffers["1w"].empty:
@@ -435,8 +434,10 @@ class LiveSignalEngine:
                 else:
                     macro["weekly_ma55"] = float(df_w["close"].rolling(55).mean().iloc[-1])
                 macro["weekly_close"] = float(df_w["close"].iloc[-1])
-                effective_weekly_p = last_p if last_p > 0 else macro["weekly_close"]
-                macro["is_weekly_bullish"] = effective_weekly_p >= macro["weekly_ma55"]
+                # Regime decisions are made from the latest completed candle.
+                # The live ticker is telemetry only and must not change the
+                # regime while the weekly candle is still forming.
+                macro["is_weekly_bullish"] = macro["weekly_close"] >= macro["weekly_ma55"]
 
             # 2. 4H SMA111
             if "4h" in buffers and not buffers["4h"].empty:
@@ -446,21 +447,18 @@ class LiveSignalEngine:
                 else:
                     macro["sma111_4h"] = float(df_4h["close"].rolling(111).mean().iloc[-1])
                 macro["close_4h"] = float(df_4h["close"].iloc[-1])
-                effective_4h_p = last_p if last_p > 0 else macro["close_4h"]
-                macro["is_4h_bullish"] = effective_4h_p >= macro["sma111_4h"]
+                macro["is_4h_bullish"] = macro["close_4h"] >= macro["sma111_4h"]
 
             # 3. 1H EMA50
             if "1h" in buffers and not buffers["1h"].empty:
                 df_1h = buffers["1h"]
                 macro["ema50_1h"] = float(df_1h["close"].ewm(span=50, adjust=False).mean().iloc[-1])
                 macro["close_1h"] = float(df_1h["close"].iloc[-1])
-                effective_1h_p = last_p if last_p > 0 else macro["close_1h"]
-                macro["is_1h_bullish"] = effective_1h_p >= macro["ema50_1h"]
+                macro["is_1h_bullish"] = macro["close_1h"] >= macro["ema50_1h"]
 
             # Macro regime summary
             ma55 = macro["weekly_ma55"]
-            effective_p = last_p if last_p > 0 else macro["weekly_close"]
-            diff_pct = ((effective_p - ma55) / ma55) * 100.0 if ma55 > 0 else 0.0
+            diff_pct = ((macro["weekly_close"] - ma55) / ma55) * 100.0 if ma55 > 0 else 0.0
             macro["distance_weekly_ma55_pct"] = round(diff_pct, 2)
             if macro["is_weekly_bullish"]:
                 macro["regime_description"] = f"BULLISH EXPANSION (+{diff_pct:.1f}% vs Weekly MA55)"
@@ -819,7 +817,13 @@ class LiveSignalEngine:
             model.distance_to_trigger_pct = round(dist_pct, 2)
 
     def on_ticker_tick(self, price: float, timestamp: int, symbol: str = "BTCUSDT"):
-        """Called upon every live ticker price tick from Binance WebSocket."""
+        """Update mark-to-market telemetry without executing strategy rules.
+
+        Entries, breakeven changes, stop losses, take profits, structural exits,
+        and regime flips are all evaluated by ``on_kline_closed`` only.  The
+        ticker stream is intentionally limited to live PnL and UI distance
+        updates so an intrabar price cannot create or close a signal.
+        """
         sym = symbol.upper()
         if sym == "ETHUSDT":
             self.last_price_eth = price
@@ -828,7 +832,6 @@ class LiveSignalEngine:
 
         models = self.get_models(sym)
         events = []
-        fmt_sym = "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT"
 
         for strat_id, model in models.items():
             if model.position_status == "OPEN":
@@ -840,83 +843,6 @@ class LiveSignalEngine:
                     flt_pnl = ((model.entry_price - price) / model.entry_price) * 100.0
                     model.trough_price = min(model.trough_price, price)
 
-                cfg = model.config
-
-                # 2. Check Dynamic Breakeven Activation
-                be_pct = cfg.get("be_pct", 0.0)
-                if be_pct > 0 and not model.be_active:
-                    hit_be_threshold = (flt_pnl >= (be_pct * 100.0))
-                    if hit_be_threshold:
-                        model.be_active = True
-                        if model.direction == "LONG":
-                            model.current_sl = round(model.entry_price * 1.002, 2)
-                        else:
-                            model.current_sl = round(model.entry_price * 0.998, 2)
-                        if model.active_ticket:
-                            model.active_ticket["stop_loss"] = model.current_sl
-                        now_ts = int(time.time())
-                        model.active_markers.append({
-                            "time": now_ts,
-                            "position": "aboveBar" if model.direction == "LONG" else "belowBar",
-                            "color": "#FF9F0A",
-                            "shape": "circle",
-                            "text": f"BE LOCKED @ ${model.current_sl:,.2f} (+0.2%)",
-                            "size": 2,
-                            "exitPrice": model.current_sl,
-                            "isBreakeven": True
-                        })
-                        logger.info(f"⚡ [BREAKEVEN ACTIVATED] [{sym}] {model.name} locked BE stop at ${model.current_sl:,.2f}")
-                        events.append({
-                            "type": "BREAKEVEN_LOCKED",
-                            "symbol": fmt_sym,
-                            "asset": sym,
-                            "strategy_id": model.strat_id,
-                            "strategy_name": model.name,
-                            "new_stop_loss": model.current_sl,
-                            "price": price,
-                            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-                        })
-                        try:
-                            self._persist_opened_trade(model, model.active_ticket or {})
-                        except Exception as exc:
-                            logger.error(f"Error persisting breakeven state for {model.strat_id}: {exc}")
-
-                # 3. Check Intra-bar Stop Loss
-                hit_sl = False
-                if model.current_sl > 0 and model.direction == "LONG" and price <= model.current_sl:
-                    hit_sl = True
-                elif model.current_sl > 0 and model.direction == "SHORT" and price >= model.current_sl:
-                    hit_sl = True
-
-                # 4. Check Intra-bar Take Profit
-                hit_tp = False
-                tp_pct = cfg.get("tp_pct", 0.0)
-                if tp_pct > 0:
-                    if model.direction == "LONG" and price >= model.target_tp:
-                        hit_tp = True
-                    elif model.direction == "SHORT" and price <= model.target_tp:
-                        hit_tp = True
-
-                if hit_sl or hit_tp:
-                    exit_reason = "Take_Profit" if hit_tp else ("Fast_Breakeven" if model.be_active else "Stop_Loss")
-                    exit_trade = self._close_position(model, price, exit_reason)
-                    events.append({
-                        "type": "POSITION_CLOSED",
-                        "symbol": fmt_sym,
-                        "asset": sym,
-                        "strategy_id": model.strat_id,
-                        "strategy_name": model.name,
-                        "trade": exit_trade
-                    })
-                    events.append({
-                        "type": "SIGNAL_EXIT",
-                        "symbol": fmt_sym,
-                        "asset": sym,
-                        "strategy_id": model.strat_id,
-                        "strategy_name": model.name,
-                        "trade": exit_trade,
-                        "autonomous": True
-                    })
             else:
                 # Update distance to trigger dynamically for flat models
                 if model.next_entry_trigger > 0 and price > 0:
@@ -925,6 +851,98 @@ class LiveSignalEngine:
                     else:
                         model.distance_to_trigger_pct = round(((price - model.next_entry_trigger) / price) * 100.0, 2)
 
+        return events
+
+    def _evaluate_closed_position(self, model: StrategyModel, close_price: float, candle_time: str) -> list[dict]:
+        """Apply BE, SL, and TP rules using a completed candle close only."""
+        if model.position_status != "OPEN":
+            return []
+
+        sym = getattr(model, "symbol", "BTCUSDT").upper()
+        fmt_sym = "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT"
+        if model.direction == "LONG":
+            flt_pnl = ((close_price - model.entry_price) / model.entry_price) * 100.0
+        else:
+            flt_pnl = ((model.entry_price - close_price) / model.entry_price) * 100.0
+
+        events = []
+        cfg = model.config
+        be_pct = cfg.get("be_pct", 0.0)
+        if be_pct > 0 and not model.be_active and flt_pnl >= (be_pct * 100.0):
+            model.be_active = True
+            model.current_sl = round(
+                model.entry_price * (1.002 if model.direction == "LONG" else 0.998),
+                2,
+            )
+            if model.active_ticket:
+                model.active_ticket["stop_loss"] = model.current_sl
+            try:
+                marker_time = int(pd.to_datetime(candle_time, utc=True).timestamp())
+            except Exception:
+                marker_time = int(time.time())
+            model.active_markers.append({
+                "time": marker_time,
+                "position": "aboveBar" if model.direction == "LONG" else "belowBar",
+                "color": "#FF9F0A",
+                "shape": "circle",
+                "text": f"BE LOCKED @ ${model.current_sl:,.2f} (+0.2%)",
+                "size": 2,
+                "exitPrice": model.current_sl,
+                "isBreakeven": True,
+            })
+            logger.info(
+                f"⚡ [BREAKEVEN ACTIVATED] [{sym}] {model.name} "
+                f"locked BE stop at ${model.current_sl:,.2f} on candle close"
+            )
+            events.append({
+                "type": "BREAKEVEN_LOCKED",
+                "symbol": fmt_sym,
+                "asset": sym,
+                "strategy_id": model.strat_id,
+                "strategy_name": model.name,
+                "new_stop_loss": model.current_sl,
+                "price": close_price,
+                "timestamp": candle_time,
+                "candle_close": True,
+            })
+            try:
+                self._persist_opened_trade(model, model.active_ticket or {})
+            except Exception as exc:
+                logger.error(f"Error persisting breakeven state for {model.strat_id}: {exc}")
+
+        hit_sl = (
+            model.current_sl > 0
+            and ((model.direction == "LONG" and close_price <= model.current_sl)
+                 or (model.direction == "SHORT" and close_price >= model.current_sl))
+        )
+        tp_pct = cfg.get("tp_pct", 0.0)
+        hit_tp = (
+            tp_pct > 0
+            and ((model.direction == "LONG" and close_price >= model.target_tp)
+                 or (model.direction == "SHORT" and close_price <= model.target_tp))
+        )
+        if hit_sl or hit_tp:
+            exit_reason = "Take_Profit" if hit_tp else ("Fast_Breakeven" if model.be_active else "Stop_Loss")
+            exit_trade = self._close_position(model, close_price, exit_reason, exit_time=candle_time)
+            events.append({
+                "type": "POSITION_CLOSED",
+                "symbol": fmt_sym,
+                "asset": sym,
+                "strategy_id": model.strat_id,
+                "strategy_name": model.name,
+                "trade": exit_trade,
+                "candle_close": True,
+            })
+            events.append({
+                "type": "SIGNAL_EXIT",
+                "symbol": fmt_sym,
+                "asset": sym,
+                "strategy_id": model.strat_id,
+                "strategy_name": model.name,
+                "trade": exit_trade,
+                "autonomous": True,
+                "candle_close": True,
+            })
         return events
 
     async def on_kline_closed(self, timeframe: str, candle: dict, binance_manager: Any, symbol: str = "BTCUSDT"):
@@ -983,6 +1001,14 @@ class LiveSignalEngine:
                 continue
 
             self._evaluate_strategy_levels(model, sym)
+            close_events = self._evaluate_closed_position(model, curr_price, new_bar["datetime"])
+            for event in close_events:
+                await binance_manager.broadcast(event)
+            # A protection exit is terminal for this candle.  Do not close and
+            # reopen the same strategy from the same bar.
+            if any(event.get("type") == "POSITION_CLOSED" for event in close_events):
+                continue
+
             closes = buffers[tf]["close"].values
             highs = buffers[tf]["high"].values
             lows = buffers[tf]["low"].values
@@ -997,11 +1023,12 @@ class LiveSignalEngine:
                 ma55 = float(buffers[tf]["MA55"].iloc[-1]) if "MA55" in buffers[tf] and not pd.isna(buffers[tf]["MA55"].iloc[-1]) else float(pd.Series(closes).rolling(55).mean().iloc[-1])
                 desired_side = "LONG" if curr_close >= ma55 else "SHORT"
                 if model.position_status == "OPEN" and model.direction != desired_side:
-                    exit_trade = self._close_position(model, curr_close, "Weekly_MA55_Regime_Flip")
+                    exit_trade = self._close_position(model, curr_close, "Weekly_MA55_Regime_Flip", exit_time=new_bar["datetime"])
                     await binance_manager.broadcast({
                         "type": "SIGNAL_EXIT", "symbol": fmt_sym, "asset": sym,
                         "strategy_id": model.strat_id, "strategy_name": model.name,
                         "trade": exit_trade, "autonomous": True,
+                        "candle_close": True, "candle_time": new_bar["datetime"],
                     })
                 if model.position_status == "FLAT":
                     model.direction = desired_side
@@ -1011,6 +1038,7 @@ class LiveSignalEngine:
                     await binance_manager.broadcast({
                         "type": "NEW_SIGNAL", "symbol": fmt_sym, "asset": sym,
                         "ticket": ticket, "autonomous": True,
+                        "candle_close": True, "candle_time": new_bar["datetime"],
                     })
                 continue
 
@@ -1027,7 +1055,7 @@ class LiveSignalEngine:
                     at = atr_val <= 0.01
 
                     if a30 and sp and at and model.regime_ok:
-                        ticket = self._open_position(model, curr_close)
+                        ticket = self._open_position(model, curr_close, new_bar["datetime"])
                         logger.info(f"🚀 [AUTONOMOUS SIGNAL TRIGGERED] [{sym}] {model.direction} {model.name} @ ${curr_close:,.2f}")
                         try:
                             from supabase_client import record_live_signal
@@ -1047,12 +1075,14 @@ class LiveSignalEngine:
                             "symbol": fmt_sym,
                             "asset": sym,
                             "ticket": ticket,
-                            "autonomous": True
+                            "autonomous": True,
+                            "candle_close": True,
+                            "candle_time": new_bar["datetime"],
                         })
                 elif model.position_status == "OPEN":
                     fc = (curr_close < m25_30) and (curr_close < m50_30) and ((m25_30 - curr_close) / m25_30 >= 0.005) and ((m50_30 - curr_close) / m50_30 >= 0.005)
                     if fc:
-                        exit_trade = self._close_position(model, curr_close, "Force_Close_MA")
+                        exit_trade = self._close_position(model, curr_close, "Force_Close_MA", exit_time=new_bar["datetime"])
                         logger.info(f"⏹️ [AUTONOMOUS SIGNAL EXIT] [{sym}] {model.name} closed by Force Close MA @ ${curr_close:,.2f}")
                         await binance_manager.broadcast({
                             "type": "SIGNAL_EXIT",
@@ -1061,7 +1091,9 @@ class LiveSignalEngine:
                             "strategy_id": model.strat_id,
                             "strategy_name": model.name,
                             "trade": exit_trade,
-                            "autonomous": True
+                            "autonomous": True,
+                            "candle_close": True,
+                            "candle_time": new_bar["datetime"],
                         })
                 continue
 
@@ -1080,7 +1112,7 @@ class LiveSignalEngine:
                         entry_triggered = True
 
                 if entry_triggered:
-                    ticket = self._open_position(model, curr_close)
+                    ticket = self._open_position(model, curr_close, new_bar["datetime"])
                     logger.info(f"🚀 [AUTONOMOUS SIGNAL TRIGGERED] [{sym}] {model.direction} {model.name} @ ${curr_close:,.2f}")
                     
                     # Record to Supabase
@@ -1103,7 +1135,9 @@ class LiveSignalEngine:
                         "symbol": fmt_sym,
                         "asset": sym,
                         "ticket": ticket,
-                        "autonomous": True
+                        "autonomous": True,
+                        "candle_close": True,
+                        "candle_time": new_bar["datetime"],
                     })
 
             # B. Evaluate Structural Exit (When OPEN)
@@ -1121,7 +1155,7 @@ class LiveSignalEngine:
                         struct_exit = True
 
                 if struct_exit:
-                    exit_trade = self._close_position(model, curr_close, "Structure_Exit")
+                    exit_trade = self._close_position(model, curr_close, "Structure_Exit", exit_time=new_bar["datetime"])
                     logger.info(f"⏹️ [AUTONOMOUS SIGNAL EXIT] [{sym}] {model.name} closed by Structure Exit @ ${curr_close:,.2f}")
 
                     # Broadcast SIGNAL_EXIT
@@ -1132,7 +1166,9 @@ class LiveSignalEngine:
                         "strategy_id": model.strat_id,
                         "strategy_name": model.name,
                         "trade": exit_trade,
-                        "autonomous": True
+                        "autonomous": True,
+                        "candle_close": True,
+                        "candle_time": new_bar["datetime"],
                     })
 
     def _open_position(self, model: StrategyModel, entry_p: float, entry_time: Optional[str] = None) -> dict:
@@ -1233,7 +1269,13 @@ class LiveSignalEngine:
 
         return ticket
 
-    def _close_position(self, model: StrategyModel, exit_p: float, reason: str) -> dict:
+    def _close_position(
+        self,
+        model: StrategyModel,
+        exit_p: float,
+        reason: str,
+        exit_time: Optional[str] = None,
+    ) -> dict:
         """Helper to close a position and calculate finalized trade metrics."""
         entry_p = model.entry_price
         if model.direction == "LONG":
@@ -1257,7 +1299,7 @@ class LiveSignalEngine:
             "entry_price": entry_p,
             "exit_price": exit_p,
             "entry_time": model.entry_time,
-            "exit_time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            "exit_time": exit_time or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "net_return_pct": round(net_ret, 2),
             "reason": reason,
             "status": "CLOSED"

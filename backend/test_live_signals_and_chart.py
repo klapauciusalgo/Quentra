@@ -225,8 +225,16 @@ def test_floor_with_eth_regime(client):
     assert 2000.0 < data["eth_market_regime"]["weekly_ma55"] < 4000.0 # ETH MA55 (~2648.68)
 
 def test_autonomous_buy_execution_and_breakeven_lock(client):
-    """Verify that Long engines track PnL, lock Breakeven (+0.2%), and execute Take Profit / Stop Loss autonomously."""
+    """Verify that protection rules execute from completed candle closes only."""
+    import asyncio
     from live_signal_engine import LiveSignalEngine, StrategyModel
+
+    class BroadcastCollector:
+        def __init__(self):
+            self.events = []
+
+        async def broadcast(self, event):
+            self.events.append(event)
     
     # Create isolated test engine so production models are never touched
     test_engine = LiveSignalEngine()
@@ -249,18 +257,48 @@ def test_autonomous_buy_execution_and_breakeven_lock(client):
     assert model.current_sl == 76000.0 # -5%
     assert model.be_active is False
 
-    # 2. Simulate price advance by +3.5% (triggers Breakeven lock)
+    collector = BroadcastCollector()
+
+    # A ticker update only changes mark-to-market telemetry.
     now_ts = 1774300000
     be_price = 80000.0 * 1.035 # 82,800
     events = test_engine.on_ticker_tick(be_price, now_ts, symbol="BTCUSDT")
-    
+    assert events == []
+    assert model.be_active is False
+
+    # 2. The completed candle close locks Breakeven.
+    asyncio.run(test_engine.on_kline_closed("30m", {
+        "time": now_ts,
+        "timestamp": now_ts * 1000,
+        "open": 80000.0,
+        "high": be_price,
+        "low": 80000.0,
+        "close": be_price,
+        "volume": 1.0,
+    }, collector, symbol="BTCUSDT"))
+    events = collector.events
+
     be_events = [e for e in events if e.get("type") == "BREAKEVEN_LOCKED" and e.get("strategy_id") == "test-long-algo"]
     assert len(be_events) == 1
     assert model.be_active is True
     assert model.current_sl == 80160.0 # +0.2% locked above entry 80,000!
 
-    # 3. Simulate price drop to hit Breakeven stop loss
+    # 3. A ticker crossing the stop does not close the position.
     exit_events = test_engine.on_ticker_tick(80150.0, now_ts + 10, symbol="BTCUSDT")
+    assert exit_events == []
+    assert model.position_status == "OPEN"
+
+    # 4. The completed candle close executes the Breakeven stop.
+    asyncio.run(test_engine.on_kline_closed("30m", {
+        "time": now_ts + 1800,
+        "timestamp": (now_ts + 1800) * 1000,
+        "open": 80150.0,
+        "high": 80150.0,
+        "low": 80100.0,
+        "close": 80150.0,
+        "volume": 1.0,
+    }, collector, symbol="BTCUSDT"))
+    exit_events = collector.events
     closed = [e for e in exit_events if e.get("type") == "POSITION_CLOSED" and e.get("strategy_id") == "test-long-algo"]
     assert len(closed) == 1
     assert model.position_status == "FLAT"
@@ -268,8 +306,16 @@ def test_autonomous_buy_execution_and_breakeven_lock(client):
     assert closed[0]["trade"]["net_return_pct"] >= 0.0 # Profit preserved!
 
 def test_autonomous_short_execution_and_take_profit(client):
-    """Verify that Short engines track PnL, lock Breakeven, and execute Take Profit autonomously on ETH."""
+    """Verify that Short protection rules execute from completed candle closes on ETH."""
+    import asyncio
     from live_signal_engine import LiveSignalEngine, StrategyModel
+
+    class BroadcastCollector:
+        def __init__(self):
+            self.events = []
+
+        async def broadcast(self, event):
+            self.events.append(event)
     
     test_engine = LiveSignalEngine()
     model = StrategyModel(
@@ -290,16 +336,45 @@ def test_autonomous_short_execution_and_take_profit(client):
     assert ticket["symbol"] == "ETH/USDT"
     assert model.current_sl == 2940.0 # +5% for short
 
-    # 2. Simulate price drop by 2.5% (triggers short Breakeven lock)
+    collector = BroadcastCollector()
+    # 2. A ticker update does not lock Breakeven.
     now_ts = 1774300000
     events = test_engine.on_ticker_tick(2730.0, now_ts, symbol="ETHUSDT")
+    assert events == []
+    assert model.be_active is False
+
+    # The completed candle close locks Breakeven.
+    asyncio.run(test_engine.on_kline_closed("30m", {
+        "time": now_ts,
+        "timestamp": now_ts * 1000,
+        "open": 2800.0,
+        "high": 2800.0,
+        "low": 2730.0,
+        "close": 2730.0,
+        "volume": 1.0,
+    }, collector, symbol="ETHUSDT"))
+    events = collector.events
     be_events = [e for e in events if e.get("type") == "BREAKEVEN_LOCKED" and e.get("strategy_id") == "test-short-eth"]
     assert len(be_events) == 1
     assert model.be_active is True
     assert model.current_sl == 2794.4 # -0.2% locked below entry 2,800!
 
-    # 3. Simulate price drop to hit Take Profit (10% down -> 2,520)
+    # 3. The ticker crossing TP does not close the position.
     tp_events = test_engine.on_ticker_tick(2510.0, now_ts + 20, symbol="ETHUSDT")
+    assert tp_events == []
+    assert model.position_status == "OPEN"
+
+    # 4. The completed candle close executes Take Profit (10% down -> 2,520).
+    asyncio.run(test_engine.on_kline_closed("30m", {
+        "time": now_ts + 1800,
+        "timestamp": (now_ts + 1800) * 1000,
+        "open": 2510.0,
+        "high": 2510.0,
+        "low": 2510.0,
+        "close": 2510.0,
+        "volume": 1.0,
+    }, collector, symbol="ETHUSDT"))
+    tp_events = collector.events
     closed = [e for e in tp_events if e.get("type") == "POSITION_CLOSED" and e.get("strategy_id") == "test-short-eth"]
     assert len(closed) == 1
     assert model.position_status == "FLAT"
@@ -451,4 +526,3 @@ def test_multi_asset_signals_endpoints(client):
     sim_data = res_sim.json()
     assert sim_data["ticket"]["symbol"] == "ETH/USDT"
     assert sim_data["ticket"]["asset"] == "ETHUSDT"
-

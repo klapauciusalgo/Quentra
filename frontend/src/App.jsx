@@ -224,6 +224,9 @@ function TradingApp() {
               current_price: price,
               floating_pnl_pct: strategy.floating_pnl_pct || 0.0,
               stop_loss: strategy.stop_loss,
+              be_active: strategy.be_active,
+              partial_taken: strategy.partial_taken,
+              partial_exit_price: strategy.partial_exit_price,
               take_profit: strategy.take_profit,
               timestamp: strategy.entry_time || new Date().toLocaleTimeString(),
               status: 'IN_POSITION',
@@ -528,6 +531,9 @@ function TradingApp() {
               current_price: msg.ticket?.current_price || msg.ticket?.entry_price,
               floating_pnl_pct: 0.0,
               stop_loss: msg.ticket?.stop_loss,
+              be_active: msg.ticket?.be_active || false,
+              partial_taken: msg.ticket?.partial_taken || false,
+              partial_take_profit: msg.ticket?.partial_take_profit,
               take_profit: msg.ticket?.take_profit,
               timestamp: new Date().toLocaleTimeString(),
               status: 'IN_POSITION',
@@ -555,6 +561,37 @@ function TradingApp() {
               price: msg.ticket?.entry_price,
             });
             setTimeout(() => setBannerAlert(null), 7000);
+          } else if (msg.type === 'PARTIAL_TAKE_PROFIT') {
+            const asset = msg.asset || 'BTCUSDT';
+            if (asset === selectedAssetRef.current && msg.strategy_id) {
+              setActiveSignals((prev) =>
+                prev.map((s) =>
+                  s.strategy_id === msg.strategy_id
+                    ? {
+                        ...s,
+                        stop_loss: msg.new_stop_loss,
+                        be_active: Boolean(msg.be_locked),
+                        partial_taken: true,
+                        partial_pct: msg.partial_pct,
+                      }
+                    : s
+                )
+              );
+              refreshLiveState(asset, false);
+            }
+            setSignalNotifications((prev) => [
+              {
+                id: `notif-${Date.now()}`,
+                type: 'PARTIAL_TAKE_PROFIT',
+                title: `PARTIAL TAKE PROFIT: ${msg.strategy_name || ''}`,
+                strategy: msg.strategy_name || '',
+                price: msg.price,
+                partial_pct: msg.partial_pct,
+                new_stop_loss: msg.new_stop_loss,
+                timestamp: new Date().toLocaleTimeString(),
+              },
+              ...prev.slice(0, 19),
+            ]);
           } else if (msg.type === 'POSITION_CLOSED') {
             // Protection exits emit POSITION_CLOSED followed by SIGNAL_EXIT.
             // Reconcile immediately without creating a duplicate notification;

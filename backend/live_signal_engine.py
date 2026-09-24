@@ -140,12 +140,19 @@ class StrategyModel:
         self.current_sl = 0.0
         self.be_active = False
         self.target_tp = 0.0
+        self.partial_taken = False
+        self.partial_exit_price = 0.0
         
         # Live market telemetry
         self.next_entry_trigger = 0.0
         self.structural_floor = 0.0
         self.distance_to_trigger_pct = 0.0
         self.regime_ok = False
+        self.major_swing_level = 0.0
+        self.entry_swing_level = 0.0
+        self.exit_swing_level = 0.0
+        self.entry_confluence_ok = True
+        self.exit_confluence_ok = True
         
         # Recent executed trades log in this session
         self.recent_trades: List[dict] = []
@@ -264,7 +271,9 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
                 "ent_swing": 5,
                 "ex_swing": 5,
                 "sl_pct": 0.15,
-                "be_pct": 0.05,
+                # The original 4H rule exits on bearish CHoCH/structural
+                # breakdown. It does not use the generic fast breakeven rule.
+                "be_pct": 0.0,
                 "tp_pct": 0.75,
                 "regime": "4h_sma111"
             },
@@ -283,6 +292,7 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
                 "be_pct": 0.04,
                 "tp_pct": 0.75,
                 "partial_tp": 0.04,
+                "partial_weight": 0.30,
                 "regime": "4h_sma111_and_1h_ema50"
             },
             symbol=sym
@@ -495,11 +505,14 @@ class LiveSignalEngine:
             is_open_trade = is_open_trade_record(last_trade)
 
             if is_open_trade:
+                protection_normalized = False
                 entry_p = float(last_trade.get("entry_price", 0.0))
                 entry_time = str(last_trade.get("entry_time", ""))
                 curr_sl = float(last_trade.get("stop_loss", 0.0))
                 target_tp = float(last_trade.get("take_profit", 0.0))
                 be_active = bool(last_trade.get("be_activated", False))
+                partial_taken = bool(last_trade.get("partial_taken", False))
+                partial_exit_price = float(last_trade.get("partial_exit_price", 0.0) or 0.0)
 
                 model.direction = str(last_trade.get("side") or model.direction).upper()
                 model.position_status = "OPEN"
@@ -510,7 +523,25 @@ class LiveSignalEngine:
                 model.current_sl = curr_sl
                 model.target_tp = target_tp
                 model.be_active = be_active
+                model.partial_taken = partial_taken
+                model.partial_exit_price = partial_exit_price
                 model.active_ticket = strat_data.get("active_ticket")
+
+                # Strategies without a breakeven rule must always restore the
+                # configured hard stop. Older persisted records may contain a
+                # stop from a previous generic BE implementation.
+                if model.config.get("be_pct", 0.0) <= 0:
+                    model.be_active = False
+                    sl_pct = model.config.get("sl_pct", 0.0)
+                    normalized_sl = round(
+                        entry_p * (1.0 - sl_pct if model.direction == "LONG" else 1.0 + sl_pct),
+                        2,
+                    ) if sl_pct > 0 else 0.0
+                    protection_normalized = bool(be_active or abs(curr_sl - normalized_sl) > 0.01)
+                    model.current_sl = normalized_sl
+                    if model.active_ticket:
+                        model.active_ticket["stop_loss"] = model.current_sl
+                        model.active_ticket["be_active"] = False
                 
                 # Restore only the markers that belong to the current open trade.
                 # Older inactive OPEN records must not be revived after a restart.
@@ -539,10 +570,17 @@ class LiveSignalEngine:
                         normalized["tradeNo"] = trade_no
                         active_markers.append(normalized)
                 model.active_markers = deduplicate_markers(active_markers)
-                logger.info(f"🚀 [STATE SYNC] Restored active {model.direction} trade for [{sym}] {model.name}: Entry  at {entry_time} (SL: , BE: {be_active})")
+                if protection_normalized:
+                    try:
+                        self._persist_opened_trade(model, model.active_ticket or {})
+                    except Exception as exc:
+                        logger.error(f"Error normalizing persisted protection state for {model.strat_id}: {exc}")
+                logger.info(f"🚀 [STATE SYNC] Restored active {model.direction} trade for [{sym}] {model.name}: Entry at {entry_time} (SL: {model.current_sl}, BE: {model.be_active})")
             else:
                 model.position_status = "FLAT"
                 model.entry_price = 0.0
+                model.partial_taken = False
+                model.partial_exit_price = 0.0
                 model.active_ticket = None
                 model.active_markers = []
 
@@ -735,6 +773,11 @@ class LiveSignalEngine:
         if n < 50:
             return
 
+        # SMC strategies use a major swing as a confluence anchor. The MA
+        # squeeze strategies have their own filters and do not use this gate.
+        model.entry_confluence_ok = True
+        model.exit_confluence_ok = True
+
         if model.config.get("execution") == "weekly_ma55_regime":
             ma55 = float(df["MA55"].iloc[-1]) if "MA55" in df and not pd.isna(df["MA55"].iloc[-1]) else float(df["close"].rolling(55).mean().iloc[-1])
             model.next_entry_trigger = round(ma55, 2)
@@ -754,7 +797,8 @@ class LiveSignalEngine:
                 c1h = float(df1h["close"].iloc[-1])
                 m25h = float(df1h["MA25"].iloc[-1]) if ("MA25" in df1h and not pd.isna(df1h["MA25"].iloc[-1])) else float(df1h["close"].rolling(25).mean().iloc[-1])
                 m50h = float(df1h["MA50"].iloc[-1]) if ("MA50" in df1h and not pd.isna(df1h["MA50"].iloc[-1])) else float(df1h["close"].rolling(50).mean().iloc[-1])
-                if c1h > m25h and c1h > m50h and ((c1h - m25h) / m25h < 0.015) and ((c1h - m50h) / m50h < 0.015):
+                regime_dist = float(model.config.get("regime_dist_1h", 0.015))
+                if c1h > m25h and c1h > m50h and ((c1h - m25h) / m25h < regime_dist) and ((c1h - m50h) / m50h < regime_dist):
                     reg_1h_ok = True
 
             if model.strat_id == "pippo-30m-new-gen":
@@ -786,6 +830,20 @@ class LiveSignalEngine:
         last_btm_ent = [b for b in btm_ent if b > 0][-1] if any(btm_ent > 0) else float(lows[-1])
         last_top_ex = [t for t in top_ex if t > 0][-1] if any(top_ex > 0) else float(highs[-1])
         last_btm_ex = [b for b in btm_ex if b > 0][-1] if any(btm_ex > 0) else float(lows[-1])
+
+        model.major_swing_level = round(last_top_maj if model.direction == "LONG" else last_btm_maj, 2)
+        model.entry_swing_level = round(last_top_ent if model.direction == "LONG" else last_btm_ent, 2)
+        model.exit_swing_level = round(last_btm_ex if model.direction == "LONG" else last_top_ex, 2)
+        model.entry_confluence_ok = (
+            model.major_swing_level > 0
+            and model.entry_swing_level > 0
+            and not np.isclose(model.major_swing_level, model.entry_swing_level)
+        )
+        model.exit_confluence_ok = (
+            model.major_swing_level > 0
+            and model.exit_swing_level > 0
+            and not np.isclose(model.major_swing_level, model.exit_swing_level)
+        )
 
         curr_p = self.get_last_price(sym) if self.get_last_price(sym) > 0 else float(closes[-1])
 
@@ -868,6 +926,46 @@ class LiveSignalEngine:
         events = []
         cfg = model.config
         be_pct = cfg.get("be_pct", 0.0)
+        partial_tp = float(cfg.get("partial_tp", 0.0) or 0.0)
+        partial_weight = float(cfg.get("partial_weight", 0.0) or 0.0)
+        partial_hit = (
+            partial_tp > 0
+            and partial_weight > 0
+            and not model.partial_taken
+            and ((model.direction == "LONG" and close_price >= model.entry_price * (1.0 + partial_tp))
+                 or (model.direction == "SHORT" and close_price <= model.entry_price * (1.0 - partial_tp)))
+        )
+        if partial_hit:
+            model.partial_taken = True
+            model.partial_exit_price = round(model.entry_price * (1.0 + partial_tp if model.direction == "LONG" else 1.0 - partial_tp), 2)
+            model.be_active = True
+            model.current_sl = round(
+                model.entry_price * (1.002 if model.direction == "LONG" else 0.998),
+                2,
+            )
+            if model.active_ticket:
+                model.active_ticket["stop_loss"] = model.current_sl
+                model.active_ticket["be_active"] = True
+                model.active_ticket["partial_taken"] = True
+            events.append({
+                "type": "PARTIAL_TAKE_PROFIT",
+                "symbol": fmt_sym,
+                "asset": sym,
+                "strategy_id": model.strat_id,
+                "strategy_name": model.name,
+                "price": close_price,
+                "partial_pct": round(partial_weight * 100.0, 2),
+                "remaining_pct": round((1.0 - partial_weight) * 100.0, 2),
+                "new_stop_loss": model.current_sl,
+                "be_locked": True,
+                "timestamp": candle_time,
+                "candle_close": True,
+            })
+            try:
+                self._persist_opened_trade(model, model.active_ticket or {})
+            except Exception as exc:
+                logger.error(f"Error persisting partial take-profit state for {model.strat_id}: {exc}")
+
         if be_pct > 0 and not model.be_active and flt_pnl >= (be_pct * 100.0):
             model.be_active = True
             model.current_sl = round(
@@ -1044,15 +1142,21 @@ class LiveSignalEngine:
 
             if model.strat_id in ["pippo-30m-new-gen", "pippo-30m-grd"]:
                 df_cur = buffers[tf]
+                cfg = model.config
+                entry_dist = float(cfg.get("entry_dist", 0.008))
+                regime_dist = float(cfg.get("regime_dist_1h", 0.015))
+                spread_max = float(cfg.get("spread_max", 0.0015))
+                atr_max = float(cfg.get("atr_max", 0.01))
+                force_close_dist = float(cfg.get("fc_dist", 0.005))
                 m25_30 = float(df_cur["MA25"].iloc[-1]) if ("MA25" in df_cur and not pd.isna(df_cur["MA25"].iloc[-1])) else float(curr_close)
                 m50_30 = float(df_cur["MA50"].iloc[-1]) if ("MA50" in df_cur and not pd.isna(df_cur["MA50"].iloc[-1])) else float(curr_close)
 
                 if model.position_status == "FLAT":
-                    a30 = (curr_close > m25_30) and (curr_close > m50_30) and ((curr_close - m25_30) / m25_30 < 0.008) and ((curr_close - m50_30) / m50_30 < 0.008)
-                    sp = abs(m25_30 - m50_30) / m50_30 < 0.0015 if m50_30 > 0 else False
+                    a30 = (curr_close > m25_30) and (curr_close > m50_30) and ((curr_close - m25_30) / m25_30 < entry_dist) and ((curr_close - m50_30) / m50_30 < entry_dist)
+                    sp = abs(m25_30 - m50_30) / m50_30 < spread_max if m50_30 > 0 else False
                     tr = np.maximum(df_cur["high"] - df_cur["low"], np.maximum((df_cur["high"] - df_cur["close"].shift()).abs(), (df_cur["low"] - df_cur["close"].shift()).abs()))
                     atr_val = tr.rolling(14).mean().iloc[-1] / curr_close
-                    at = atr_val <= 0.01
+                    at = atr_val <= atr_max
 
                     if a30 and sp and at and model.regime_ok:
                         ticket = self._open_position(model, curr_close, new_bar["datetime"])
@@ -1080,7 +1184,7 @@ class LiveSignalEngine:
                             "candle_time": new_bar["datetime"],
                         })
                 elif model.position_status == "OPEN":
-                    fc = (curr_close < m25_30) and (curr_close < m50_30) and ((m25_30 - curr_close) / m25_30 >= 0.005) and ((m50_30 - curr_close) / m50_30 >= 0.005)
+                    fc = (curr_close < m25_30) and (curr_close < m50_30) and ((m25_30 - curr_close) / m25_30 >= force_close_dist) and ((m50_30 - curr_close) / m50_30 >= force_close_dist)
                     if fc:
                         exit_trade = self._close_position(model, curr_close, "Force_Close_MA", exit_time=new_bar["datetime"])
                         logger.info(f"⏹️ [AUTONOMOUS SIGNAL EXIT] [{sym}] {model.name} closed by Force Close MA @ ${curr_close:,.2f}")
@@ -1104,11 +1208,11 @@ class LiveSignalEngine:
 
                 if model.direction == "LONG":
                     # Breakout: close crosses above entry swing top and regime is bullish
-                    if curr_close > trigger_level and prev_close <= trigger_level and model.regime_ok:
+                    if curr_close > trigger_level and prev_close <= trigger_level and model.regime_ok and model.entry_confluence_ok:
                         entry_triggered = True
                 elif model.direction == "SHORT":
                     # Breakdown: close crosses below entry swing bottom and regime is bearish
-                    if curr_close < trigger_level and prev_close >= trigger_level and model.regime_ok:
+                    if curr_close < trigger_level and prev_close >= trigger_level and model.regime_ok and model.entry_confluence_ok:
                         entry_triggered = True
 
                 if entry_triggered:
@@ -1147,11 +1251,11 @@ class LiveSignalEngine:
 
                 if model.direction == "LONG":
                     # Long structural exit: candle close breaks below exit swing floor
-                    if curr_close < floor_level and prev_close >= floor_level:
+                    if curr_close < floor_level and prev_close >= floor_level and model.exit_confluence_ok:
                         struct_exit = True
                 elif model.direction == "SHORT":
                     # Short structural exit: candle close breaks above exit swing ceiling
-                    if curr_close > floor_level and prev_close <= floor_level:
+                    if curr_close > floor_level and prev_close <= floor_level and model.exit_confluence_ok:
                         struct_exit = True
 
                 if struct_exit:
@@ -1184,6 +1288,8 @@ class LiveSignalEngine:
         model.peak_price = entry_p
         model.trough_price = entry_p
         model.be_active = False
+        model.partial_taken = False
+        model.partial_exit_price = 0.0
 
         model.current_sl = 0.0
         if sl_pct > 0:
@@ -1218,6 +1324,9 @@ class LiveSignalEngine:
             "take_profit": model.target_tp,
             "take_profit_pct": round(tp_pct * 100, 1) if model.direction == "LONG" else -round(tp_pct * 100, 1),
             "risk_reward_ratio": f"{round(tp_pct / sl_pct, 2)}x" if sl_pct > 0 else "Regime-managed",
+            "partial_take_profit": round(entry_p * (1.0 + float(cfg.get("partial_tp", 0.0)) if model.direction == "LONG" else 1.0 - float(cfg.get("partial_tp", 0.0))), 2) if cfg.get("partial_tp", 0.0) else None,
+            "partial_position_pct": round(float(cfg.get("partial_weight", 0.0)) * 100.0, 2) if cfg.get("partial_weight", 0.0) else 0.0,
+            "partial_taken": False,
             "timestamp": model.entry_time,
             "contributing_agents": ["quant", "trader", "informan"],
             "status": "LIVE_SIGNAL",
@@ -1279,9 +1388,19 @@ class LiveSignalEngine:
         """Helper to close a position and calculate finalized trade metrics."""
         entry_p = model.entry_price
         if model.direction == "LONG":
-            gross_ret = (exit_p - entry_p) / entry_p
+            remaining_ret = (exit_p - entry_p) / entry_p
         else:
-            gross_ret = (entry_p - exit_p) / entry_p
+            remaining_ret = (entry_p - exit_p) / entry_p
+
+        partial_weight = float(model.config.get("partial_weight", 0.0) or 0.0)
+        if model.partial_taken and partial_weight > 0 and model.partial_exit_price > 0:
+            if model.direction == "LONG":
+                partial_ret = (model.partial_exit_price - entry_p) / entry_p
+            else:
+                partial_ret = (entry_p - model.partial_exit_price) / entry_p
+            gross_ret = (partial_weight * partial_ret) + ((1.0 - partial_weight) * remaining_ret)
+        else:
+            gross_ret = remaining_ret
 
         fee = 0.0009 * 2 # roundtrip commission
         net_ret = (gross_ret - fee) * 100.0
@@ -1301,8 +1420,12 @@ class LiveSignalEngine:
             "entry_time": model.entry_time,
             "exit_time": exit_time or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "net_return_pct": round(net_ret, 2),
+            "gross_return_pct": round(gross_ret * 100.0, 2),
             "reason": reason,
-            "status": "CLOSED"
+            "status": "CLOSED",
+            "partial_taken": bool(model.partial_taken),
+            "partial_exit_price": model.partial_exit_price if model.partial_taken else None,
+            "partial_position_pct": round(partial_weight * 100.0, 2) if model.partial_taken else 0.0,
         }
         model.recent_trades.append(trade_record)
         if hasattr(model, "synced_recent_trades"):
@@ -1313,6 +1436,8 @@ class LiveSignalEngine:
         model.entry_price = 0.0
         model.entry_time = None
         model.be_active = False
+        model.partial_taken = False
+        model.partial_exit_price = 0.0
         model.current_sl = 0.0
         model.target_tp = 0.0
         model.active_ticket = None
@@ -1383,8 +1508,11 @@ class LiveSignalEngine:
                     matching_trade["exit_price"] = trade_record["exit_price"]
                     matching_trade["exit_time"] = exit_time_str
                     matching_trade["net_return_pct"] = trade_record["net_return_pct"]
-                    matching_trade["gross_return_pct"] = round(trade_record["net_return_pct"] + 0.18, 2)
+                    matching_trade["gross_return_pct"] = trade_record.get("gross_return_pct", round(trade_record["net_return_pct"] + 0.18, 2))
                     matching_trade["exit_reason"] = trade_record.get("reason", "Force Close MA (-0.5%)")
+                    matching_trade["partial_taken"] = trade_record.get("partial_taken", False)
+                    matching_trade["partial_exit_price"] = trade_record.get("partial_exit_price")
+                    matching_trade["partial_position_pct"] = trade_record.get("partial_position_pct", 0.0)
                 else:
                     new_trade = {
                         "trade_no": trade_no,
@@ -1394,11 +1522,14 @@ class LiveSignalEngine:
                         "exit_time": exit_time_str,
                         "entry_price": trade_record.get("entry_price") or trade_record["exit_price"],
                         "exit_price": trade_record["exit_price"],
-                        "gross_return_pct": round(trade_record["net_return_pct"] + 0.18, 2),
+                        "gross_return_pct": trade_record.get("gross_return_pct", round(trade_record["net_return_pct"] + 0.18, 2)),
                         "net_return_pct": trade_record["net_return_pct"],
                         "exit_reason": trade_record.get("reason", "Force Close MA (-0.5%)"),
                         "be_activated": getattr(model, "be_active", False),
-                        "status": "CLOSED"
+                        "status": "CLOSED",
+                        "partial_taken": trade_record.get("partial_taken", False),
+                        "partial_exit_price": trade_record.get("partial_exit_price"),
+                        "partial_position_pct": trade_record.get("partial_position_pct", 0.0),
                     }
                     trades.append(new_trade)
 
@@ -1512,7 +1643,10 @@ class LiveSignalEngine:
                         "status": "OPEN",
                         "stop_loss": model.current_sl,
                         "take_profit": model.target_tp,
-                        "is_active": True
+                        "is_active": True,
+                        "partial_taken": model.partial_taken,
+                        "partial_exit_price": model.partial_exit_price if model.partial_taken else None,
+                        "partial_position_pct": round(float(model.config.get("partial_weight", 0.0) or 0.0) * 100.0, 2)
                     }
                     trades.append(open_trade)
                     active_trade = open_trade
@@ -1525,6 +1659,9 @@ class LiveSignalEngine:
                     existing_entry["take_profit"] = model.target_tp
                     existing_entry["be_activated"] = model.be_active
                     existing_entry["exit_reason"] = f"Active Signal ({'BE Locked' if model.be_active else 'Trailing'})"
+                    existing_entry["partial_taken"] = model.partial_taken
+                    existing_entry["partial_exit_price"] = model.partial_exit_price if model.partial_taken else None
+                    existing_entry["partial_position_pct"] = round(float(model.config.get("partial_weight", 0.0) or 0.0) * 100.0, 2)
 
                 if active_trade is None:
                     active_trade = next((
@@ -1589,9 +1726,14 @@ class LiveSignalEngine:
                 "floating_pnl_pct": round(flt_pnl, 2),
                 "stop_loss": m.current_sl if m.position_status == "OPEN" else None,
                 "be_active": m.be_active,
+                "partial_taken": m.partial_taken,
+                "partial_exit_price": m.partial_exit_price if m.partial_taken else None,
                 "take_profit": m.target_tp if m.position_status == "OPEN" else None,
                 "next_entry_trigger": m.next_entry_trigger,
                 "structural_floor": m.structural_floor,
+                "major_swing_level": m.major_swing_level,
+                "entry_confluence_ok": m.entry_confluence_ok,
+                "exit_confluence_ok": m.exit_confluence_ok,
                 "distance_to_trigger_pct": m.distance_to_trigger_pct,
                 "regime_aligned": m.regime_ok,
                 "recent_trades_count": len(m.recent_trades)

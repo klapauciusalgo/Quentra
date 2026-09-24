@@ -400,6 +400,83 @@ def test_reopened_position_recalculates_stop_loss():
     assert reopened["stop_loss"] == 190.0
     assert model.current_sl == 190.0
 
+
+def test_scalp_partial_take_profit_locks_breakeven_and_blends_exit():
+    """Scalp-Runner realizes 30% at +4% before the runner closes."""
+    import asyncio
+    from live_signal_engine import LiveSignalEngine, StrategyModel
+
+    class BroadcastCollector:
+        def __init__(self):
+            self.events = []
+
+        async def broadcast(self, event):
+            self.events.append(event)
+
+    engine = LiveSignalEngine()
+    model = StrategyModel(
+        strat_id="test-scalp-partial",
+        name="Test Scalp Runner",
+        tf="30m",
+        direction="LONG",
+        config={"sl_pct": 0.05, "be_pct": 0.04, "tp_pct": 0.75, "partial_tp": 0.04, "partial_weight": 0.30},
+    )
+    engine.strategies[model.strat_id] = model
+    engine._open_position(model, 100.0)
+    collector = BroadcastCollector()
+
+    asyncio.run(engine.on_kline_closed("30m", {
+        "time": 1774300000,
+        "timestamp": 1774300000000,
+        "open": 100.0,
+        "high": 104.0,
+        "low": 100.0,
+        "close": 104.0,
+        "volume": 1.0,
+    }, collector, symbol="BTCUSDT"))
+
+    partial = [e for e in collector.events if e.get("type") == "PARTIAL_TAKE_PROFIT"]
+    assert len(partial) == 1
+    assert model.partial_taken is True
+    assert model.be_active is True
+    assert model.current_sl == 100.2
+
+    asyncio.run(engine.on_kline_closed("30m", {
+        "time": 1774301800,
+        "timestamp": 1774301800000,
+        "open": 104.0,
+        "high": 104.0,
+        "low": 102.0,
+        "close": 100.1,
+        "volume": 1.0,
+    }, collector, symbol="BTCUSDT"))
+
+    closed = [e for e in collector.events if e.get("type") == "POSITION_CLOSED" and e.get("strategy_id") == model.strat_id]
+    assert len(closed) == 1
+    assert closed[0]["trade"]["reason"] == "Fast_Breakeven"
+    assert closed[0]["trade"]["partial_taken"] is True
+    assert 1.1 < closed[0]["trade"]["gross_return_pct"] < 1.4
+
+
+def test_four_hour_original_does_not_use_generic_breakeven():
+    """4H Original keeps its 15% hard stop and CHoCH exit model."""
+    from live_signal_engine import LiveSignalEngine, StrategyModel
+
+    engine = LiveSignalEngine()
+    model = StrategyModel(
+        strat_id="test-4h-original",
+        name="Test 4H Original",
+        tf="4h",
+        direction="LONG",
+        config={"sl_pct": 0.15, "be_pct": 0.0, "tp_pct": 0.75},
+    )
+    engine.strategies[model.strat_id] = model
+    engine._open_position(model, 100.0)
+    events = engine.on_ticker_tick(110.0, 1774300000, symbol="BTCUSDT")
+    assert events == []
+    assert model.be_active is False
+    assert model.current_sl == 85.0
+
 def test_zero_stop_macro_short_does_not_immediately_stop_out():
     """Macro short positions use weekly regime flips rather than a zero-price stop."""
     from live_signal_engine import LiveSignalEngine, StrategyModel

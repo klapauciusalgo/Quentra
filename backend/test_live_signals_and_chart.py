@@ -144,9 +144,27 @@ def test_klines_endpoint(client):
         res = client.get(f"/api/klines?timeframe={tf}&limit=100")
         assert res.status_code == 200
         data = res.json()
-        assert data["data_source"] == "local_parquet"
+        assert data["data_source"].startswith("local_parquet")
         assert len(data["candles"]) == 100
         assert data["candles"][-1]["close"] > 50000.0
+
+def test_klines_endpoint_uses_canonical_cache_not_ticker_override(client):
+    previous_connected = main.binance_manager.is_connected
+    previous_ticker = dict(main.binance_manager.ticker_data_map["BTCUSDT"])
+    try:
+        main.binance_manager.is_connected = True
+        main.binance_manager.ticker_data_map["BTCUSDT"]["price"] = 12345.67
+        expected = main.KLINES_CACHE["1h"][-1]
+        res = client.get("/api/klines?symbol=BTCUSDT&timeframe=1h&limit=1")
+        assert res.status_code == 200
+        actual = res.json()["candles"][-1]
+        assert actual["time"] == expected["time"]
+        assert actual["close"] == expected["close"]
+        assert res.json()["data_source"] == "local_parquet_live_cache"
+    finally:
+        main.binance_manager.is_connected = previous_connected
+        main.binance_manager.ticker_data_map["BTCUSDT"] = previous_ticker
+
 
 def test_eth_system_status(client):
     res = client.get("/api/status")

@@ -13,6 +13,7 @@ import os
 import json
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -312,8 +313,17 @@ def reload_local_catalog(symbol: str = "BTCUSDT"):
                 STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
 
 
+def _recalculate_cache_mas(candles: list[dict]) -> list[dict]:
+    """Keep indicator values aligned with the canonical live candle cache."""
+    closes = [float(c["close"]) for c in candles]
+    for idx, item in enumerate(candles):
+        for key, period in (("ma8", 8), ("ma25", 25), ("ma50", 50), ("ma55", 55), ("ma111", 111)):
+            item[key] = round(sum(closes[idx - period + 1:idx + 1]) / period, 8) if idx >= period - 1 else None
+    return candles
+
+
 def update_live_kline_cache(symbol: str, timeframe: str, candle: dict):
-    """Keep REST chart data aligned with closed candles processed by the engine."""
+    """Keep REST chart data aligned with every Binance WS candle update."""
     global KLINES_CACHE, KLINES_CACHE_ETH
     sym = symbol.upper()
     tf = timeframe.lower()
@@ -337,11 +347,13 @@ def update_live_kline_cache(symbol: str, timeframe: str, candle: dict):
         "ma111": None,
     }
     candles = list(target_cache.get(tf, []))
-    if candles and int(candles[-1].get("time", 0)) == timestamp:
-        candles[-1] = {**candles[-1], **item}
+    existing_idx = next((i for i, c in enumerate(candles) if int(c.get("time", 0)) == timestamp), None)
+    if existing_idx is not None:
+        candles[existing_idx] = {**candles[existing_idx], **item}
     else:
         candles.append(item)
-    target_cache[tf] = candles[-5000:]
+        candles.sort(key=lambda c: int(c.get("time", 0)))
+    target_cache[tf] = _recalculate_cache_mas(candles[-5000:])
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -417,7 +429,26 @@ async def get_klines(
     target_ts = PARQUET_TIMESTAMPS_ETH if sym == "ETHUSDT" else PARQUET_TIMESTAMPS
     target_cache = KLINES_CACHE_ETH if sym == "ETHUSDT" else KLINES_CACHE
     
-    # If around_time is passed and parquet is in memory, slice around that exact timestamp!
+    # For recent trade jumps, use the same canonical live cache as the normal
+    # chart path. Older historical jumps still use the in-memory Parquet frame.
+    cache_data = target_cache.get(tf, [])
+    cache_start = int(cache_data[0]["time"]) if cache_data else None
+    cache_end = int(cache_data[-1]["time"]) if cache_data else None
+    if around_time and cache_data and cache_start <= around_time <= cache_end:
+        idx = bisect.bisect_left([int(c["time"]) for c in cache_data], around_time)
+        half = limit // 2
+        candles = cache_data[max(0, idx - half):min(len(cache_data), idx + half)]
+        return {
+            "symbol": sym,
+            "timeframe": tf,
+            "data_source": "local_parquet_live_cache",
+            "count": len(candles),
+            "last_candle_time": int(candles[-1]["time"]) if candles else None,
+            "served_at": int(time.time()),
+            "candles": candles,
+        }
+
+    # Historical path: slice the Parquet frame around the requested timestamp.
     if around_time and tf in target_dfs and tf in target_ts:
         df = target_dfs[tf]
         timestamps = target_ts[tf]
@@ -428,30 +459,19 @@ async def get_klines(
         slice_df = df.iloc[start_idx:end_idx]
 
         time_arr = (slice_df['timestamp'] // 1000).values if 'timestamp' in slice_df.columns else slice_df['time'].values
-        open_arr = slice_df['open'].values
-        high_arr = slice_df['high'].values
-        low_arr = slice_df['low'].values
-        close_arr = slice_df['close'].values
-        vol_arr = slice_df['volume'].values if 'volume' in slice_df else np.zeros(len(slice_df))
-        ma8_arr = slice_df['MA8'].values if 'MA8' in slice_df else None
-        ma25_arr = slice_df['MA25'].values if 'MA25' in slice_df else None
-        ma50_arr = slice_df['MA50'].values if 'MA50' in slice_df else None
-        ma55_arr = slice_df['MA55'].values if 'MA55' in slice_df else None
-        ma111_arr = slice_df['MA111'].values if 'MA111' in slice_df else None
-
         candles = [
             {
                 "time": int(time_arr[i]),
-                "open": float(open_arr[i]),
-                "high": float(high_arr[i]),
-                "low": float(low_arr[i]),
-                "close": float(close_arr[i]),
-                "volume": float(vol_arr[i]),
-                "ma8": float(ma8_arr[i]) if ma8_arr is not None and not np.isnan(ma8_arr[i]) else None,
-                "ma25": float(ma25_arr[i]) if ma25_arr is not None and not np.isnan(ma25_arr[i]) else None,
-                "ma50": float(ma50_arr[i]) if ma50_arr is not None and not np.isnan(ma50_arr[i]) else None,
-                "ma55": float(ma55_arr[i]) if ma55_arr is not None and not np.isnan(ma55_arr[i]) else None,
-                "ma111": float(ma111_arr[i]) if ma111_arr is not None and not np.isnan(ma111_arr[i]) else None,
+                "open": float(slice_df['open'].values[i]),
+                "high": float(slice_df['high'].values[i]),
+                "low": float(slice_df['low'].values[i]),
+                "close": float(slice_df['close'].values[i]),
+                "volume": float(slice_df['volume'].values[i]) if 'volume' in slice_df else 0.0,
+                "ma8": float(slice_df['MA8'].values[i]) if 'MA8' in slice_df and not np.isnan(slice_df['MA8'].values[i]) else None,
+                "ma25": float(slice_df['MA25'].values[i]) if 'MA25' in slice_df and not np.isnan(slice_df['MA25'].values[i]) else None,
+                "ma50": float(slice_df['MA50'].values[i]) if 'MA50' in slice_df and not np.isnan(slice_df['MA50'].values[i]) else None,
+                "ma55": float(slice_df['MA55'].values[i]) if 'MA55' in slice_df and not np.isnan(slice_df['MA55'].values[i]) else None,
+                "ma111": float(slice_df['MA111'].values[i]) if 'MA111' in slice_df and not np.isnan(slice_df['MA111'].values[i]) else None,
             }
             for i in range(len(time_arr))
         ]
@@ -460,32 +480,29 @@ async def get_klines(
             "timeframe": tf,
             "data_source": "local_parquet",
             "count": len(candles),
-            "candles": candles
+            "last_candle_time": int(candles[-1]["time"]) if candles else None,
+            "served_at": int(time.time()),
+            "candles": candles,
         }
 
-    # Standard path: use klines cache
+    # Standard path: use the same canonical live cache
     if tf not in target_cache:
         raise HTTPException(status_code=400, detail=f"Unsupported timeframe '{timeframe}' for {sym}. Choose from: {list(target_cache.keys())}")
     
     data = target_cache[tf]
     sliced = data[-limit:] if limit < len(data) else data
 
-    # If live price exists from active WebSocket, inject or update the latest unfinished bar close
-    ticker_obj = binance_manager.get_ticker(sym)
-    live_price = ticker_obj.get("price")
-    if sliced and live_price and live_price > 0 and binance_manager.is_connected:
-        last_candle = dict(sliced[-1])
-        last_candle["close"] = float(live_price)
-        last_candle["high"] = max(last_candle["high"], float(live_price))
-        last_candle["low"] = min(last_candle["low"], float(live_price))
-        sliced = sliced[:-1] + [last_candle]
-
+    # Do not mutate chart candles with the ticker endpoint. The canonical
+    # Binance kline stream updates this cache directly, so every REST caller
+    # receives the same candle snapshot from the production backend.
     return {
         "symbol": sym,
         "timeframe": tf,
-        "data_source": "local_parquet",
+        "data_source": "local_parquet_live_cache",
         "count": len(sliced),
-        "candles": sliced
+        "last_candle_time": int(sliced[-1]["time"]) if sliced else None,
+        "served_at": int(time.time()),
+        "candles": sliced,
     }
 
 def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:

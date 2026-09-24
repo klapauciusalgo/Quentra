@@ -11,8 +11,6 @@ import {
 import { formatPrice, formatPercent, playRetroSound } from '../utils/formatters';
 import { getProcessedMarkers } from '../utils/chartMarkers';
 import { API_BASE } from '../config';
-import klinesBaseline from '../data/klinesBaseline.json';
-import klinesBaselineEth from '../data/klinesBaseline_eth.json';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -87,10 +85,7 @@ export default function TradingChart({
   const shouldResetViewportRef = useRef(true);
 
   const [loading, setLoading] = useState(false);
-  const [candles, setCandles] = useState(() => {
-    const source = symbol === 'ETHUSDT' ? klinesBaselineEth : klinesBaseline;
-    return source[timeframe] || [];
-  });
+  const [candles, setCandles] = useState([]);
   const [hoveredData, setHoveredData] = useState(null);
   const [hoveredSignal, setHoveredSignal] = useState(null);
   const [showMarkers, setShowMarkers] = useState(true);
@@ -250,22 +245,6 @@ export default function TradingChart({
     });
   }, [tradesList, tradeFilter, signalSortOrder]);
 
-  // Compute moving averages over candles array
-  const calculateMAValues = (candleArr, period) => {
-    const result = new Array(candleArr.length).fill(null);
-    let sum = 0;
-    for (let i = 0; i < candleArr.length; i++) {
-      sum += candleArr[i].close;
-      if (i >= period) {
-        sum -= candleArr[i - period].close;
-      }
-      if (i >= period - 1) {
-        result[i] = parseFloat((sum / period).toFixed(2));
-      }
-    }
-    return result;
-  };
-
   // Fetch Klines whenever timeframe changes with multi-tier edge fallback
   useEffect(() => {
     let isMounted = true;
@@ -274,126 +253,41 @@ export default function TradingChart({
     // live candle updates must preserve the user's current zoom and position.
     shouldResetViewportRef.current = true;
 
-    // 0. Instantly populate baseline candles for zero-latency initial paint (BTC or ETH)
-    const baselineSource = symbol === 'ETHUSDT' ? klinesBaselineEth : klinesBaseline;
-    if (baselineSource && baselineSource[timeframe] && baselineSource[timeframe].length > 0) {
-      setCandles(baselineSource[timeframe]);
-      setLoading(false);
-    } else {
-      setLoading(true);
-    }
+    // Production chart data must come from the configured backend. Do not
+    // silently substitute a compiled baseline or another exchange, because
+    // that makes the UI disagree with the production signal engine.
+    setCandles([]);
+    setLoading(true);
 
     async function loadKlines() {
-      // Tier 1: Try configured backend API (validating JSON content-type)
       try {
-        const res = await fetch(`${API_BASE}/api/klines?symbol=${symbol}&timeframe=${timeframe}&limit=5000`);
+        const res = await fetch(`${API_BASE}/api/klines?symbol=${symbol}&timeframe=${timeframe}&limit=5000`, {
+          cache: 'no-store',
+        });
         const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
-          const data = await res.json();
-          // Defensive guard: verify symbol matches current chart symbol
-          const isSymbolMatch = !data.symbol || data.symbol === symbol;
-          const lastBar = data.candles?.[data.candles.length - 1];
-          const isMagnitudeValid = !lastBar || (symbol === 'ETHUSDT' ? lastBar.close < 20000 : lastBar.close > 20000);
+        const data = contentType.includes('application/json') ? await res.json() : null;
+        const isSymbolMatch = !data?.symbol || data.symbol === symbol;
+        const lastBar = data?.candles?.[data.candles.length - 1];
+        const isMagnitudeValid = !lastBar || (symbol === 'ETHUSDT' ? lastBar.close < 20000 : lastBar.close > 20000);
+        const isAuthoritative = typeof data?.data_source === 'string' && data.data_source.startsWith('local_parquet');
 
-          if (data && Array.isArray(data.candles) && data.candles.length > 0 && isSymbolMatch && isMagnitudeValid) {
-            if (isMounted) {
-              setCandles(data.candles);
-              setLoading(false);
-              return;
-            }
+        if (res.ok && Array.isArray(data?.candles) && data.candles.length > 0 && isSymbolMatch && isMagnitudeValid && isAuthoritative) {
+          if (isMounted) {
+            setCandles(data.candles);
+            setLoading(false);
+            return;
           }
         }
+
+        throw new Error(data?.error || `Chart backend returned HTTP ${res.status}`);
       } catch (err) {
-        console.warn('Backend klines unavailable:', err);
-      }
-
-      // Tier 2: Bybit Spot Public REST API (accessible worldwide & not blocked by Indonesian Nawala)
-      try {
-        const bybitTfMap = { '30m': '30', '1h': '60', '4h': '240', '1d': 'D', '1w': 'W' };
-        const bybitInterval = bybitTfMap[timeframe] || '60';
-        const res = await fetch(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${symbol}&interval=${bybitInterval}&limit=1000`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.result?.list && Array.isArray(data.result.list) && data.result.list.length > 0) {
-            const reversed = [...data.result.list].reverse();
-            const parsed = reversed.map((c) => ({
-              time: Math.floor(parseInt(c[0], 10) / 1000),
-              open: parseFloat(c[1]),
-              high: parseFloat(c[2]),
-              low: parseFloat(c[3]),
-              close: parseFloat(c[4]),
-              volume: parseFloat(c[5]),
-            }));
-
-            const ma8Arr = calculateMAValues(parsed, 8);
-            const ma25Arr = calculateMAValues(parsed, 25);
-            const ma50Arr = calculateMAValues(parsed, 50);
-            const ma55Arr = calculateMAValues(parsed, 55);
-            const ma111Arr = calculateMAValues(parsed, 111);
-
-            const enriched = parsed.map((c, idx) => ({
-              ...c,
-              ma8: ma8Arr[idx],
-              ma25: ma25Arr[idx],
-              ma50: ma50Arr[idx],
-              ma55: ma55Arr[idx],
-              ma111: ma111Arr[idx],
-            }));
-
-            if (isMounted) {
-              setCandles(enriched);
-              setLoading(false);
-              return;
-            }
-          }
+        console.warn('Authoritative chart backend unavailable:', err);
+        if (isMounted) {
+          setLoading(false);
+          // Keep the chart empty rather than presenting stale or cross-exchange data.
+          setCandles([]);
         }
-      } catch (err) {
-        console.warn('Bybit public klines unavailable:', err);
       }
-
-      // Tier 3: Binance official public REST API
-      try {
-        const binanceInterval = timeframe.toLowerCase();
-        const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=1000`);
-        if (res.ok) {
-          const raw = await res.json();
-          if (Array.isArray(raw) && raw.length > 0) {
-            const parsed = raw.map((c) => ({
-              time: Math.floor(c[0] / 1000),
-              open: parseFloat(c[1]),
-              high: parseFloat(c[2]),
-              low: parseFloat(c[3]),
-              close: parseFloat(c[4]),
-              volume: parseFloat(c[5]),
-            }));
-
-            const ma8Arr = calculateMAValues(parsed, 8);
-            const ma25Arr = calculateMAValues(parsed, 25);
-            const ma50Arr = calculateMAValues(parsed, 50);
-            const ma55Arr = calculateMAValues(parsed, 55);
-            const ma111Arr = calculateMAValues(parsed, 111);
-
-            const enriched = parsed.map((c, idx) => ({
-              ...c,
-              ma8: ma8Arr[idx],
-              ma25: ma25Arr[idx],
-              ma50: ma50Arr[idx],
-              ma55: ma55Arr[idx],
-              ma111: ma111Arr[idx],
-            }));
-
-            if (isMounted) {
-              setCandles(enriched);
-              setLoading(false);
-              return;
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Binance public klines fetch error:', err);
-      }
-
-      if (isMounted) setLoading(false);
     }
 
     loadKlines();

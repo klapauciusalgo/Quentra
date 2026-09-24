@@ -221,15 +221,19 @@ class BinanceManager:
                                 "candle": candle
                             })
 
+                            # Keep REST and WebSocket chart consumers on the exact
+                            # same candle snapshot, including the unfinished bar.
+                            try:
+                                import main as backend_main
+                                backend_main.update_live_kline_cache(sym, tf, candle)
+                            except Exception as cache_err:
+                                logger.error(f"Error updating {sym} {tf} live kline cache: {cache_err}", exc_info=True)
+
                             # Autonomous on-the-fly signal evaluation upon candle closure
                             if candle["is_closed"]:
                                 try:
                                     from live_signal_engine import live_signal_engine
                                     await live_signal_engine.on_kline_closed(tf, candle, self, symbol=sym)
-                                    # Keep the REST chart feed on the same closed candle
-                                    # sequence used by the signal engine.
-                                    import main as backend_main
-                                    backend_main.update_live_kline_cache(sym, tf, candle)
                                 except Exception as eval_err:
                                     logger.error(f"Error evaluating closed {sym} {tf} candle: {eval_err}", exc_info=True)
 

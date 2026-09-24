@@ -200,7 +200,12 @@ function TradingApp() {
       setStrategies(fallbackCatalog);
     }
 
-    if (signalsResult.status === 'fulfilled' && signalsResult.value?.ok && isCurrentRefresh()) {
+    const signalsAvailable = signalsResult.status === 'fulfilled' && Boolean(signalsResult.value?.ok);
+    if (isCurrentRefresh()) {
+      setStatus((prev) => ({ ...prev, signals_available: signalsAvailable }));
+    }
+
+    if (signalsAvailable && isCurrentRefresh()) {
       const data = await signalsResult.value.json();
       if (isCurrentRefresh() && Array.isArray(data?.strategies)) {
         const price = data.current_price || (symbol === 'ETHUSDT' ? data.current_eth_price : data.current_btc_price);

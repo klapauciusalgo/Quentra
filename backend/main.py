@@ -395,6 +395,7 @@ async def get_status():
         "strategies_count": len(STRATEGIES_CATALOG),
         "strategies_count_eth": len(STRATEGIES_CATALOG_ETH),
         "live_signal_engine": "AUTONOMOUS_ONLINE",
+        "signals_available": True,
         "macro_regime": live_signal_engine.macro_state.get("regime_description", "MACRO_DISCOUNT")
     }
 

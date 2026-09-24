@@ -53,6 +53,9 @@ export default function Header({
   };
 
   const isPositive = (ticker?.change_24h_pct || 0) >= 0;
+  const streamLive = Boolean(status?.binance_ws_connected);
+  const signalBackendAvailable = status?.signals_available !== false;
+  const isLive = streamLive && signalBackendAvailable;
 
   return (
     <header className="sticky top-0 z-40 backdrop-blur-2xl bg-apple-canvas/80 border-b border-apple-border transition-colors duration-200">
@@ -182,7 +185,7 @@ export default function Header({
           <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-full px-3 py-1 text-xs">
             <span
               className={`w-2 h-2 rounded-full ${
-                status?.binance_ws_connected
+                isLive
                   ? 'bg-apple-green shadow-[0_0_8px_rgba(48,209,88,0.5)]'
                   : 'bg-apple-orange animate-pulse'
               }`}
@@ -190,10 +193,10 @@ export default function Header({
             <span className="hidden sm:inline text-apple-muted font-normal">Stream:</span>
             <span
               className={`font-medium ${
-                status?.binance_ws_connected ? 'text-apple-green' : 'text-apple-orange'
+                isLive ? 'text-apple-green' : 'text-apple-orange'
               }`}
             >
-              {status?.binance_ws_connected ? 'Live' : 'Syncing'}
+              {!signalBackendAvailable ? 'Signal Offline' : isLive ? 'Live' : 'Syncing'}
             </span>
           </div>
 

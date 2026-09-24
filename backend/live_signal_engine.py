@@ -402,196 +402,57 @@ class LiveSignalEngine:
 
     def sync_active_positions(self, symbol: str = "BTCUSDT"):
         """
-        Replays recent market bars for each strategy to restore active OPEN positions,
-        exact entry prices, breakeven status, and trailing stops.
+        Restores active OPEN positions directly from authoritative strategy storage
+        (strategies.json / strategies_eth.json), ensuring RAM and Disk are 100% in sync.
         """
         sym = symbol.upper()
-        buffers = self.get_candle_buffers(sym)
         models = self.get_models(sym)
-        macro = self.get_macro_state(sym)
-        try:
-            for strat_id, model in models.items():
-                if strat_id in ["pippo-30m-new-gen", "pippo-30m-grd"]:
-                    self._sync_pippo_new_gen(model, sym)
-                    continue
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        data_file = "strategies_eth.json" if sym == "ETHUSDT" else "strategies.json"
+        data_path = os.path.join(backend_dir, "data", data_file)
 
-                tf = model.timeframe
-                if tf not in buffers or buffers[tf].empty:
-                    continue
+        disk_catalog = {}
+        if os.path.exists(data_path):
+            try:
+                with open(data_path, "r") as f:
+                    disk_list = json.load(f)
+                disk_catalog = {s["id"]: s for s in disk_list}
+            except Exception as e:
+                logger.warning(f"Could not load {data_path} for active positions sync: {e}")
 
-                df = buffers[tf]
-                highs = df["high"].values
-                lows = df["low"].values
-                closes = df["close"].values
-                n = len(closes)
-                if n < 50:
-                    continue
+        for strat_id, model in models.items():
+            strat_data = disk_catalog.get(strat_id, {})
+            has_active = strat_data.get("has_active_signal", False)
+            trades = strat_data.get("trades", [])
+            last_trade = trades[-1] if trades else None
+            is_open_trade = last_trade and (last_trade.get("status") in ["OPEN", "RUNNING"] or last_trade.get("exit_time") in [None, "RUNNING"])
 
-                cfg = model.config
-                maj_len = cfg.get("maj_swing", 50)
-                ent_len = cfg.get("ent_swing", 16)
-                ex_len = cfg.get("ex_swing", 48)
-                sl_pct = cfg.get("sl_pct", 0.05)
-                be_pct = cfg.get("be_pct", 0.03)
-                tp_pct = cfg.get("tp_pct", 0.75)
-                direction = model.direction
+            if has_active and is_open_trade:
+                entry_p = float(last_trade.get("entry_price", 0.0))
+                entry_time = str(last_trade.get("entry_time", ""))
+                curr_sl = float(last_trade.get("stop_loss", 0.0))
+                target_tp = float(last_trade.get("take_profit", 0.0))
+                be_active = bool(last_trade.get("be_activated", False))
 
-                top_maj, btm_maj = compute_swings_arr(highs, lows, min(maj_len, n - 1))
-                top_ent, btm_ent = compute_swings_arr(highs, lows, min(ent_len, n - 1))
-                top_ex, btm_ex = compute_swings_arr(highs, lows, min(ex_len, n - 1))
-
-                sma111_4h = macro.get("sma111_4h", 0.0)
-                weekly_ma55 = macro.get("weekly_ma55", 0.0)
-
-                in_pos = False
-                entry_p = 0.0
-                entry_time = ""
-                curr_sl = 0.0
-                be_active = False
-                peak_p = 0.0
-                trough_p = 0.0
-
-                top_y = 0.0
-                itop_y = 0.0
-                itop_cross = True
-                ibtm_y = 0.0
-                btm_y = 0.0
-                ibtm_cross = True
-
-                start_bar = max(1, n - 600)
-                replayed_closed = []
-                for i in range(start_bar, n):
-                    prev_itop = itop_y
-                    prev_ibtm = ibtm_y
-
-                    if top_maj[i] > 0: top_y = top_maj[i]
-                    if btm_maj[i] > 0: btm_y = btm_maj[i]
-                    if top_ent[i] > 0: itop_y = top_ent[i]; itop_cross = True
-                    if btm_ent[i] > 0: ibtm_y = btm_ent[i]; ibtm_cross = True
-
-                    reg_rule = cfg.get("regime", "")
-                    reg_ok = True
-                    if "4h_sma111" in reg_rule and sma111_4h > 0:
-                        reg_ok = closes[i] >= sma111_4h
-                    elif "weekly_ma55" in reg_rule and weekly_ma55 > 0:
-                        reg_ok = closes[i] < weekly_ma55
-
-                    cur_dt = str(df["datetime"].iloc[i]) if "datetime" in df.columns else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-
-                    if direction == "LONG":
-                        crossover = (closes[i] > itop_y) and (closes[i - 1] <= prev_itop)
-                        ex_floor = [b for b in btm_ex[:i + 1] if b > 0][-1] if any(btm_ex[:i + 1] > 0) else lows[i]
-
-                        if not in_pos:
-                            if crossover and itop_cross and (top_y != itop_y) and reg_ok:
-                                in_pos = True
-                                entry_p = float(closes[i])
-                                entry_time = cur_dt
-                                peak_p = float(highs[i])
-                                curr_sl = round(entry_p * (1.0 - sl_pct), 2)
-                                be_active = False
-                                itop_cross = False
-                        else:
-                            peak_p = max(peak_p, float(highs[i]))
-                            if be_pct > 0 and not be_active and closes[i] >= entry_p * (1.0 + be_pct):
-                                be_active = True
-                                curr_sl = round(entry_p * 1.002, 2)
-                            
-                            hit_sl = lows[i] <= curr_sl
-                            hit_tp = highs[i] >= entry_p * (1.0 + tp_pct)
-                            struct_exit = closes[i] < ex_floor
-
-                            if hit_sl or hit_tp or struct_exit:
-                                exit_p = curr_sl if hit_sl else (entry_p * (1.0 + tp_pct) if hit_tp else float(closes[i]))
-                                reason = "Breakeven SL" if (hit_sl and be_active) else ("Stop Loss" if hit_sl else ("Take Profit" if hit_tp else "Bearish CHoCH Exit"))
-                                raw_ret = (exit_p - entry_p) / entry_p
-                                net_ret = (raw_ret - 0.0018) * 100.0
-                                replayed_closed.append({
-                                    "symbol": "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT",
-                                    "asset": sym,
-                                    "side": direction,
-                                    "type": direction,
-                                    "entry_time": entry_time,
-                                    "exit_time": cur_dt,
-                                    "entry_price": entry_p,
-                                    "exit_price": exit_p,
-                                    "gross_return_pct": round(raw_ret * 100.0, 2),
-                                    "net_return_pct": round(net_ret, 2),
-                                    "exit_reason": reason,
-                                    "be_activated": be_active,
-                                    "status": "CLOSED"
-                                })
-                                in_pos = False
-                    else: # SHORT
-                        crossunder = (closes[i] < ibtm_y) and (closes[i - 1] >= prev_ibtm)
-                        ex_ceil = [t for t in top_ex[:i + 1] if t > 0][-1] if any(top_ex[:i + 1] > 0) else highs[i]
-
-                        if not in_pos:
-                            if crossunder and ibtm_cross and (btm_y != ibtm_y) and reg_ok:
-                                in_pos = True
-                                entry_p = float(closes[i])
-                                entry_time = cur_dt
-                                trough_p = float(lows[i])
-                                curr_sl = round(entry_p * (1.0 + sl_pct), 2)
-                                be_active = False
-                                ibtm_cross = False
-                        else:
-                            trough_p = min(trough_p, float(lows[i]))
-                            if be_pct > 0 and not be_active and closes[i] <= entry_p * (1.0 - be_pct):
-                                be_active = True
-                                curr_sl = round(entry_p * 0.998, 2)
-                            
-                            hit_sl = highs[i] >= curr_sl
-                            hit_tp = lows[i] <= entry_p * (1.0 - tp_pct)
-                            struct_exit = closes[i] > ex_ceil
-
-                            if hit_sl or hit_tp or struct_exit:
-                                exit_p = curr_sl if hit_sl else (entry_p * (1.0 - tp_pct) if hit_tp else float(closes[i]))
-                                reason = "Breakeven SL" if (hit_sl and be_active) else ("Stop Loss" if hit_sl else ("Take Profit" if hit_tp else "Structure_Exit"))
-                                raw_ret = (entry_p - exit_p) / entry_p
-                                net_ret = (raw_ret - 0.0018) * 100.0
-                                replayed_closed.append({
-                                    "symbol": "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT",
-                                    "asset": sym,
-                                    "side": direction,
-                                    "type": direction,
-                                    "entry_time": entry_time,
-                                    "exit_time": cur_dt,
-                                    "entry_price": entry_p,
-                                    "exit_price": exit_p,
-                                    "gross_return_pct": round(raw_ret * 100.0, 2),
-                                    "net_return_pct": round(net_ret, 2),
-                                    "exit_reason": reason,
-                                    "be_activated": be_active,
-                                    "status": "CLOSED"
-                                })
-                                in_pos = False
-
-                model.synced_recent_trades = replayed_closed
-
-                if in_pos:
-                    model.position_status = "OPEN"
-                    model.entry_price = entry_p
-                    model.entry_time = entry_time
-                    model.peak_price = peak_p
-                    model.trough_price = trough_p
-                    model.current_sl = curr_sl
-                    model.be_active = be_active
-                    model.target_tp = round(entry_p * (1.0 + tp_pct if direction == "LONG" else 1.0 - tp_pct), 2)
-                    self._open_position(model, entry_p, entry_time)
-                    model.current_sl = curr_sl
-                    model.be_active = be_active
-                    if model.active_ticket:
-                        model.active_ticket["stop_loss"] = curr_sl
-                    logger.info(f"🚀 [STATE SYNC] Restored active {direction} trade for [{sym}] {model.name}: Entry ${entry_p:,.2f} at {entry_time} (SL: ${curr_sl:,.2f}, BE: {be_active})")
-                else:
-                    model.position_status = "FLAT"
-                    model.entry_price = 0.0
-                    model.active_ticket = None
-                    model.active_markers = []
-
-        except Exception as e:
-            logger.warning(f"Error in sync_active_positions ({sym}): {e}", exc_info=True)
+                model.position_status = "OPEN"
+                model.entry_price = entry_p
+                model.entry_time = entry_time
+                model.peak_price = entry_p
+                model.trough_price = entry_p
+                model.current_sl = curr_sl
+                model.target_tp = target_tp
+                model.be_active = be_active
+                model.active_ticket = strat_data.get("active_ticket")
+                
+                # Active markers from strat_data
+                markers = strat_data.get("markers", [])
+                model.active_markers = [m for m in markers if m.get("isActive") or m.get("isBreakeven")]
+                logger.info(f"🚀 [STATE SYNC] Restored active {model.direction} trade for [{sym}] {model.name}: Entry  at {entry_time} (SL: , BE: {be_active})")
+            else:
+                model.position_status = "FLAT"
+                model.entry_price = 0.0
+                model.active_ticket = None
+                model.active_markers = []
 
     def _sync_pippo_new_gen(self, model: StrategyModel, symbol: str = "BTCUSDT"):
         """Replays Pippo 30m New Gen MA squeeze & multi-timeframe rules across recent bars."""
@@ -1410,12 +1271,19 @@ class LiveSignalEngine:
                 if not strat:
                     continue
 
+                trades = strat.get("trades", [])
+
+                # Check if a trade with this exact entry_time already exists
+                existing_entry = next((t for t in trades if t.get("entry_time") == model.entry_time), None)
+                if existing_entry and existing_entry.get("status") == "CLOSED":
+                    # This trade was already closed in history; do not re-open or duplicate
+                    continue
+
                 strat["has_active_signal"] = True
                 strat["active_ticket"] = ticket
 
-                trades = strat.get("trades", [])
                 has_open = any(t.get("status") in ["OPEN", "RUNNING"] or t.get("exit_time") in [None, "RUNNING"] for t in trades)
-                if not has_open:
+                if not has_open and not existing_entry:
                     trade_no = len(trades) + 1
                     open_trade = {
                         "trade_no": trade_no,
@@ -1435,6 +1303,12 @@ class LiveSignalEngine:
                         "is_active": True
                     }
                     trades.append(open_trade)
+                elif existing_entry and existing_entry.get("status") in ["OPEN", "RUNNING"]:
+                    # Update active parameters on the existing open trade
+                    existing_entry["stop_loss"] = model.current_sl
+                    existing_entry["take_profit"] = model.target_tp
+                    existing_entry["be_activated"] = model.be_active
+                    existing_entry["exit_reason"] = f"Active Signal ({'BE Locked' if model.be_active else 'Trailing'})"
 
                 # Add active markers
                 if hasattr(model, "active_markers") and model.active_markers:

@@ -167,9 +167,9 @@ def load_data_into_memory():
                 combined["total_return_pct"] = combined["metrics"]["total_return_pct"]
                 combined["win_rate_pct"] = combined["metrics"]["win_rate_pct"]
                 combined["profit_factor"] = combined["metrics"]["profit_factor"]
-                # Deduplicate trades by trade_no
+                # Deduplicate trades by trade_no (union base local trades + Supabase trades)
                 unique_trades = {}
-                raw_trades = combined.get("trades") or base_s.get("trades", [])
+                raw_trades = (base_s.get("trades") or []) + (combined.get("trades") or [])
                 for tr in raw_trades:
                     t_no = tr.get("trade_no")
                     if tr.get("status") in ["RUNNING", "OPEN (RUNNING)"] or tr.get("exit_time") in [None, "RUNNING"]:
@@ -204,6 +204,27 @@ def load_data_into_memory():
         if os.path.exists(p):
             try:
                 df_eth = pd.read_parquet(p)
+                
+                # Auto-backfill any missing closed bars from Binance REST API for ETH
+                try:
+                    import time
+                    from binance_ws import fetch_binance_klines_rest
+                    now_ms = int(time.time() * 1000)
+                    last_ts = int(df_eth["timestamp"].iloc[-1]) if "timestamp" in df_eth.columns else (int(df_eth["time"].iloc[-1]) * 1000)
+                    gap_thresholds = {"30m": 1800000, "1h": 3600000, "4h": 14400000, "1d": 86400000, "1w": 604800000}
+                    if now_ms - last_ts > gap_thresholds.get(tf, 1800000):
+                        new_bars = fetch_binance_klines_rest("ETHUSDT", tf, limit=1000, start_time=last_ts + 1)
+                        closed_bars = [b for b in new_bars if b.get("close_time", 0) < now_ms]
+                        if closed_bars:
+                            df_new = pd.DataFrame(closed_bars)
+                            df_eth = pd.concat([df_eth, df_new], ignore_index=True).drop_duplicates(subset=["timestamp"]).reset_index(drop=True)
+                            for w in [8, 25, 50, 55, 111]:
+                                if len(df_eth) >= w:
+                                    df_eth[f"MA{w}"] = df_eth["close"].rolling(w).mean()
+                            logger.info(f"Backfilled {len(closed_bars)} live ETH candles for {tf} up to {df_eth['datetime'].iloc[-1]}")
+                except Exception as ex_bf:
+                    logger.debug(f"ETH backfill gap skipped for {tf}: {ex_bf}")
+
                 PARQUET_DFS_ETH[tf] = df_eth
                 if "timestamp" in df_eth.columns:
                     PARQUET_TIMESTAMPS_ETH[tf] = (df_eth["timestamp"] // 1000).values

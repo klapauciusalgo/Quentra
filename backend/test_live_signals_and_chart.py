@@ -226,9 +226,10 @@ def test_floor_with_eth_regime(client):
 
 def test_autonomous_buy_execution_and_breakeven_lock(client):
     """Verify that Long engines track PnL, lock Breakeven (+0.2%), and execute Take Profit / Stop Loss autonomously."""
-    from live_signal_engine import live_signal_engine, StrategyModel
+    from live_signal_engine import LiveSignalEngine, StrategyModel
     
-    # Create test model
+    # Create isolated test engine so production models are never touched
+    test_engine = LiveSignalEngine()
     model = StrategyModel(
         strat_id="test-long-algo",
         name="Test Long Runner",
@@ -237,44 +238,40 @@ def test_autonomous_buy_execution_and_breakeven_lock(client):
         config={"sl_pct": 0.05, "be_pct": 0.03, "tp_pct": 0.20},
         symbol="BTCUSDT"
     )
-    live_signal_engine.strategies["test-long-algo"] = model
+    test_engine.strategies["test-long-algo"] = model
     
     # 1. Open Position (Simulate BUY signal)
-    try:
-        # 1. Open Position (Simulate BUY signal)
-        entry_price = 80000.0
-        ticket = live_signal_engine._open_position(model, entry_price)
-        assert ticket["action"] == "BUY"
-        assert ticket["direction"] == "LONG"
-        assert model.position_status == "OPEN"
-        assert model.current_sl == 76000.0 # -5%
-        assert model.be_active is False
+    entry_price = 80000.0
+    ticket = test_engine._open_position(model, entry_price)
+    assert ticket["action"] == "BUY"
+    assert ticket["direction"] == "LONG"
+    assert model.position_status == "OPEN"
+    assert model.current_sl == 76000.0 # -5%
+    assert model.be_active is False
 
-        # 2. Simulate price advance by +3.5% (triggers Breakeven lock)
-        now_ts = 1774300000
-        be_price = 80000.0 * 1.035 # 82,800
-        events = live_signal_engine.on_ticker_tick(be_price, now_ts, symbol="BTCUSDT")
-        
-        be_events = [e for e in events if e.get("type") == "BREAKEVEN_LOCKED" and e.get("strategy_id") == "test-long-algo"]
-        assert len(be_events) == 1
-        assert model.be_active is True
-        assert model.current_sl == 80160.0 # +0.2% locked above entry 80,000!
+    # 2. Simulate price advance by +3.5% (triggers Breakeven lock)
+    now_ts = 1774300000
+    be_price = 80000.0 * 1.035 # 82,800
+    events = test_engine.on_ticker_tick(be_price, now_ts, symbol="BTCUSDT")
+    
+    be_events = [e for e in events if e.get("type") == "BREAKEVEN_LOCKED" and e.get("strategy_id") == "test-long-algo"]
+    assert len(be_events) == 1
+    assert model.be_active is True
+    assert model.current_sl == 80160.0 # +0.2% locked above entry 80,000!
 
-        # 3. Simulate price drop to hit Breakeven stop loss
-        exit_events = live_signal_engine.on_ticker_tick(80150.0, now_ts + 10, symbol="BTCUSDT")
-        closed = [e for e in exit_events if e.get("type") == "POSITION_CLOSED" and e.get("strategy_id") == "test-long-algo"]
-        assert len(closed) == 1
-        assert model.position_status == "FLAT"
-        assert closed[0]["trade"]["reason"] == "Fast_Breakeven"
-        assert closed[0]["trade"]["net_return_pct"] >= 0.0 # Profit preserved!
-    finally:
-        # Cleanup
-        live_signal_engine.strategies.pop("test-long-algo", None)
+    # 3. Simulate price drop to hit Breakeven stop loss
+    exit_events = test_engine.on_ticker_tick(80150.0, now_ts + 10, symbol="BTCUSDT")
+    closed = [e for e in exit_events if e.get("type") == "POSITION_CLOSED" and e.get("strategy_id") == "test-long-algo"]
+    assert len(closed) == 1
+    assert model.position_status == "FLAT"
+    assert closed[0]["trade"]["reason"] == "Fast_Breakeven"
+    assert closed[0]["trade"]["net_return_pct"] >= 0.0 # Profit preserved!
 
 def test_autonomous_short_execution_and_take_profit(client):
     """Verify that Short engines track PnL, lock Breakeven, and execute Take Profit autonomously on ETH."""
-    from live_signal_engine import live_signal_engine, StrategyModel
+    from live_signal_engine import LiveSignalEngine, StrategyModel
     
+    test_engine = LiveSignalEngine()
     model = StrategyModel(
         strat_id="test-short-eth",
         name="Test Short ETH",
@@ -283,35 +280,31 @@ def test_autonomous_short_execution_and_take_profit(client):
         config={"sl_pct": 0.05, "be_pct": 0.02, "tp_pct": 0.10},
         symbol="ETHUSDT"
     )
-    live_signal_engine.strategies_eth["test-short-eth"] = model
+    test_engine.strategies_eth["test-short-eth"] = model
 
-    try:
-        # 1. Open Position (Simulate SELL signal)
-        entry_price = 2800.0
-        ticket = live_signal_engine._open_position(model, entry_price)
-        assert ticket["action"] == "SELL"
-        assert ticket["direction"] == "SHORT"
-        assert ticket["symbol"] == "ETH/USDT"
-        assert model.current_sl == 2940.0 # +5% for short
+    # 1. Open Position (Simulate SELL signal)
+    entry_price = 2800.0
+    ticket = test_engine._open_position(model, entry_price)
+    assert ticket["action"] == "SELL"
+    assert ticket["direction"] == "SHORT"
+    assert ticket["symbol"] == "ETH/USDT"
+    assert model.current_sl == 2940.0 # +5% for short
 
-        # 2. Simulate price drop by 2.5% (triggers short Breakeven lock)
-        now_ts = 1774300000
-        events = live_signal_engine.on_ticker_tick(2730.0, now_ts, symbol="ETHUSDT")
-        be_events = [e for e in events if e.get("type") == "BREAKEVEN_LOCKED" and e.get("strategy_id") == "test-short-eth"]
-        assert len(be_events) == 1
-        assert model.be_active is True
-        assert model.current_sl == 2794.4 # -0.2% locked below entry 2,800!
+    # 2. Simulate price drop by 2.5% (triggers short Breakeven lock)
+    now_ts = 1774300000
+    events = test_engine.on_ticker_tick(2730.0, now_ts, symbol="ETHUSDT")
+    be_events = [e for e in events if e.get("type") == "BREAKEVEN_LOCKED" and e.get("strategy_id") == "test-short-eth"]
+    assert len(be_events) == 1
+    assert model.be_active is True
+    assert model.current_sl == 2794.4 # -0.2% locked below entry 2,800!
 
-        # 3. Simulate price drop to hit Take Profit (10% down -> 2,520)
-        tp_events = live_signal_engine.on_ticker_tick(2510.0, now_ts + 20, symbol="ETHUSDT")
-        closed = [e for e in tp_events if e.get("type") == "POSITION_CLOSED" and e.get("strategy_id") == "test-short-eth"]
-        assert len(closed) == 1
-        assert model.position_status == "FLAT"
-        assert closed[0]["trade"]["reason"] == "Take_Profit"
-        assert closed[0]["trade"]["net_return_pct"] > 9.0 # ~10% gain - fees!
-    finally:
-        # Cleanup
-        live_signal_engine.strategies_eth.pop("test-short-eth", None)
+    # 3. Simulate price drop to hit Take Profit (10% down -> 2,520)
+    tp_events = test_engine.on_ticker_tick(2510.0, now_ts + 20, symbol="ETHUSDT")
+    closed = [e for e in tp_events if e.get("type") == "POSITION_CLOSED" and e.get("strategy_id") == "test-short-eth"]
+    assert len(closed) == 1
+    assert model.position_status == "FLAT"
+    assert closed[0]["trade"]["reason"] == "Take_Profit"
+    assert closed[0]["trade"]["net_return_pct"] > 9.0 # ~10% gain - fees!
 
 def test_multi_asset_signals_endpoints(client):
     """Verify live telemetry and ticket endpoints respond with correct symbol metadata."""

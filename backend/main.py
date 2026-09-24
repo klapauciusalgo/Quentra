@@ -311,6 +311,38 @@ def reload_local_catalog(symbol: str = "BTCUSDT"):
                 STRATEGIES_CATALOG = json.load(f)
                 STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
 
+
+def update_live_kline_cache(symbol: str, timeframe: str, candle: dict):
+    """Keep REST chart data aligned with closed candles processed by the engine."""
+    global KLINES_CACHE, KLINES_CACHE_ETH
+    sym = symbol.upper()
+    tf = timeframe.lower()
+    target_cache = KLINES_CACHE_ETH if sym == "ETHUSDT" else KLINES_CACHE
+    timestamp = int(candle.get("time") or int(candle.get("timestamp", 0)) // 1000)
+    if not timestamp:
+        return
+
+    item = {
+        "time": timestamp,
+        "datetime": pd.to_datetime(timestamp, unit="s", utc=True).strftime("%Y-%m-%d %H:%M:%S"),
+        "open": float(candle["open"]),
+        "high": float(candle["high"]),
+        "low": float(candle["low"]),
+        "close": float(candle["close"]),
+        "volume": float(candle.get("volume", 0.0)),
+        "ma8": None,
+        "ma25": None,
+        "ma50": None,
+        "ma55": None,
+        "ma111": None,
+    }
+    candles = list(target_cache.get(tf, []))
+    if candles and int(candles[-1].get("time", 0)) == timestamp:
+        candles[-1] = {**candles[-1], **item}
+    else:
+        candles.append(item)
+    target_cache[tf] = candles[-5000:]
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -454,7 +486,7 @@ async def get_klines(
     }
 
 def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
-    from live_signal_engine import deduplicate_markers, live_signal_engine
+    from live_signal_engine import deduplicate_markers, is_open_trade_record, live_signal_engine
     sym = symbol.upper()
     model = live_signal_engine.get_model(s["id"], symbol=sym)
     if not model:
@@ -462,7 +494,7 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
 
     s_copy = dict(s)
     # Strip any previously stored OPEN / RUNNING trades to avoid duplication
-    base_trades = [t for t in s.get("trades", []) if t.get("status") != "OPEN" and t.get("exit_time") != "RUNNING"]
+    base_trades = [t for t in s.get("trades", []) if not is_open_trade_record(t)]
     base_markers = [
         m for m in s.get("markers", [])
         if m.get("isActive") is not True and m.get("status") != "OPEN"
@@ -687,6 +719,36 @@ async def simulate_signal(
         logger.debug(f"Supabase signal audit skipped: {e}")
 
     return {"message": "Signal triggered successfully", "ticket": ticket}
+
+
+@app.post("/api/signals/close")
+async def close_live_signal(
+    strategy_id: str = Query(...),
+    symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT"),
+):
+    """Close the real engine position requested from the signal panel."""
+    from live_signal_engine import live_signal_engine
+
+    sym = symbol.upper()
+    model = live_signal_engine.get_model(strategy_id, symbol=sym)
+    if not model or model.position_status != "OPEN":
+        raise HTTPException(status_code=404, detail="No active position for this strategy")
+
+    price = live_signal_engine.get_last_price(sym) or binance_manager.get_ticker(sym).get("price")
+    if not price:
+        raise HTTPException(status_code=503, detail="Live price is unavailable")
+
+    trade = live_signal_engine._close_position(model, float(price), "Manual_Exit")
+    await binance_manager.broadcast({
+        "type": "SIGNAL_EXIT",
+        "symbol": "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT",
+        "asset": sym,
+        "strategy_id": model.strat_id,
+        "strategy_name": model.name,
+        "trade": trade,
+        "autonomous": False,
+    })
+    return {"status": "CLOSED", "trade": trade}
 
 @app.get("/api/signals/live")
 async def get_live_signals_telemetry(symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")):

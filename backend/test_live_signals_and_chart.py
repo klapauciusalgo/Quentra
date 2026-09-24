@@ -306,6 +306,116 @@ def test_autonomous_short_execution_and_take_profit(client):
     assert closed[0]["trade"]["reason"] == "Take_Profit"
     assert closed[0]["trade"]["net_return_pct"] > 9.0 # ~10% gain - fees!
 
+def test_reopened_position_recalculates_stop_loss():
+    """A previous position's stop must never leak into the next entry."""
+    from live_signal_engine import LiveSignalEngine, StrategyModel
+
+    engine = LiveSignalEngine()
+    model = StrategyModel(
+        strat_id="test-stop-reset",
+        name="Stop Reset",
+        tf="30m",
+        direction="LONG",
+        config={"sl_pct": 0.05, "be_pct": 0.0, "tp_pct": 0.20},
+    )
+    engine._open_position(model, 100.0)
+    engine._close_position(model, 95.0, "test")
+    reopened = engine._open_position(model, 200.0)
+
+    assert reopened["stop_loss"] == 190.0
+    assert model.current_sl == 190.0
+
+def test_zero_stop_macro_short_does_not_immediately_stop_out():
+    """Macro short positions use weekly regime flips rather than a zero-price stop."""
+    from live_signal_engine import LiveSignalEngine, StrategyModel
+
+    engine = LiveSignalEngine()
+    model = StrategyModel(
+        strat_id="test-macro-short",
+        name="Macro Short",
+        tf="1w",
+        direction="SHORT",
+        config={"sl_pct": 0.0, "be_pct": 0.0, "tp_pct": 0.0},
+    )
+    engine.strategies[model.strat_id] = model
+    engine._open_position(model, 100.0)
+
+    events = engine.on_ticker_tick(90.0, 1, symbol="BTCUSDT")
+
+    assert model.position_status == "OPEN"
+    assert model.current_sl == 0.0
+    assert not any(event["type"] == "POSITION_CLOSED" for event in events)
+
+def test_weekly_macro_emits_signal_on_regime_flip():
+    """A completed weekly close opens or flips the MA55 regime position."""
+    import asyncio
+    import pandas as pd
+    from live_signal_engine import LiveSignalEngine, StrategyModel
+
+    class BroadcastCollector:
+        def __init__(self):
+            self.events = []
+
+        async def broadcast(self, event):
+            self.events.append(event)
+
+    engine = LiveSignalEngine()
+    model = StrategyModel(
+        strat_id="test-weekly-macro",
+        name="Weekly Macro",
+        tf="1w",
+        direction="LONG",
+        config={
+            "execution": "weekly_ma55_regime",
+            "sl_pct": 0.0,
+            "be_pct": 0.0,
+            "tp_pct": 0.0,
+        },
+    )
+    engine.strategies = {model.strat_id: model}
+    engine.candle_buffers = {
+        "1w": pd.DataFrame([
+            {
+                "time": i * 604800,
+                "timestamp": i * 604800000,
+                "datetime": f"2020-01-{(i % 28) + 1:02d} 00:00:00",
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.0,
+                "volume": 1.0,
+            }
+            for i in range(60)
+        ])
+    }
+    collector = BroadcastCollector()
+
+    asyncio.run(engine.on_kline_closed("1w", {
+        "time": 60 * 604800,
+        "timestamp": 60 * 604800000,
+        "open": 100.0,
+        "high": 106.0,
+        "low": 99.0,
+        "close": 105.0,
+        "volume": 1.0,
+    }, collector))
+    assert model.position_status == "OPEN"
+    assert model.direction == "LONG"
+    assert [event["type"] for event in collector.events] == ["NEW_SIGNAL"]
+
+    asyncio.run(engine.on_kline_closed("1w", {
+        "time": 61 * 604800,
+        "timestamp": 61 * 604800000,
+        "open": 105.0,
+        "high": 106.0,
+        "low": 94.0,
+        "close": 95.0,
+        "volume": 1.0,
+    }, collector))
+    assert model.position_status == "OPEN"
+    assert model.direction == "SHORT"
+    assert [event["type"] for event in collector.events[-2:]] == ["SIGNAL_EXIT", "NEW_SIGNAL"]
+
 def test_multi_asset_signals_endpoints(client):
     """Verify live telemetry and ticket endpoints respond with correct symbol metadata."""
     # 1. Telemetry for BTC
@@ -341,6 +451,4 @@ def test_multi_asset_signals_endpoints(client):
     sim_data = res_sim.json()
     assert sim_data["ticket"]["symbol"] == "ETH/USDT"
     assert sim_data["ticket"]["asset"] == "ETHUSDT"
-
-
 

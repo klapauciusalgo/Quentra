@@ -52638,13 +52638,15 @@
       {
         "time": 1762732800,
         "position": "aboveBar",
-        "color": "#FF4B5C",
+        "color": "#FF453A",
         "shape": "arrowDown",
-        "text": "SHORT #6 @ $94,261",
-        "size": 2,
+        "text": "ACTIVE SHORT @ $94,261.44",
+        "size": 3,
         "entryPrice": 94261.44,
-        "tradeNo": 6,
-        "side": "SHORT"
+        "side": "SHORT",
+        "status": "OPEN",
+        "isActive": true,
+        "tradeNo": 6
       }
     ],
     "trades": [
@@ -52713,16 +52715,47 @@
         "side": "SHORT",
         "type": "SHORT",
         "entry_time": "2025-11-10 00:00:00",
-        "exit_time": "2026-09-07 00:00:00 (RUNNING)",
+        "exit_time": "RUNNING",
         "entry_price": 94261.44,
         "exit_price": 77484.0,
         "net_return_pct": 17.8,
-        "exit_reason": "Weekly Close >= MA55",
-        "status": "OPEN (RUNNING)"
+        "exit_reason": "Active Signal (Trailing)",
+        "status": "OPEN",
+        "is_active": true,
+        "stop_loss": 0.0,
+        "take_profit": 0.0,
+        "be_activated": false
       }
     ],
-    "has_active_signal": false,
-    "active_ticket": null,
+    "has_active_signal": true,
+    "active_ticket": {
+      "symbol": "BTC/USDT",
+      "asset": "BTCUSDT",
+      "direction": "SHORT",
+      "action": "SELL",
+      "strategy_name": "Pure Macro Weekly MA55",
+      "strategy_id": "pure-macro-weekly-ma55",
+      "timeframe": "1w",
+      "confidence_pct": 88,
+      "confidence_blocks": 8,
+      "entry_price": 94261.44,
+      "current_price": 83778.01,
+      "stop_loss": 0.0,
+      "stop_loss_pct": 0.0,
+      "breakeven_trigger": 94261.44,
+      "breakeven_trigger_pct": -0.0,
+      "take_profit": 0.0,
+      "take_profit_pct": -0.0,
+      "risk_reward_ratio": "Regime-managed",
+      "timestamp": "2025-11-10 00:00:00",
+      "contributing_agents": [
+        "quant",
+        "trader",
+        "informan"
+      ],
+      "status": "LIVE_SIGNAL",
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+    },
     "total_return_pct": 1751.05,
     "win_rate_pct": 60.0,
     "profit_factor": 50.98,

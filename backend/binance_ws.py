@@ -226,6 +226,10 @@ class BinanceManager:
                                 try:
                                     from live_signal_engine import live_signal_engine
                                     await live_signal_engine.on_kline_closed(tf, candle, self, symbol=sym)
+                                    # Keep the REST chart feed on the same closed candle
+                                    # sequence used by the signal engine.
+                                    import main as backend_main
+                                    backend_main.update_live_kline_cache(sym, tf, candle)
                                 except Exception as eval_err:
                                     logger.error(f"Error evaluating closed {sym} {tf} candle: {eval_err}", exc_info=True)
 
@@ -281,4 +285,3 @@ def fetch_binance_klines_rest(symbol: str = "BTCUSDT", interval: str = "30m", li
     return []
 
 binance_manager = BinanceManager()
-

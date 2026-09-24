@@ -39,28 +39,34 @@ export default {
       return new Response(null, { headers: CORS_HEADERS });
     }
 
-    // 1. If BACKEND_URL is configured in Cloudflare environment, proxy to it
+    // Route real-time API and WebSocket traffic to the autonomous backend when
+    // a production origin is configured. Keep the complete backend response so
+    // API errors and WebSocket upgrades are never replaced by stale edge data.
     if (env && env.BACKEND_URL && (url.pathname.startsWith('/api') || url.pathname.startsWith('/ws'))) {
       try {
-        const backendUrl = new URL(request.url);
         const target = new URL(env.BACKEND_URL);
-        backendUrl.hostname = target.hostname;
-        backendUrl.protocol = target.protocol;
-        backendUrl.port = target.port;
-        const res = await fetch(backendUrl.toString(), request);
-        if (res.ok) return res;
+        target.pathname = url.pathname;
+        target.search = url.search;
+        return await fetch(new Request(target.toString(), request));
       } catch (err) {
-        console.error('Proxy to backend failed, falling back to edge handlers:', err);
+        console.error('Proxy to backend failed:', err);
+        if (url.pathname.startsWith('/api/signals/') || url.pathname.startsWith('/ws')) {
+          return new Response(JSON.stringify({
+            error: 'Live signal backend is unavailable',
+            code: 'BACKEND_UNAVAILABLE',
+          }), { status: 503, headers: CORS_HEADERS });
+        }
       }
     }
 
     // 2. Edge handler: /api/status
     if (url.pathname === '/api/status') {
       return new Response(JSON.stringify({
-        status: "ONLINE",
-        service: "Quentra Platform (Edge)",
-        binance_ws_connected: true,
-        ticker_status: "LIVE",
+        status: "EDGE_ONLY",
+        service: "Quentra Platform (Edge Cache)",
+        binance_ws_connected: false,
+        ticker_status: "EDGE_FALLBACK",
+        signals_available: false,
         supported_assets: ["BTCUSDT", "ETHUSDT"],
         strategies_count: strategiesData.length,
         strategies_count_eth: strategiesDataEth.length,
@@ -305,6 +311,15 @@ export default {
         timeframe: tf,
         candles: [],
       }), { headers: CORS_HEADERS });
+    }
+
+    // Signal APIs require the autonomous backend. Returning a static response
+    // here would make the UI look live while silently hiding signal events.
+    if (url.pathname.startsWith('/api/signals/')) {
+      return new Response(JSON.stringify({
+        error: 'Live signal backend is not configured',
+        code: 'BACKEND_UNAVAILABLE',
+      }), { status: 503, headers: CORS_HEADERS });
     }
 
     // 7. Block any other /api/* from returning index.html

@@ -170,6 +170,54 @@ function TradingApp() {
   const wsRef = useRef(null);
   const directBinanceWsRef = useRef(null);
   const lastWsTickTimeRef = useRef(0);
+  const [liveKline, setLiveKline] = useState(null);
+
+  const refreshLiveState = async (asset, replaceCatalog = true) => {
+    const symbol = asset || selectedAssetRef.current;
+    const [strategiesResult, signalsResult] = await Promise.allSettled([
+      fetch(`${API_BASE}/api/strategies?symbol=${symbol}`),
+      fetch(`${API_BASE}/api/signals/live?symbol=${symbol}`),
+    ]);
+
+    if (replaceCatalog && strategiesResult.status === 'fulfilled' && strategiesResult.value.ok) {
+      const catalog = await strategiesResult.value.json();
+      if (selectedAssetRef.current === symbol && Array.isArray(catalog) && catalog.length > 0) {
+        setStrategies(catalog);
+        const selected = catalog.find((strategy) => strategy.id === selectedStrategyId) || catalog[0];
+        if (selected?.timeframe) setTimeframe(selected.timeframe.toLowerCase());
+      }
+    } else if (replaceCatalog && selectedAssetRef.current === symbol) {
+      const fallbackCatalog = symbol === 'ETHUSDT' ? strategiesDataEth : strategiesData;
+      setStrategies(fallbackCatalog);
+    }
+
+    if (signalsResult.status === 'fulfilled' && signalsResult.value.ok) {
+      const data = await signalsResult.value.json();
+      if (selectedAssetRef.current === symbol && Array.isArray(data?.strategies)) {
+        const price = data.current_price || (symbol === 'ETHUSDT' ? data.current_eth_price : data.current_btc_price);
+        setActiveSignals(
+          data.strategies
+            .filter((strategy) => strategy.position_status === 'IN_POSITION' || strategy.position_status === 'OPEN')
+            .map((strategy) => ({
+              id: `${symbol}-${strategy.strategy_id}`,
+              asset: symbol,
+              strategy_id: strategy.strategy_id,
+              strategy_name: strategy.name,
+              timeframe: strategy.timeframe,
+              direction: strategy.direction,
+              action: strategy.direction === 'LONG' ? 'BUY' : 'SELL',
+              entry_price: strategy.entry_price || price,
+              current_price: price,
+              floating_pnl_pct: strategy.floating_pnl_pct || 0.0,
+              stop_loss: strategy.stop_loss,
+              take_profit: strategy.take_profit,
+              timestamp: strategy.entry_time || new Date().toLocaleTimeString(),
+              status: 'IN_POSITION',
+            }))
+        );
+      }
+    }
+  };
 
   // 1. Fetch initial platform data with automatic fallbacks
   useEffect(() => {
@@ -258,34 +306,7 @@ function TradingApp() {
         // Initialized with bundled strategiesData
       });
 
-    // Live Signals Telemetry
-    fetch(`${API_BASE}/api/signals/live`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data && Array.isArray(data.strategies)) {
-          const inPos = data.strategies.filter((s) => s.position_status === 'IN_POSITION' || s.position_status === 'OPEN');
-          if (inPos.length > 0) {
-            setActiveSignals(
-              inPos.map((s) => ({
-                id: s.strategy_id,
-                strategy_id: s.strategy_id,
-                strategy_name: s.name,
-                timeframe: s.timeframe,
-                direction: s.direction,
-                action: s.direction === 'LONG' ? 'BUY' : 'SELL',
-                entry_price: s.entry_price || data.current_btc_price,
-                current_price: data.current_btc_price,
-                floating_pnl_pct: s.floating_pnl_pct || 0.0,
-                stop_loss: s.stop_loss,
-                take_profit: s.take_profit,
-                timestamp: new Date().toLocaleTimeString(),
-                status: 'IN_POSITION',
-              }))
-            );
-          }
-        }
-      })
-      .catch(() => {});
+    refreshLiveState(selectedAssetRef.current);
 
     // Periodic ticker sync: only query edge /api/ticker as fallback if no live WebSocket tick in the last 4s
     const tickerPollInterval = setInterval(() => {
@@ -459,27 +480,36 @@ function TradingApp() {
             }));
           } else if (msg.type === 'FLOOR_UPDATE') {
             setFloor(msg.floor);
+          } else if (msg.type === 'KLINE') {
+            if (msg.symbol === selectedAssetRef.current && msg.candle) {
+              setLiveKline({ ...msg, asset: msg.symbol });
+            }
           } else if (msg.type === 'NEW_SIGNAL') {
             playRetroSound('signal');
+            const asset = msg.asset || msg.ticket?.asset || 'BTCUSDT';
             const direction = msg.ticket?.direction || 'LONG';
             const action = direction === 'LONG' ? 'BUY' : 'SELL';
             const sigId = msg.ticket?.strategy_id || `sig-${Date.now()}`;
             const newSig = {
-              id: sigId,
+              id: `${asset}-${sigId}`,
+              asset,
               strategy_id: msg.ticket?.strategy_id,
               strategy_name: msg.ticket?.strategy_name || 'Autonomous Strategy',
               timeframe: msg.ticket?.timeframe || '1h',
               direction: direction,
               action: action,
-              entry_price: msg.ticket?.entry_price || ticker.price,
-              current_price: ticker.price,
+              entry_price: msg.ticket?.entry_price || msg.ticket?.current_price,
+              current_price: msg.ticket?.current_price || msg.ticket?.entry_price,
               floating_pnl_pct: 0.0,
               stop_loss: msg.ticket?.stop_loss,
               take_profit: msg.ticket?.take_profit,
               timestamp: new Date().toLocaleTimeString(),
               status: 'IN_POSITION',
             };
-            setActiveSignals((prev) => [newSig, ...prev.filter((s) => s.strategy_id !== newSig.strategy_id)]);
+            if (asset === selectedAssetRef.current) {
+              setActiveSignals((prev) => [newSig, ...prev.filter((s) => s.strategy_id !== newSig.strategy_id)]);
+              refreshLiveState(asset);
+            }
             setSignalNotifications((prev) => [
               {
                 id: `notif-${Date.now()}`,
@@ -501,10 +531,12 @@ function TradingApp() {
             setTimeout(() => setBannerAlert(null), 7000);
           } else if (msg.type === 'SIGNAL_EXIT') {
             playRetroSound('alert');
+            const asset = msg.asset || 'BTCUSDT';
             const pnl = msg.trade?.net_return_pct;
             const pnlStr = pnl !== undefined ? `${pnl > 0 ? '+' : ''}${pnl}%` : '';
-            if (msg.strategy_id) {
+            if (msg.strategy_id && asset === selectedAssetRef.current) {
               setActiveSignals((prev) => prev.filter((s) => s.strategy_id !== msg.strategy_id));
+              refreshLiveState(asset);
             }
             setSignalNotifications((prev) => [
               {
@@ -527,13 +559,17 @@ function TradingApp() {
             setTimeout(() => setBannerAlert(null), 7000);
           } else if (msg.type === 'BREAKEVEN_LOCKED') {
             playRetroSound('select');
-            setActiveSignals((prev) =>
-              prev.map((s) =>
-                s.strategy_id === msg.strategy_id
-                  ? { ...s, stop_loss: msg.new_stop_loss, be_active: true }
-                  : s
-              )
-            );
+            const asset = msg.asset || 'BTCUSDT';
+            if (asset === selectedAssetRef.current) {
+              setActiveSignals((prev) =>
+                prev.map((s) =>
+                  s.strategy_id === msg.strategy_id
+                    ? { ...s, stop_loss: msg.new_stop_loss, be_active: true }
+                    : s
+                )
+              );
+              refreshLiveState(asset);
+            }
             setSignalNotifications((prev) => [
               {
                 id: `notif-${Date.now()}`,
@@ -584,6 +620,7 @@ function TradingApp() {
     playRetroSound('select');
     setSelectedAsset(newAsset);
     selectedAssetRef.current = newAsset;
+    setActiveSignals([]);
 
     // Instantly update active ticker from map to eliminate lag or set clean baseline
     if (tickersMap[newAsset] && tickersMap[newAsset].price > 0) {
@@ -601,41 +638,7 @@ function TradingApp() {
       setTickersMap((prev) => ({ ...prev, [newAsset]: fallbackTicker }));
     }
 
-    const fallbackStrats = newAsset === 'ETHUSDT' ? strategiesDataEth : strategiesData;
-
-    // Fetch live enriched strategies for this asset
-    fetch(`${API_BASE}/api/strategies?symbol=${newAsset}`)
-      .then((r) => {
-        const ct = r.headers.get('content-type') || '';
-        if (r.ok && ct.includes('application/json')) return r.json();
-        throw new Error('Not JSON');
-      })
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setStrategies(data);
-          const exists = data.some((s) => s.id === selectedStrategyId);
-          if (!exists) {
-            setSelectedStrategyId(data[0].id);
-            if (data[0].timeframe) setTimeframe(data[0].timeframe.toLowerCase());
-          } else {
-            const cur = data.find((s) => s.id === selectedStrategyId);
-            if (cur?.timeframe) setTimeframe(cur.timeframe.toLowerCase());
-          }
-        } else {
-          setStrategies(fallbackStrats);
-          if (!fallbackStrats.some((s) => s.id === selectedStrategyId)) {
-            setSelectedStrategyId(fallbackStrats[0].id);
-            if (fallbackStrats[0].timeframe) setTimeframe(fallbackStrats[0].timeframe.toLowerCase());
-          }
-        }
-      })
-      .catch(() => {
-        setStrategies(fallbackStrats);
-        if (!fallbackStrats.some((s) => s.id === selectedStrategyId)) {
-          setSelectedStrategyId(fallbackStrats[0].id);
-          if (fallbackStrats[0].timeframe) setTimeframe(fallbackStrats[0].timeframe.toLowerCase());
-        }
-      });
+    refreshLiveState(newAsset);
 
     // Fetch latest ticker for this asset
     fetch(`${API_BASE}/api/ticker?symbol=${newAsset}`)
@@ -686,7 +689,7 @@ function TradingApp() {
     if (strat?.timeframe) {
       setTimeframe(strat.timeframe.toLowerCase());
     }
-    fetch(`${API_BASE}/api/signals/ticket?strategy_id=${stratId}`)
+    fetch(`${API_BASE}/api/signals/ticket?strategy_id=${stratId}&symbol=${selectedAssetRef.current}`)
       .then((r) => r.json())
       .then((ticket) => {
         if (ticket) {
@@ -704,7 +707,7 @@ function TradingApp() {
 
   // Dispatch simulated test signal
   const handleSimulateSignal = () => {
-    fetch(`${API_BASE}/api/floor/simulate-signal?strategy_id=${selectedStrategyId}`, { method: 'POST' })
+    fetch(`${API_BASE}/api/floor/simulate-signal?strategy_id=${selectedStrategyId}&symbol=${selectedAssetRef.current}`, { method: 'POST' })
       .then((r) => r.json())
       .then((data) => {
         const ticket = data.ticket;
@@ -786,8 +789,15 @@ function TradingApp() {
   };
 
   // Close active signal
-  const handleCloseSignal = (strategyId) => {
+  const handleCloseSignal = async (strategyId) => {
     playRetroSound('alert');
+    try {
+      const response = await fetch(`${API_BASE}/api/signals/close?strategy_id=${encodeURIComponent(strategyId)}&symbol=${selectedAssetRef.current}`, { method: 'POST' });
+      if (!response.ok) throw new Error('Close request failed');
+      await refreshLiveState(selectedAssetRef.current);
+    } catch (error) {
+      return;
+    }
     setActiveSignals((prev) => {
       const sig = prev.find((s) => s.strategy_id === strategyId);
       if (sig) {
@@ -1026,6 +1036,7 @@ function TradingApp() {
               onPriceSync={handlePriceSyncFromChart}
               activeSignals={activeSignals}
               symbol={selectedAsset}
+              liveKline={liveKline}
             />
           </section>
         )}

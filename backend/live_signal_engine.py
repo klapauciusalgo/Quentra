@@ -72,6 +72,15 @@ def deduplicate_markers(markers: List[dict]) -> List[dict]:
             unique[key] = marker
     return [unique[key] for key in order]
 
+
+def is_open_trade_record(trade: dict) -> bool:
+    """Accept legacy and current representations of a running trade."""
+    if not trade:
+        return False
+    status = str(trade.get("status", "")).upper()
+    exit_time = str(trade.get("exit_time", "")).upper()
+    return status == "RUNNING" or status.startswith("OPEN") or "RUNNING" in exit_time
+
 def compute_swings_arr(high_arr: np.ndarray, low_arr: np.ndarray, len_p: int):
     n = len(high_arr)
     top = np.zeros(n)
@@ -300,7 +309,12 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
             tf="1w",
             direction="LONG",
             config={
-                "regime": "weekly_ma55_close"
+                "regime": "weekly_ma55_close",
+                "execution": "weekly_ma55_regime",
+                "mode": "long_short",
+                "sl_pct": 0.0,
+                "be_pct": 0.0,
+                "tp_pct": 0.0,
             },
             symbol=sym
         )
@@ -393,6 +407,11 @@ class LiveSignalEngine:
             # Synchronize active open trades from recent history
             self.sync_active_positions(sym)
 
+            # The weekly macro strategy is a regime state machine, not an SMC
+            # breakout. Reconstructing it from closed weekly candles prevents a
+            # restart from losing the currently active long or short regime.
+            self._restore_weekly_macro_position(sym)
+
             # Evaluate current market state across all strategies
             self._evaluate_all_models_initial(sym)
             if sym == "BTCUSDT":
@@ -473,18 +492,18 @@ class LiveSignalEngine:
 
         for strat_id, model in models.items():
             strat_data = disk_catalog.get(strat_id, {})
-            has_active = strat_data.get("has_active_signal", False)
             trades = strat_data.get("trades", [])
             last_trade = trades[-1] if trades else None
-            is_open_trade = last_trade and (last_trade.get("status") in ["OPEN", "RUNNING"] or last_trade.get("exit_time") in [None, "RUNNING"])
+            is_open_trade = is_open_trade_record(last_trade)
 
-            if has_active and is_open_trade:
+            if is_open_trade:
                 entry_p = float(last_trade.get("entry_price", 0.0))
                 entry_time = str(last_trade.get("entry_time", ""))
                 curr_sl = float(last_trade.get("stop_loss", 0.0))
                 target_tp = float(last_trade.get("take_profit", 0.0))
                 be_active = bool(last_trade.get("be_activated", False))
 
+                model.direction = str(last_trade.get("side") or model.direction).upper()
                 model.position_status = "OPEN"
                 model.entry_price = entry_p
                 model.entry_time = entry_time
@@ -528,6 +547,42 @@ class LiveSignalEngine:
                 model.entry_price = 0.0
                 model.active_ticket = None
                 model.active_markers = []
+
+    def _restore_weekly_macro_position(self, symbol: str = "BTCUSDT"):
+        """Restore the current MA55 regime from completed weekly candles."""
+        models = self.get_models(symbol)
+        model = models.get("pure-macro-weekly-ma55")
+        buffers = self.get_candle_buffers(symbol)
+        if not model or "1w" not in buffers or buffers["1w"].empty:
+            return
+
+        df = buffers["1w"]
+        ma55 = df["MA55"] if "MA55" in df else df["close"].rolling(55).mean()
+        valid = df.loc[ma55.notna()].copy()
+        if valid.empty:
+            return
+
+        valid["ma55"] = ma55.loc[valid.index]
+        sides = np.where(valid["close"] >= valid["ma55"], "LONG", "SHORT")
+        change_points = np.flatnonzero(np.r_[True, sides[1:] != sides[:-1]])
+        entry_idx = int(change_points[-1])
+        entry_row = valid.iloc[entry_idx]
+        desired_side = str(sides[-1])
+        entry_time = str(entry_row.get("datetime") or datetime.fromtimestamp(int(entry_row["time"]), tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+
+        is_same_position = (
+            model.position_status == "OPEN"
+            and model.direction == desired_side
+            and abs(model.entry_price - float(entry_row["close"])) < 0.01
+        )
+        if is_same_position and model.active_ticket:
+            return
+
+        model.direction = desired_side
+        model.current_sl = 0.0
+        model.target_tp = 0.0
+        model.be_active = False
+        self._open_position(model, float(entry_row["close"]), entry_time)
 
     def _sync_pippo_new_gen(self, model: StrategyModel, symbol: str = "BTCUSDT"):
         """Replays Pippo 30m New Gen MA squeeze & multi-timeframe rules across recent bars."""
@@ -682,6 +737,15 @@ class LiveSignalEngine:
         if n < 50:
             return
 
+        if model.config.get("execution") == "weekly_ma55_regime":
+            ma55 = float(df["MA55"].iloc[-1]) if "MA55" in df and not pd.isna(df["MA55"].iloc[-1]) else float(df["close"].rolling(55).mean().iloc[-1])
+            model.next_entry_trigger = round(ma55, 2)
+            model.structural_floor = round(ma55, 2)
+            model.regime_ok = True
+            curr_p = self.get_last_price(sym) or float(closes[-1])
+            model.distance_to_trigger_pct = round(((curr_p - ma55) / ma55) * 100.0, 2) if ma55 > 0 else 0.0
+            return
+
         if model.strat_id in ["pippo-30m-new-gen", "pippo-30m-grd"]:
             ma25_30 = float(df["MA25"].iloc[-1]) if ("MA25" in df and not pd.isna(df["MA25"].iloc[-1])) else float(df["close"].rolling(25).mean().iloc[-1])
             ma50_30 = float(df["MA50"].iloc[-1]) if ("MA50" in df and not pd.isna(df["MA50"].iloc[-1])) else float(df["close"].rolling(50).mean().iloc[-1])
@@ -812,12 +876,16 @@ class LiveSignalEngine:
                             "price": price,
                             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
                         })
+                        try:
+                            self._persist_opened_trade(model, model.active_ticket or {})
+                        except Exception as exc:
+                            logger.error(f"Error persisting breakeven state for {model.strat_id}: {exc}")
 
                 # 3. Check Intra-bar Stop Loss
                 hit_sl = False
-                if model.direction == "LONG" and price <= model.current_sl:
+                if model.current_sl > 0 and model.direction == "LONG" and price <= model.current_sl:
                     hit_sl = True
-                elif model.direction == "SHORT" and price >= model.current_sl:
+                elif model.current_sl > 0 and model.direction == "SHORT" and price >= model.current_sl:
                     hit_sl = True
 
                 # 4. Check Intra-bar Take Profit
@@ -924,6 +992,27 @@ class LiveSignalEngine:
 
             prev_close = closes[-2]
             curr_close = closes[-1]
+
+            if model.config.get("execution") == "weekly_ma55_regime":
+                ma55 = float(buffers[tf]["MA55"].iloc[-1]) if "MA55" in buffers[tf] and not pd.isna(buffers[tf]["MA55"].iloc[-1]) else float(pd.Series(closes).rolling(55).mean().iloc[-1])
+                desired_side = "LONG" if curr_close >= ma55 else "SHORT"
+                if model.position_status == "OPEN" and model.direction != desired_side:
+                    exit_trade = self._close_position(model, curr_close, "Weekly_MA55_Regime_Flip")
+                    await binance_manager.broadcast({
+                        "type": "SIGNAL_EXIT", "symbol": fmt_sym, "asset": sym,
+                        "strategy_id": model.strat_id, "strategy_name": model.name,
+                        "trade": exit_trade, "autonomous": True,
+                    })
+                if model.position_status == "FLAT":
+                    model.direction = desired_side
+                    model.current_sl = 0.0
+                    model.target_tp = 0.0
+                    ticket = self._open_position(model, curr_close, new_bar["datetime"])
+                    await binance_manager.broadcast({
+                        "type": "NEW_SIGNAL", "symbol": fmt_sym, "asset": sym,
+                        "ticket": ticket, "autonomous": True,
+                    })
+                continue
 
             if model.strat_id in ["pippo-30m-new-gen", "pippo-30m-grd"]:
                 df_cur = buffers[tf]
@@ -1058,15 +1147,16 @@ class LiveSignalEngine:
         model.entry_time = entry_time or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         model.peak_price = entry_p
         model.trough_price = entry_p
-        model.be_active = getattr(model, "be_active", False)
+        model.be_active = False
 
-        if not getattr(model, "current_sl", 0.0) or model.current_sl == 0.0:
+        model.current_sl = 0.0
+        if sl_pct > 0:
             if model.direction == "LONG":
                 model.current_sl = round(entry_p * (1.0 - sl_pct), 2)
             else:
                 model.current_sl = round(entry_p * (1.0 + sl_pct), 2)
 
-        model.target_tp = round(entry_p * (1.0 + tp_pct if model.direction == "LONG" else 1.0 - tp_pct), 2)
+        model.target_tp = round(entry_p * (1.0 + tp_pct if model.direction == "LONG" else 1.0 - tp_pct), 2) if tp_pct > 0 else 0.0
         be_trigger_val = round(entry_p * (1.0 + be_pct if model.direction == "LONG" else 1.0 - be_pct), 2)
 
         sym = getattr(model, "symbol", "BTCUSDT")
@@ -1091,7 +1181,7 @@ class LiveSignalEngine:
             "breakeven_trigger_pct": round(be_pct * 100, 1) if model.direction == "LONG" else -round(be_pct * 100, 1),
             "take_profit": model.target_tp,
             "take_profit_pct": round(tp_pct * 100, 1) if model.direction == "LONG" else -round(tp_pct * 100, 1),
-            "risk_reward_ratio": f"{round(tp_pct / sl_pct, 2)}x",
+            "risk_reward_ratio": f"{round(tp_pct / sl_pct, 2)}x" if sl_pct > 0 else "Regime-managed",
             "timestamp": model.entry_time,
             "contributing_agents": ["quant", "trader", "informan"],
             "status": "LIVE_SIGNAL",
@@ -1181,6 +1271,8 @@ class LiveSignalEngine:
         model.entry_price = 0.0
         model.entry_time = None
         model.be_active = False
+        model.current_sl = 0.0
+        model.target_tp = 0.0
         model.active_ticket = None
         model.active_markers = []
 
@@ -1229,7 +1321,7 @@ class LiveSignalEngine:
                 trades = strat.get("trades", [])
                 matching_trade = None
                 for t in reversed(trades):
-                    if t.get("status") in ["OPEN", "RUNNING"] or t.get("exit_time") in [None, "RUNNING"]:
+                    if is_open_trade_record(t):
                         matching_trade = t
                         break
 
@@ -1359,7 +1451,7 @@ class LiveSignalEngine:
                 strat["has_active_signal"] = True
                 strat["active_ticket"] = ticket
 
-                has_open = any(t.get("status") in ["OPEN", "RUNNING"] or t.get("exit_time") in [None, "RUNNING"] for t in trades)
+                has_open = any(is_open_trade_record(t) for t in trades)
                 active_trade = existing_entry
                 if not has_open and not existing_entry:
                     trade_no = len(trades) + 1
@@ -1382,8 +1474,11 @@ class LiveSignalEngine:
                     }
                     trades.append(open_trade)
                     active_trade = open_trade
-                elif existing_entry and existing_entry.get("status") in ["OPEN", "RUNNING"]:
+                elif existing_entry and is_open_trade_record(existing_entry):
                     # Update active parameters on the existing open trade
+                    existing_entry["status"] = "OPEN"
+                    existing_entry["exit_time"] = "RUNNING"
+                    existing_entry["is_active"] = True
                     existing_entry["stop_loss"] = model.current_sl
                     existing_entry["take_profit"] = model.target_tp
                     existing_entry["be_activated"] = model.be_active
@@ -1392,7 +1487,7 @@ class LiveSignalEngine:
                 if active_trade is None:
                     active_trade = next((
                         trade for trade in reversed(trades)
-                        if trade.get("status") in ["OPEN", "RUNNING"] or trade.get("exit_time") in [None, "RUNNING"]
+                        if is_open_trade_record(trade)
                     ), None)
 
                 # Add active markers
@@ -1508,7 +1603,7 @@ class LiveSignalEngine:
             "breakeven_trigger_pct": round(be_pct * 100, 1) if model.direction == "LONG" else -round(be_pct * 100, 1),
             "take_profit": round((model.next_entry_trigger or curr_p) * (1.0 + tp_pct if model.direction == "LONG" else 1.0 - tp_pct), 2),
             "take_profit_pct": round(tp_pct * 100, 1) if model.direction == "LONG" else -round(tp_pct * 100, 1),
-            "risk_reward_ratio": f"{round(tp_pct / sl_pct, 2)}x",
+            "risk_reward_ratio": f"{round(tp_pct / sl_pct, 2)}x" if sl_pct > 0 else "Regime-managed",
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "contributing_agents": ["quant", "trader", "informan"],
             "status": "ACTIVE_WATCH",

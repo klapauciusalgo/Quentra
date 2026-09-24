@@ -74,6 +74,7 @@ export default function TradingChart({
   onPriceSync = null,
   activeSignals = [],
   symbol = 'BTCUSDT',
+  liveKline = null,
 }) {
   const isDark = theme === 'dark';
   const chartContainerRef = useRef(null);
@@ -391,11 +392,37 @@ export default function TradingChart({
     }
 
     loadKlines();
+    const refreshInterval = setInterval(loadKlines, 30000);
 
     return () => {
       isMounted = false;
+      clearInterval(refreshInterval);
     };
   }, [timeframe, symbol]);
+
+  // Closed candles from the backend arrive before the next REST refresh. Merge
+  // them into the visible series so a signal marker lands on its actual bar.
+  useEffect(() => {
+    if (!liveKline?.candle || liveKline.symbol !== symbol || liveKline.timeframe !== timeframe) return;
+    const candle = liveKline.candle;
+    const time = Number(candle.time);
+    if (!Number.isFinite(time)) return;
+    setCandles((previous) => {
+      const nextCandle = {
+        time,
+        open: Number(candle.open),
+        high: Number(candle.high),
+        low: Number(candle.low),
+        close: Number(candle.close),
+        volume: Number(candle.volume || 0),
+      };
+      const next = [...previous];
+      const lastIndex = next.findIndex((item) => Number(item.time) === time);
+      if (lastIndex >= 0) next[lastIndex] = { ...next[lastIndex], ...nextCandle };
+      else next.push(nextCandle);
+      return next.sort((a, b) => Number(a.time) - Number(b.time));
+    });
+  }, [liveKline, symbol, timeframe]);
 
   // Clean and remove price lines
   const clearPriceLines = () => {

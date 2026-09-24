@@ -542,6 +542,8 @@ class LiveSignalEngine:
                     if model.active_ticket:
                         model.active_ticket["stop_loss"] = model.current_sl
                         model.active_ticket["be_active"] = False
+                        model.active_ticket["breakeven_trigger"] = None
+                        model.active_ticket["breakeven_trigger_pct"] = 0.0
                 
                 # Restore only the markers that belong to the current open trade.
                 # Older inactive OPEN records must not be revived after a restart.
@@ -1319,8 +1321,8 @@ class LiveSignalEngine:
             "current_price": curr_price,
             "stop_loss": model.current_sl,
             "stop_loss_pct": -round(sl_pct * 100, 1) if model.direction == "LONG" else round(sl_pct * 100, 1),
-            "breakeven_trigger": be_trigger_val,
-            "breakeven_trigger_pct": round(be_pct * 100, 1) if model.direction == "LONG" else -round(be_pct * 100, 1),
+            "breakeven_trigger": be_trigger_val if be_pct > 0 else None,
+            "breakeven_trigger_pct": (round(be_pct * 100, 1) if model.direction == "LONG" else -round(be_pct * 100, 1)) if be_pct > 0 else 0.0,
             "take_profit": model.target_tp,
             "take_profit_pct": round(tp_pct * 100, 1) if model.direction == "LONG" else -round(tp_pct * 100, 1),
             "risk_reward_ratio": f"{round(tp_pct / sl_pct, 2)}x" if sl_pct > 0 else "Regime-managed",

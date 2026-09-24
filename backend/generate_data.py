@@ -422,7 +422,7 @@ strategies = [
             "entry_swing": "16 bars (16 hours internal breakout)",
             "exit_swing": "48 bars (48 hours structural floor)",
             "major_swing": "50 bars macro anchor",
-            "regime_filter": "4H SMA 111 (or 1H SMA 444)",
+            "regime_filter": "4H SMA 111",
             "hard_stop_loss": "8.0%",
             "breakeven_lock": "+5.0% -> BE (+0.2%)",
             "take_profit": "75.0% runner target",

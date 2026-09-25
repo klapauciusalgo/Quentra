@@ -61,6 +61,54 @@ function formatDuration(startTime, endTime) {
   return `${Math.round(diffHours)} Hours`;
 }
 
+function calculateRsiData(candles, period = 14, maPeriod = 9) {
+  if (!Array.isArray(candles) || candles.length <= period) {
+    return { rsi: [], ma: [], levels: [] };
+  }
+
+  const rsiValues = [];
+  let averageGain = 0;
+  let averageLoss = 0;
+
+  for (let i = 1; i < candles.length; i += 1) {
+    const delta = Number(candles[i].close) - Number(candles[i - 1].close);
+    const gain = Math.max(delta, 0);
+    const loss = Math.max(-delta, 0);
+
+    if (i <= period) {
+      averageGain += gain / period;
+      averageLoss += loss / period;
+      if (i < period) continue;
+    } else {
+      averageGain = ((averageGain * (period - 1)) + gain) / period;
+      averageLoss = ((averageLoss * (period - 1)) + loss) / period;
+    }
+
+    const relativeStrength = averageLoss === 0 ? Infinity : averageGain / averageLoss;
+    const value = averageLoss === 0 ? 100 : 100 - (100 / (1 + relativeStrength));
+    rsiValues.push({ time: candles[i].time, value: Number(value.toFixed(4)) });
+  }
+
+  const maValues = rsiValues.map((point, index) => {
+    if (index < maPeriod - 1) return null;
+    const window = rsiValues.slice(index - maPeriod + 1, index + 1);
+    const average = window.reduce((sum, item) => sum + item.value, 0) / maPeriod;
+    return { time: point.time, value: Number(average.toFixed(4)) };
+  }).filter(Boolean);
+
+  const levels = candles.length > 0
+    ? [0, 30, 50, 70, 100].map((value) => ({
+        value,
+        data: [
+          { time: candles[0].time, value },
+          { time: candles[candles.length - 1].time, value },
+        ],
+      }))
+    : [];
+
+  return { rsi: rsiValues, ma: maValues, levels };
+}
+
 export default function TradingChart({ 
   timeframe = '30m', 
   onTimeframeChange, 
@@ -80,6 +128,11 @@ export default function TradingChart({
   const candleSeriesRef = useRef(null);
   const volumeSeriesRef = useRef(null);
   const maSeriesRef = useRef({});
+  const rsiSeriesRef = useRef(null);
+  const rsiMaSeriesRef = useRef(null);
+  const rsiLevelSeriesRef = useRef([]);
+  const rsiPaneRef = useRef(null);
+  const rsiLabelRef = useRef(null);
   const markersPrimitiveRef = useRef(null);
   const priceLinesRef = useRef([]);
   const shouldResetViewportRef = useRef(true);
@@ -215,6 +268,17 @@ export default function TradingChart({
         window.requestAnimationFrame(applyLatestRange);
       });
     }
+  };
+
+  const updateRsiSeries = (candleData) => {
+    const { rsi, ma, levels } = calculateRsiData(candleData);
+    if (rsiSeriesRef.current) rsiSeriesRef.current.setData(rsi);
+    if (rsiMaSeriesRef.current) rsiMaSeriesRef.current.setData(ma);
+
+    rsiLevelSeriesRef.current.forEach((series, index) => {
+      const level = levels[index];
+      if (level) series.setData(level.data);
+    });
   };
 
   const [visibleMAs, setVisibleMAs] = useState({
@@ -482,6 +546,11 @@ export default function TradingChart({
     if (chartRef.current) {
       chartRef.current.remove();
       chartRef.current = null;
+      rsiSeriesRef.current = null;
+      rsiMaSeriesRef.current = null;
+      rsiLevelSeriesRef.current = [];
+      rsiPaneRef.current = null;
+      rsiLabelRef.current = null;
       markersPrimitiveRef.current = null;
       priceLinesRef.current = [];
     }
@@ -490,7 +559,7 @@ export default function TradingChart({
     const initialWidth = Math.max(300, container.clientWidth || container.parentElement?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth - 64 : 800));
     const chart = createChart(container, {
       width: initialWidth,
-      height: 520,
+      height: 650,
       layout: {
         background: { type: ColorType.Solid, color: isDark ? '#07080A' : '#FFFFFF' },
         textColor: isDark ? '#86868B' : '#6E6E73',
@@ -533,6 +602,97 @@ export default function TradingChart({
     });
 
     chartRef.current = chart;
+
+    // RSI pane: fixed 0-100 oscillator with 30/50/70 guides.
+    const rsiPane = chart.addPane();
+    rsiPane.setHeight(155);
+    rsiPaneRef.current = rsiPane;
+    rsiPane.priceScale('right').applyOptions({
+      autoScale: true,
+      scaleMargins: { top: 0.08, bottom: 0.08 },
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
+      minimumWidth: 54,
+    });
+
+    const rsiPaneElement = rsiPane.getHTMLElement();
+    if (rsiPaneElement) {
+      rsiPaneElement.style.backgroundColor = isDark ? 'rgba(38, 32, 62, 0.42)' : '#F1EFFA';
+      rsiPaneElement.style.position = 'relative';
+      const rsiLabel = document.createElement('div');
+      rsiLabel.textContent = 'RSI 14';
+      Object.assign(rsiLabel.style, {
+        position: 'absolute',
+        top: '8px',
+        left: '10px',
+        zIndex: '5',
+        pointerEvents: 'none',
+        color: isDark ? '#F5F5F7' : '#202024',
+        fontSize: '12px',
+        fontWeight: '600',
+        letterSpacing: '0.02em',
+      });
+      rsiPaneElement.appendChild(rsiLabel);
+      rsiLabelRef.current = rsiLabel;
+    }
+
+    rsiSeriesRef.current = chart.addSeries(LineSeries, {
+      color: isDark ? '#F5F5F7' : '#111111',
+      lineWidth: 2,
+      title: 'RSI 14',
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 3,
+    }, 1);
+    rsiMaSeriesRef.current = chart.addSeries(LineSeries, {
+      color: '#F2C94C',
+      lineWidth: 2,
+      title: 'RSI MA 9',
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+    }, 1);
+
+    const rsiLevelConfigs = [
+      { color: 'rgba(0, 0, 0, 0)', lineStyle: 0 },
+      { color: isDark ? 'rgba(210, 207, 220, 0.55)' : 'rgba(95, 91, 105, 0.65)', lineStyle: 2 },
+      { color: isDark ? '#FF5268' : '#A52C44', lineStyle: 2 },
+      { color: isDark ? 'rgba(210, 207, 220, 0.55)' : 'rgba(95, 91, 105, 0.65)', lineStyle: 2 },
+      { color: 'rgba(0, 0, 0, 0)', lineStyle: 0 },
+    ];
+    rsiLevelSeriesRef.current = rsiLevelConfigs.map((config) => chart.addSeries(LineSeries, {
+      ...config,
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    }, 1));
+
+    // The pane element is available after its first series is attached.
+    const decorateRsiPane = () => {
+      const paneElement = rsiPane.getHTMLElement();
+      if (!paneElement) return;
+      paneElement.style.backgroundColor = isDark ? 'rgba(38, 32, 62, 0.42)' : '#F1EFFA';
+      paneElement.style.position = 'relative';
+      if (rsiLabelRef.current) return;
+      const label = document.createElement('div');
+      label.textContent = 'RSI 14';
+      Object.assign(label.style, {
+        position: 'absolute',
+        top: '8px',
+        left: '10px',
+        zIndex: '5',
+        pointerEvents: 'none',
+        color: isDark ? '#F5F5F7' : '#202024',
+        fontSize: '12px',
+        fontWeight: '600',
+        letterSpacing: '0.02em',
+      });
+      paneElement.appendChild(label);
+      rsiLabelRef.current = label;
+    };
+    decorateRsiPane();
+    if (typeof window !== 'undefined') window.requestAnimationFrame(decorateRsiPane);
 
     // 1. Candlestick Series
     const candleSeries = chart.addSeries(CandlestickSeries, {
@@ -656,6 +816,7 @@ export default function TradingChart({
       ma50Series.setData(ma50Data);
       ma55Series.setData(ma55Data);
       ma111Series.setData(ma111Data);
+      updateRsiSeries(candles);
 
       // Plot Strategy Markers
       if (showMarkers && activeStrategy?.markers && activeStrategy.markers.length > 0) {
@@ -695,6 +856,8 @@ export default function TradingChart({
       const ma50 = param.seriesData.get(ma50Series);
       const ma55 = param.seriesData.get(ma55Series);
       const ma111 = param.seriesData.get(ma111Series);
+      const rsi = rsiSeriesRef.current ? param.seriesData.get(rsiSeriesRef.current) : null;
+      const rsiMa = rsiMaSeriesRef.current ? param.seriesData.get(rsiMaSeriesRef.current) : null;
 
       if (candle) {
         setHoveredData({
@@ -708,6 +871,8 @@ export default function TradingChart({
           ma50: ma50?.value,
           ma55: ma55?.value,
           ma111: ma111?.value,
+          rsi: rsi?.value,
+          rsiMa: rsiMa?.value,
         });
 
         // Check if a signal event occurred on this hovered candle!
@@ -765,6 +930,11 @@ export default function TradingChart({
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
+        rsiSeriesRef.current = null;
+        rsiMaSeriesRef.current = null;
+        rsiLevelSeriesRef.current = [];
+        rsiPaneRef.current = null;
+        rsiLabelRef.current = null;
         markersPrimitiveRef.current = null;
         priceLinesRef.current = [];
       }
@@ -809,6 +979,7 @@ export default function TradingChart({
           .map((c) => ({ time: c.time, value: c[key] }))
       );
     });
+    updateRsiSeries(candles);
 
     if (shouldResetViewportRef.current || !previousRange) {
       anchorToLatest(chart);
@@ -1226,6 +1397,18 @@ export default function TradingChart({
                 <span className="text-apple-text tabular-nums">{Number(hoveredData.volume).toFixed(2)} {symbol === 'ETHUSDT' ? 'ETH' : 'BTC'}</span>
               </div>
             )}
+            {hoveredData.rsi && (
+              <div>
+                <span className="text-[#111111] dark:text-white">RSI:</span>{' '}
+                <span className="tabular-nums text-apple-text">{Number(hoveredData.rsi).toFixed(2)}</span>
+              </div>
+            )}
+            {hoveredData.rsiMa && (
+              <div>
+                <span className="text-[#F2C94C]">RSI MA:</span>{' '}
+                <span className="tabular-nums text-apple-text">{Number(hoveredData.rsiMa).toFixed(2)}</span>
+              </div>
+            )}
             {hoveredData.ma25 && visibleMAs.ma25 && (
               <div>
                 <span className="text-[#0A84FF]">MA25:</span>{' '}
@@ -1347,6 +1530,14 @@ export default function TradingChart({
             <span className="w-2.5 h-0.5 rounded bg-apple-cyan"></span>
             <span>Price Levels</span>
           </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-0.5 rounded bg-black dark:bg-white"></span>
+            <span>RSI 14</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-0.5 rounded bg-[#F2C94C]"></span>
+            <span>RSI MA 9</span>
+          </div>
         </div>
       </div>
 
@@ -1365,7 +1556,7 @@ export default function TradingChart({
         )}
 
         {/* Lightweight Charts Canvas Element */}
-        <div ref={chartContainerRef} className="w-full" style={{ height: '520px' }} />
+        <div ref={chartContainerRef} className="w-full" style={{ height: '650px' }} />
 
         {/* On-Chart Signal Position HUD (Apple-Grade Translucent Inspector) */}
         {showMarkers && activeStrategy && activeTrade && isHudVisible && (

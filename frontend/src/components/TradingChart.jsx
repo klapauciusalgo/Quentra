@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { 
   createChart, 
+  AreaSeries,
   CandlestickSeries, 
   HistogramSeries, 
   LineSeries, 
@@ -130,6 +131,7 @@ export default function TradingChart({
   const maSeriesRef = useRef({});
   const rsiSeriesRef = useRef(null);
   const rsiMaSeriesRef = useRef(null);
+  const rsiBackgroundSeriesRef = useRef(null);
   const rsiLevelSeriesRef = useRef([]);
   const rsiPaneRef = useRef(null);
   const rsiLabelRef = useRef(null);
@@ -272,6 +274,9 @@ export default function TradingChart({
 
   const updateRsiSeries = (candleData) => {
     const { rsi, ma, levels } = calculateRsiData(candleData);
+    if (rsiBackgroundSeriesRef.current) {
+      rsiBackgroundSeriesRef.current.setData(candleData.map((candle) => ({ time: candle.time, value: 100 })));
+    }
     if (rsiSeriesRef.current) rsiSeriesRef.current.setData(rsi);
     if (rsiMaSeriesRef.current) rsiMaSeriesRef.current.setData(ma);
 
@@ -548,6 +553,7 @@ export default function TradingChart({
       chartRef.current = null;
       rsiSeriesRef.current = null;
       rsiMaSeriesRef.current = null;
+      rsiBackgroundSeriesRef.current = null;
       rsiLevelSeriesRef.current = [];
       rsiPaneRef.current = null;
       rsiLabelRef.current = null;
@@ -634,6 +640,17 @@ export default function TradingChart({
       rsiPaneElement.appendChild(rsiLabel);
       rsiLabelRef.current = rsiLabel;
     }
+
+    rsiBackgroundSeriesRef.current = chart.addSeries(AreaSeries, {
+      topColor: isDark ? 'rgba(38, 32, 62, 0.46)' : 'rgba(239, 236, 250, 0.92)',
+      bottomColor: isDark ? 'rgba(38, 32, 62, 0.46)' : 'rgba(239, 236, 250, 0.92)',
+      lineColor: 'rgba(0, 0, 0, 0)',
+      lineWidth: 1,
+      lineVisible: false,
+      lastValueVisible: false,
+      priceLineVisible: false,
+      crosshairMarkerVisible: false,
+    }, 1);
 
     rsiSeriesRef.current = chart.addSeries(LineSeries, {
       color: isDark ? '#F5F5F7' : '#111111',
@@ -932,6 +949,7 @@ export default function TradingChart({
         chartRef.current = null;
         rsiSeriesRef.current = null;
         rsiMaSeriesRef.current = null;
+        rsiBackgroundSeriesRef.current = null;
         rsiLevelSeriesRef.current = [];
         rsiPaneRef.current = null;
         rsiLabelRef.current = null;

@@ -59,7 +59,7 @@ export default function Header({
 
   return (
     <header className="sticky top-0 z-40 backdrop-blur-2xl bg-apple-canvas/80 border-b border-apple-border transition-colors duration-200">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <div className="max-w-[1600px] mx-auto w-full min-w-0 px-3 sm:px-6 min-h-14 sm:h-16 py-2 sm:py-0 flex items-center justify-between gap-2 sm:gap-4 overflow-hidden">
         
         {/* Brand & Platform Identity */}
         <div 
@@ -69,7 +69,7 @@ export default function Header({
               onGoToLanding();
             }
           }}
-          className={`flex items-center gap-3 ${onGoToLanding ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+          className={`flex items-center gap-2 sm:gap-3 shrink-0 min-w-0 ${onGoToLanding ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
           title="Return to Product Overview & Landing Page"
         >
           <div className="w-8 h-8 rounded-xl bg-gradient-to-b from-black/[0.06] to-black/[0.01] dark:from-white/[0.12] dark:to-white/[0.02] border border-black/10 dark:border-white/15 flex items-center justify-center shadow-sm">
@@ -94,7 +94,7 @@ export default function Header({
         </div>
 
         {/* Asset Switcher & Live Ticker Telemetry */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0 flex-1">
           {/* 1-Click Asset Switcher (BTC / ETH) */}
           <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.06] p-1 rounded-2xl border border-black/[0.08] dark:border-white/[0.08] shadow-inner">
             <button
@@ -104,7 +104,7 @@ export default function Header({
                   onSelectAsset('BTCUSDT');
                 }
               }}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer ${
                 selectedAsset === 'BTCUSDT'
                   ? 'bg-apple-blue text-white shadow-md scale-[1.02]'
                   : 'text-apple-muted hover:text-apple-text hover:bg-black/[0.03] dark:hover:bg-white/[0.04]'
@@ -121,7 +121,7 @@ export default function Header({
                   onSelectAsset('ETHUSDT');
                 }
               }}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer ${
                 selectedAsset === 'ETHUSDT'
                   ? 'bg-apple-blue text-white shadow-md scale-[1.02]'
                   : 'text-apple-muted hover:text-apple-text hover:bg-black/[0.03] dark:hover:bg-white/[0.04]'
@@ -134,7 +134,7 @@ export default function Header({
           </div>
 
           {/* Live Ticker Telemetry */}
-          <div className="flex items-center gap-3 bg-black/[0.03] dark:bg-white/[0.04] hover:bg-black/[0.05] dark:hover:bg-white/[0.06] border border-black/[0.08] dark:border-white/[0.08] rounded-2xl px-3.5 py-1.5 transition-colors">
+          <div className="hidden sm:flex items-center gap-3 bg-black/[0.03] dark:bg-white/[0.04] hover:bg-black/[0.05] dark:hover:bg-white/[0.06] border border-black/[0.08] dark:border-white/[0.08] rounded-2xl px-3.5 py-1.5 transition-colors min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-apple-muted tracking-wide">
                 {selectedAsset === 'ETHUSDT' ? 'ETH/USDT' : 'BTC/USDT'}
@@ -180,9 +180,9 @@ export default function Header({
         </div>
 
         {/* Status Indicators & Tactile Controls */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {/* Binance WebSocket Status */}
-          <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-full px-3 py-1 text-xs">
+          <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-full px-2 sm:px-3 py-1 text-xs">
             <span
               className={`w-2 h-2 rounded-full ${
                 isLive
@@ -315,10 +315,10 @@ export default function Header({
               <button
                 type="button"
                 onClick={() => openAuthModal('/app')}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-apple-blue hover:bg-blue-600 text-white rounded-full text-xs font-medium transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-apple-blue hover:bg-blue-600 text-white rounded-full text-xs font-medium transition-colors cursor-pointer"
               >
                 <User className="w-3.5 h-3.5" />
-                <span>Masuk</span>
+                <span className="hidden sm:inline">Masuk</span>
               </button>
             )}
           </div>

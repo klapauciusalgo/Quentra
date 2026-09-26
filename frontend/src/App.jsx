@@ -1058,7 +1058,7 @@ function TradingApp() {
   const activeStrategyObj = strategies.find((s) => s.id === selectedStrategyId) || strategies[0];
 
   return (
-    <div className="min-h-screen bg-apple-canvas text-apple-text flex flex-col font-sans selection:bg-apple-blue selection:text-white transition-colors duration-200">
+    <div className="min-h-screen min-w-0 overflow-x-hidden bg-apple-canvas text-apple-text flex flex-col font-sans selection:bg-apple-blue selection:text-white transition-colors duration-200">
       
       {/* Top Navigation Bar */}
       <Header
@@ -1102,50 +1102,54 @@ function TradingApp() {
       )}
 
       {/* Main Container */}
-      <main className="flex-1 max-w-[1500px] mx-auto w-full px-4 sm:px-6 py-6 space-y-7">
+      <main className="flex-1 min-w-0 max-w-[1500px] mx-auto w-full px-3 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-7">
         
         {/* Apple Segmented View Switcher */}
-        <div className="flex items-center justify-between gap-4 flex-wrap pb-1">
-          <div className="apple-segmented-container">
+        <div className="flex items-center justify-between gap-3 flex-wrap pb-1">
+          <div className="apple-segmented-container w-full sm:w-auto overflow-x-auto no-scrollbar">
             <button
               onClick={() => {
                 playRetroSound('select');
                 setActiveView('all');
               }}
-              className={`apple-segmented-item ${activeView === 'all' ? 'active' : ''}`}
+              className={`apple-segmented-item flex-1 sm:flex-none justify-center ${activeView === 'all' ? 'active' : ''}`}
             >
               <Grid className="w-3.5 h-3.5" />
-              <span>Full Platform</span>
+              <span className="sm:hidden">Home</span>
+              <span className="hidden sm:inline">Full Platform</span>
             </button>
             <button
               onClick={() => {
                 playRetroSound('select');
                 setActiveView('chart');
               }}
-              className={`apple-segmented-item ${activeView === 'chart' ? 'active' : ''}`}
+              className={`apple-segmented-item flex-1 sm:flex-none justify-center ${activeView === 'chart' ? 'active' : ''}`}
             >
               <BarChart3 className="w-3.5 h-3.5" />
-              <span>Execution Chart</span>
+              <span className="sm:hidden">Chart</span>
+              <span className="hidden sm:inline">Execution Chart</span>
             </button>
             <button
               onClick={() => {
                 playRetroSound('select');
                 setActiveView('catalog');
               }}
-              className={`apple-segmented-item ${activeView === 'catalog' ? 'active' : ''}`}
+              className={`apple-segmented-item flex-1 sm:flex-none justify-center ${activeView === 'catalog' ? 'active' : ''}`}
             >
               <Compass className="w-3.5 h-3.5" />
-              <span>Strategy Directory</span>
+              <span className="sm:hidden">Algos</span>
+              <span className="hidden sm:inline">Strategy Directory</span>
             </button>
             <button
               onClick={() => {
                 playRetroSound('select');
                 setActiveView('risk');
               }}
-              className={`apple-segmented-item ${activeView === 'risk' ? 'active' : ''}`}
+              className={`apple-segmented-item flex-1 sm:flex-none justify-center ${activeView === 'risk' ? 'active' : ''}`}
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Risk Gate</span>
+              <span className="sm:hidden">Risk</span>
+              <span className="hidden sm:inline">Risk Gate</span>
             </button>
           </div>
 

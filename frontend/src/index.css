@@ -142,12 +142,32 @@
 }
 
 .apple-segmented-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
   padding: 6px 14px;
   font-size: 12px;
   font-weight: 500;
   border-radius: 9px;
   color: var(--apple-segmented-text);
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (max-width: 639px) {
+  .apple-segmented-container {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .apple-segmented-item {
+    min-width: 0;
+    padding: 7px 4px;
+    font-size: 11px;
+    gap: 4px;
+  }
 }
 
 .apple-segmented-item:hover {

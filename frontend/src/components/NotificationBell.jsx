@@ -94,7 +94,7 @@ export default function NotificationBell({
 
       {/* Flyout Notification Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 top-11 w-80 sm:w-96 rounded-2xl bg-white/95 dark:bg-[#0E1017]/95 backdrop-blur-2xl border border-black/10 dark:border-white/15 shadow-2xl p-4 z-50 text-xs text-apple-text animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute right-0 top-11 w-[min(20rem,calc(100vw-1rem))] sm:w-96 max-w-[calc(100vw-1rem)] rounded-2xl bg-white/95 dark:bg-[#0E1017]/95 backdrop-blur-2xl border border-black/10 dark:border-white/15 shadow-2xl p-4 z-50 text-xs text-apple-text animate-in fade-in zoom-in-95 duration-150">
           
           {/* Header */}
           <div className="flex items-center justify-between border-b border-black/[0.08] dark:border-white/[0.08] pb-3 mb-3">

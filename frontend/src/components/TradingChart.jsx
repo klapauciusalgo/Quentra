@@ -158,6 +158,27 @@ export default function TradingChart({
   const [showPriceLevels, setShowPriceLevels] = useState(true);
   const [focusedTradeIndex, setFocusedTradeIndex] = useState(0);
   const [tradeFilter, setTradeFilter] = useState('ALL'); // 'ALL' | 'WINS' | 'LOSSES'
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 639px)');
+    const updateViewport = () => setIsMobileViewport(media.matches);
+    updateViewport();
+    media.addEventListener?.('change', updateViewport);
+    return () => media.removeEventListener?.('change', updateViewport);
+  }, []);
+
+  useEffect(() => {
+    if (isMobileViewport) {
+      setMarkerLabelMode('minimal');
+      setIsHudVisible(false);
+      setShowPriceLevels(false);
+    } else {
+      setMarkerLabelMode('compact');
+      setIsHudVisible(true);
+      setShowPriceLevels(true);
+    }
+  }, [isMobileViewport]);
   const [signalSortOrder, setSignalSortOrder] = useState('DESC'); // 'DESC' (Newest First) | 'ASC' (Oldest First)
 
   // Draggable HUD State & Handlers
@@ -1183,13 +1204,13 @@ export default function TradingChart({
   };
 
   return (
-    <div className="apple-glass rounded-3xl p-4 sm:p-6 space-y-4">
+    <div className="apple-glass min-w-0 rounded-3xl p-3 sm:p-6 space-y-4">
       
       {/* 1. Chart Controls Header: Symbol, Timeframes, Signal Controls, Indicators */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.08] dark:border-white/[0.08] pb-3.5">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-3 border-b border-black/[0.08] dark:border-white/[0.08] pb-3.5 min-w-0">
         
         {/* Left: Symbol, Live Price & Timeframe Switcher */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm text-apple-text tracking-tight">
               {symbol === 'ETHUSDT' ? 'ETH/USDT' : 'BTC/USDT'}
@@ -1236,7 +1257,7 @@ export default function TradingChart({
         </div>
 
         {/* Right: Signal Visibility & Label Controls + Indicators */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex flex-nowrap sm:flex-wrap items-center gap-2 text-xs max-w-full overflow-x-auto no-scrollbar pb-1">
           
           {/* Signal Label Style Switcher */}
           {activeStrategy && showMarkers && (
@@ -1581,7 +1602,7 @@ export default function TradingChart({
         )}
 
         {/* Lightweight Charts Canvas Element */}
-        <div ref={chartContainerRef} className="w-full" style={{ height: '650px' }} />
+        <div ref={chartContainerRef} className="w-full" style={{ height: 'clamp(440px, 125vw, 650px)' }} />
 
         {/* On-Chart Signal Position HUD (Apple-Grade Translucent Inspector) */}
         {showMarkers && activeStrategy && activeTrade && isHudVisible && (

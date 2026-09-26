@@ -59,8 +59,8 @@ export default function Header({
 
   return (
     <header className="sticky top-0 z-40 backdrop-blur-2xl bg-apple-canvas/80 border-b border-apple-border transition-colors duration-200">
-      <div className="max-w-[1600px] mx-auto w-full min-w-0 px-3 sm:px-6 min-h-14 sm:h-16 py-2 sm:py-0 flex items-center justify-between gap-2 sm:gap-4 overflow-hidden">
-        
+      <div className="max-w-[1600px] mx-auto w-full min-w-0 px-3 sm:px-6 min-h-14 sm:h-16 py-2 sm:py-0 flex items-center justify-between gap-2 sm:gap-4 overflow-visible">
+
         {/* Brand & Platform Identity */}
         <div 
           onClick={() => {

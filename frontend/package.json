@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/utils/chartMarkers.test.js"
+    "test": "node --test src/utils/chartMarkers.test.js src/components/Header.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

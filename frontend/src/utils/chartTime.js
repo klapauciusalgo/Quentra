@@ -19,7 +19,14 @@ function toDate(time) {
     return new Date(Date.UTC(time.year, time.month - 1, time.day));
   }
 
-  const parsed = new Date(time);
+  if (typeof time !== 'string' || !time.trim()) return null;
+  const text = time.trim();
+  const normalized = text.endsWith(' UTC')
+    ? `${text.slice(0, -4).trim()}Z`
+    : /(?:Z|[+-]\d{2}:?\d{2})$/.test(text)
+      ? text
+      : `${text.replace(' ', 'T')}Z`;
+  const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
@@ -39,6 +46,12 @@ export function formatUtcPlus7Time(time) {
   const parts = getParts(time);
   if (!parts) return '';
   return `${parts.day} ${parts.month} ${parts.year}, ${parts.hour}:${parts.minute}`;
+}
+
+export function formatUtcPlus7EventTime(time) {
+  const parts = getParts(time);
+  if (!parts) return '';
+  return `${parts.day} ${parts.month} ${parts.year}, ${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
 export function formatUtcPlus7Tick(time, tickMarkType) {

@@ -9,6 +9,7 @@ import RiskCalculator from './components/RiskCalculator';
 import { playRetroSound } from './utils/formatters';
 import { Bell, BarChart3, Compass, ShieldCheck, Grid } from 'lucide-react';
 import { API_BASE, getWsUrl } from './config';
+import { normalizeNotification } from './utils/notificationUtils';
 import strategiesData from './data/strategiesData.json';
 import strategiesDataEth from './data/strategiesData_eth.json';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -112,14 +113,15 @@ function TradingApp() {
   };
 
   const appendSignalNotification = (notification) => {
-    const eventKey = notification.event_key || [
-      notification.type,
-      notification.strategy_id || notification.strategy,
-      notification.entry_time || notification.exit_time || notification.timestamp,
+    const normalized = normalizeNotification(notification);
+    const eventKey = normalized.event_key || [
+      normalized.type,
+      normalized.strategy_id || normalized.strategy,
+      normalized.event_time,
     ].join(':');
     setSignalNotifications((previous) => {
       if (previous.some((item) => item.event_key === eventKey)) return previous;
-      const next = [{ ...notification, id: eventKey, event_key: eventKey }, ...previous].slice(0, 20);
+      const next = [{ ...normalized, id: eventKey, event_key: eventKey }, ...previous].slice(0, 20);
       signalNotificationsRef.current = next;
       return next;
     });
@@ -265,7 +267,7 @@ function TradingApp() {
             partial_taken: strategy.partial_taken,
             partial_exit_price: strategy.partial_exit_price,
             take_profit: strategy.take_profit,
-            timestamp: strategy.entry_time || new Date().toLocaleTimeString(),
+            timestamp: strategy.entry_time,
             status: 'IN_POSITION',
           }));
 
@@ -291,7 +293,7 @@ function TradingApp() {
               price: signal.entry_price,
               stop_loss: signal.stop_loss,
               entry_time: signal.entry_time,
-              timestamp: new Date().toLocaleTimeString(),
+              event_time: signal.entry_time,
               event_key: `NEW_SIGNAL:${symbol}:${signal.strategy_id}:${signal.entry_time || signal.entry_price}`,
             });
           }
@@ -319,7 +321,7 @@ function TradingApp() {
               : '',
             price: closed.exit_price,
             exit_time: closed.exit_time,
-            timestamp: new Date().toLocaleTimeString(),
+            event_time: closed.exit_time,
             event_key: `SIGNAL_EXIT:${symbol}:${strategyId}:${closed.exit_time || closed.trade_no || closed.exit_price}`,
           });
         });
@@ -616,7 +618,7 @@ function TradingApp() {
               partial_taken: msg.ticket?.partial_taken || false,
               partial_take_profit: msg.ticket?.partial_take_profit,
               take_profit: msg.ticket?.take_profit,
-              timestamp: new Date().toLocaleTimeString(),
+              timestamp: msg.ticket?.entry_time || msg.candle_time || msg.timestamp,
               status: 'IN_POSITION',
             };
             if (asset === selectedAssetRef.current) {
@@ -635,7 +637,7 @@ function TradingApp() {
               price: newSig.entry_price,
               stop_loss: newSig.stop_loss,
               entry_time: newSig.entry_time,
-              timestamp: new Date().toLocaleTimeString(),
+              event_time: newSig.entry_time,
               event_key: `NEW_SIGNAL:${asset}:${newSig.strategy_id}:${newSig.entry_time || newSig.entry_price}`,
             });
             setBannerAlert({
@@ -670,7 +672,7 @@ function TradingApp() {
               price: msg.price,
               partial_pct: msg.partial_pct,
               new_stop_loss: msg.new_stop_loss,
-              timestamp: new Date().toLocaleTimeString(),
+              event_time: msg.timestamp || msg.candle_time,
               event_key: `PARTIAL_TAKE_PROFIT:${asset}:${msg.strategy_id}:${msg.price || msg.timestamp || Date.now()}`,
             });
           } else if (msg.type === 'POSITION_CLOSED') {
@@ -700,7 +702,7 @@ function TradingApp() {
               pnl: pnlStr,
               price: msg.trade?.exit_price,
               exit_time: msg.trade?.exit_time || msg.candle_time,
-              timestamp: new Date().toLocaleTimeString(),
+              event_time: msg.trade?.exit_time || msg.candle_time || msg.timestamp,
               event_key: `SIGNAL_EXIT:${asset}:${msg.strategy_id}:${msg.trade?.exit_time || msg.trade?.trade_no || msg.trade?.exit_price}`,
             });
             setBannerAlert({
@@ -729,7 +731,7 @@ function TradingApp() {
               strategy_id: msg.strategy_id,
               price: msg.price,
               new_stop_loss: msg.new_stop_loss,
-              timestamp: new Date().toLocaleTimeString(),
+              event_time: msg.timestamp || msg.candle_time,
               event_key: `BREAKEVEN_LOCKED:${asset}:${msg.strategy_id}:${msg.price || msg.timestamp || Date.now()}`,
             });
             setBannerAlert({
@@ -877,7 +879,7 @@ function TradingApp() {
             stop_loss: ticket.stop_loss,
             take_profit: ticket.take_profit,
             entry_time: ticket.entry_time,
-            timestamp: new Date().toLocaleTimeString(),
+            event_time: ticket.entry_time,
             status: 'IN_POSITION',
           };
           replaceActiveSignals([newSig, ...activeSignalsRef.current.filter((s) => s.strategy_id !== newSig.strategy_id)]);
@@ -890,7 +892,7 @@ function TradingApp() {
             price: newSig.entry_price,
             stop_loss: newSig.stop_loss,
             entry_time: newSig.entry_time,
-            timestamp: new Date().toLocaleTimeString(),
+            event_time: newSig.entry_time,
             event_key: `NEW_SIGNAL:${selectedAssetRef.current}:${newSig.strategy_id}:${newSig.entry_time || newSig.entry_price}`,
           });
         }
@@ -901,6 +903,7 @@ function TradingApp() {
         const strat = strategies.find((s) => s.id === selectedStrategyId) || strategies[0];
         const isLong = strat.type === 'LONG';
         const action = isLong ? 'BUY' : 'SELL';
+        const simulatedAt = new Date().toISOString();
         const newSig = {
           id: strat.id,
           strategy_id: strat.id,
@@ -913,7 +916,8 @@ function TradingApp() {
           floating_pnl_pct: 0.0,
           stop_loss: Math.round(ticker.price * (isLong ? 0.92 : 1.05)),
           take_profit: Math.round(ticker.price * (isLong ? 1.75 : 0.88)),
-          timestamp: new Date().toLocaleTimeString(),
+          entry_time: simulatedAt,
+          event_time: simulatedAt,
           status: 'IN_POSITION',
         };
         replaceActiveSignals([newSig, ...activeSignalsRef.current.filter((s) => s.strategy_id !== newSig.strategy_id)]);
@@ -924,7 +928,7 @@ function TradingApp() {
           strategy_id: strat.id,
           direction: strat.type,
           price: ticker.price,
-          timestamp: new Date().toLocaleTimeString(),
+          event_time: simulatedAt,
           event_key: `NEW_SIGNAL:${selectedAssetRef.current}:${strat.id}:${ticker.price}`,
         });
         setBannerAlert({
@@ -948,6 +952,7 @@ function TradingApp() {
     }
     const sig = activeSignalsRef.current.find((s) => s.strategy_id === strategyId);
     if (sig) {
+      const manualExitTime = Date.now();
       const isBuy = sig.action === 'BUY' || sig.direction === 'LONG';
       const floating = isBuy
         ? ((ticker.price - sig.entry_price) / sig.entry_price) * 100
@@ -961,8 +966,8 @@ function TradingApp() {
         reason: 'Manual Exit via Bell Menu',
         pnl: pnlStr,
         price: ticker.price,
-        timestamp: new Date().toLocaleTimeString(),
-        event_key: `SIGNAL_EXIT:${selectedAssetRef.current}:${strategyId}:manual-${Date.now()}`,
+        event_time: manualExitTime,
+        event_key: `SIGNAL_EXIT:${selectedAssetRef.current}:${strategyId}:manual-${manualExitTime}`,
       });
       setBannerAlert({
         title: `POSITION CLOSED: ${sig.strategy_name}`,

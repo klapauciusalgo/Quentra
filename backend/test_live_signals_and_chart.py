@@ -1,11 +1,15 @@
 import sys
 import os
+import json
+from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import main
-from live_signal_engine import live_signal_engine
+from live_signal_engine import LiveSignalEngine, StrategyModel, live_signal_engine
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture(scope="module")
 def client():
@@ -73,6 +77,237 @@ def test_strategy_catalog_enrichment(client):
     assert be_markers[0]["shape"] == "circle"
     assert be_markers[0]["color"] == "#FF9F0A"
     assert "BE LOCKED" in be_markers[0]["text"]
+
+def test_catalog_markers_match_trade_lifecycle_for_all_assets_and_strategies(client):
+    """Historical exits must not be rendered as sells for an open trade."""
+    for symbol in ["BTCUSDT", "ETHUSDT"]:
+        res = client.get(f"/api/strategies?symbol={symbol}")
+        assert res.status_code == 200
+        for strategy in res.json():
+            trades_by_no = {
+                trade.get("trade_no"): trade
+                for trade in strategy.get("trades", [])
+                if trade.get("trade_no") is not None
+            }
+            for marker in strategy.get("markers", []):
+                trade_no = marker.get("tradeNo")
+                if trade_no not in trades_by_no:
+                    assert not (
+                        marker.get("isBreakeven") is not True
+                        and (
+                            marker.get("exitPrice") is not None
+                            or marker.get("pnlPct") is not None
+                            or str(marker.get("text", "")).upper().startswith(("EXIT", "CLOSE"))
+                        )
+                    ), f"orphan exit marker in {symbol}/{strategy['id']}: {marker}"
+                    continue
+
+                trade = trades_by_no[trade_no]
+                is_open = str(trade.get("status", "")).upper() in {"OPEN", "RUNNING"}
+                is_exit = marker.get("isBreakeven") is not True and (
+                    marker.get("exitPrice") is not None
+                    or marker.get("pnlPct") is not None
+                    or str(marker.get("text", "")).upper().startswith(("EXIT", "CLOSE"))
+                )
+                assert not (is_open and is_exit), (
+                    f"exit marker attached to open trade in "
+                    f"{symbol}/{strategy['id']}: {marker}"
+                )
+
+            open_trades = [
+                trade for trade in strategy.get("trades", [])
+                if str(trade.get("status", "")).upper() in {"OPEN", "RUNNING"}
+            ]
+            if open_trades:
+                open_trade_no = open_trades[-1].get("trade_no")
+                active_entries = [
+                    marker for marker in strategy.get("markers", [])
+                    if marker.get("isActive") is True and marker.get("isBreakeven") is not True
+                ]
+                active_breakevens = [
+                    marker for marker in strategy.get("markers", [])
+                    if marker.get("isBreakeven") is True and marker.get("tradeNo") == open_trade_no
+                ]
+                assert len(active_entries) == 1, (
+                    f"expected one active entry marker in {symbol}/{strategy['id']}, "
+                    f"got {active_entries}"
+                )
+                assert active_entries[0].get("tradeNo") == open_trade_no
+                assert active_entries[0].get("eventType") == "entry"
+                assert abs(
+                    float(active_entries[0].get("entryPrice"))
+                    - float(open_trades[-1].get("entry_price"))
+                ) < 0.01
+                assert len(active_breakevens) <= 1, (
+                    f"duplicate breakeven markers in {symbol}/{strategy['id']}: "
+                    f"{active_breakevens}"
+                )
+                if open_trades[-1].get("be_activated") is True:
+                    assert len(active_breakevens) == 1
+                    assert active_breakevens[0].get("eventType") == "breakeven"
+            else:
+                assert not [
+                    marker for marker in strategy.get("markers", [])
+                    if marker.get("isActive") is True
+                    or marker.get("isBreakeven") is True
+                    or str(marker.get("status", "")).upper() == "OPEN"
+                ], f"live marker leaked into flat {symbol}/{strategy['id']}"
+
+            assert not [
+                marker for marker in strategy.get("markers", [])
+                if marker.get("isBreakeven") is True and marker.get("tradeNo") is None
+            ], f"orphan breakeven marker in {symbol}/{strategy['id']}"
+
+
+@pytest.mark.parametrize(
+    "catalog_path",
+    [
+        REPO_ROOT / "backend/data/strategies.json",
+        REPO_ROOT / "backend/data/strategies_eth.json",
+        REPO_ROOT / "frontend/src/data/strategiesData.json",
+        REPO_ROOT / "frontend/src/data/strategiesData_eth.json",
+    ],
+)
+def test_persisted_catalog_marker_lifecycle_clean(catalog_path):
+    """Bundled catalogs must not carry duplicate or orphan live markers."""
+    with open(catalog_path) as handle:
+        strategies = json.load(handle)
+
+    for strategy in strategies:
+        trades = strategy.get("trades", [])
+        by_no = {
+            str(trade.get("trade_no")): trade
+            for trade in trades
+            if trade.get("trade_no") is not None
+        }
+        open_trades = [
+            trade for trade in trades
+            if str(trade.get("status", "")).upper() in {"OPEN", "RUNNING"}
+        ]
+        active_entries = [
+            marker for marker in strategy.get("markers", [])
+            if marker.get("isActive") is True and marker.get("isBreakeven") is not True
+        ]
+        breakevens = [
+            marker for marker in strategy.get("markers", [])
+            if marker.get("isBreakeven") is True
+        ]
+        if open_trades:
+            current = open_trades[-1]
+            assert len(active_entries) == 1, strategy["id"]
+            assert str(active_entries[0].get("tradeNo")) == str(current.get("trade_no"))
+            assert active_entries[0].get("eventType") == "entry"
+            assert abs(float(active_entries[0]["entryPrice"]) - float(current["entry_price"])) < 0.01
+            expected_be = current.get("be_activated") is True
+            assert len(breakevens) == (1 if expected_be else 0), strategy["id"]
+            if expected_be:
+                assert str(breakevens[0].get("tradeNo")) == str(current.get("trade_no"))
+                assert breakevens[0].get("eventType") == "breakeven"
+        else:
+            assert not active_entries, strategy["id"]
+            assert not breakevens, strategy["id"]
+
+        assert all(marker.get("tradeNo") is not None for marker in breakevens)
+        for marker in strategy.get("markers", []):
+            if marker.get("isBreakeven") is True:
+                assert str(marker.get("tradeNo")) in by_no
+
+def test_runtime_breakeven_markers_are_canonical():
+    engine = LiveSignalEngine()
+
+    direct = StrategyModel(
+        "test-be-direct", "Test BE Direct", "30m", "LONG",
+        {"sl_pct": 0.05, "be_pct": 0.03, "tp_pct": 0.75}, "BTCUSDT"
+    )
+    direct.position_status = "OPEN"
+    direct.entry_price = 100.0
+    direct.entry_time = "2026-09-26 00:00:00"
+    direct.current_sl = 95.0
+    direct.target_tp = 175.0
+    direct.active_markers = [{
+        "time": 178,
+        "entryPrice": 100.0,
+        "side": "LONG",
+        "status": "OPEN",
+        "isActive": True,
+        "eventType": "entry",
+        "tradeNo": 41,
+    }]
+    engine._evaluate_closed_position(direct, 104.0, "2026-09-26 01:00:00")
+    direct_be = [m for m in direct.active_markers if m.get("isBreakeven") is True]
+    assert len(direct_be) == 1
+    assert direct_be[0]["eventType"] == "breakeven"
+    assert direct_be[0]["tradeNo"] == 41
+    assert direct_be[0]["exitPrice"] == 100.2
+
+    partial = StrategyModel(
+        "test-be-partial", "Test BE Partial", "30m", "LONG",
+        {"sl_pct": 0.05, "be_pct": 0.04, "tp_pct": 0.75, "partial_tp": 0.04, "partial_weight": 0.30}, "BTCUSDT"
+    )
+    partial.position_status = "OPEN"
+    partial.entry_price = 100.0
+    partial.entry_time = "2026-09-26 00:00:00"
+    partial.current_sl = 95.0
+    partial.target_tp = 175.0
+    partial.active_markers = [{
+        "time": 178,
+        "entryPrice": 100.0,
+        "side": "LONG",
+        "status": "OPEN",
+        "isActive": True,
+        "eventType": "entry",
+        "tradeNo": 42,
+    }]
+    engine._evaluate_closed_position(partial, 104.0, "2026-09-26 01:00:00")
+    partial_be = [m for m in partial.active_markers if m.get("isBreakeven") is True]
+    assert len(partial_be) == 1
+    assert partial_be[0]["eventType"] == "breakeven"
+    assert partial_be[0]["tradeNo"] == 42
+    assert partial_be[0]["exitPrice"] == 100.2
+
+
+def test_persist_open_trade_collapses_duplicate_open_records(tmp_path, monkeypatch):
+    import live_signal_engine as engine_module
+
+    backend_data = tmp_path / "backend" / "data"
+    frontend_data = tmp_path / "frontend" / "src" / "data"
+    backend_data.mkdir(parents=True)
+    frontend_data.mkdir(parents=True)
+    source = json.loads((REPO_ROOT / "backend/data/strategies.json").read_text())
+    strategy = next(item for item in source if item["id"] == "pippo-1h-enhanced")
+    open_trade = next(item for item in strategy["trades"] if item.get("status") == "OPEN")
+    duplicate = dict(open_trade)
+    duplicate["trade_no"] = 999
+    duplicate["entry_time"] = "2026-09-18 13:01:00"
+    strategy["trades"].append(duplicate)
+    for path in [backend_data / "strategies.json", frontend_data / "strategiesData.json"]:
+        path.write_text(json.dumps(source, indent=2))
+
+    fake_module_file = tmp_path / "backend" / "live_signal_engine.py"
+    fake_module_file.write_text("")
+    monkeypatch.setattr(engine_module, "__file__", str(fake_module_file))
+    monkeypatch.setattr(main, "reload_local_catalog", lambda *_args: None)
+    model = StrategyModel(
+        "pippo-1h-enhanced", "Pippo 1h Enhanced", "1h", "LONG",
+        {"sl_pct": 0.08, "be_pct": 0.05, "tp_pct": 0.75}, "BTCUSDT"
+    )
+    model.entry_price = open_trade["entry_price"]
+    model.entry_time = open_trade["entry_time"]
+    model.current_sl = open_trade["stop_loss"]
+    model.target_tp = open_trade["take_profit"]
+    model.be_active = True
+    LiveSignalEngine()._persist_opened_trade(model, {})
+
+    result = json.loads((backend_data / "strategies.json").read_text())
+    result_strategy = next(item for item in result if item["id"] == model.strat_id)
+    open_records = [item for item in result_strategy["trades"] if item.get("status") == "OPEN"]
+    assert len(open_records) == 1
+    assert open_records[0]["trade_no"] == open_trade["trade_no"]
+
+
+def test_exit_price_only_marker_is_classified_as_close():
+    assert main._is_close_marker({"exitPrice": 99.0}) is True
+
 
 def test_individual_strategy_detail_endpoint(client):
     from live_signal_engine import live_signal_engine
@@ -624,7 +859,7 @@ def test_weekly_macro_emits_signal_on_regime_flip():
     assert model.direction == "SHORT"
     assert [event["type"] for event in collector.events[-2:]] == ["SIGNAL_EXIT", "NEW_SIGNAL"]
 
-def test_multi_asset_signals_endpoints(client):
+def test_multi_asset_signals_endpoints(client, monkeypatch):
     """Verify live telemetry and ticket endpoints respond with correct symbol metadata."""
     # 1. Telemetry for BTC
     res_btc = client.get("/api/signals/live?symbol=BTCUSDT")
@@ -653,9 +888,61 @@ def test_multi_asset_signals_endpoints(client):
     assert "stop_loss" in ticket
     assert "take_profit" in ticket
 
-    # 4. Simulate signal on ETH
+    # 4. Simulate signal on ETH without touching the live engine. The
+    # production endpoint delegates to the floor engine, whose real trigger
+    # intentionally opens/persists a position; this test only needs to cover
+    # the HTTP contract and must remain hermetic.
+    def fake_trigger_signal(strategy_id, strategy_name, direction, current_price, symbol):
+        return {
+            "symbol": "ETH/USDT",
+            "asset": symbol,
+            "strategy_id": strategy_id,
+            "strategy_name": strategy_name,
+            "direction": direction,
+            "entry_price": current_price,
+            "status": "LIVE_SIGNAL",
+        }
+
+    import supabase_client
+    monkeypatch.setattr(supabase_client, "record_live_signal", lambda *_args, **_kwargs: None)
+
+    async def fake_broadcast(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(main.binance_manager, "broadcast", fake_broadcast)
+    catalog_files = [
+        REPO_ROOT / "backend/data/strategies.json",
+        REPO_ROOT / "backend/data/strategies_eth.json",
+        REPO_ROOT / "frontend/src/data/strategiesData.json",
+        REPO_ROOT / "frontend/src/data/strategiesData_eth.json",
+    ]
+    disk_before = {str(path): path.read_bytes() for path in catalog_files}
+    models_before = {
+        symbol: {
+            sid: (model.position_status, model.entry_price, model.entry_time, model.be_active, model.current_sl)
+            for sid, model in live_signal_engine.get_models(symbol).items()
+        }
+        for symbol in ["BTCUSDT", "ETHUSDT"]
+    }
+    catalogs_before = (
+        json.dumps(main.STRATEGIES_CATALOG, sort_keys=True),
+        json.dumps(main.STRATEGIES_CATALOG_ETH, sort_keys=True),
+    )
+    monkeypatch.setattr(main.floor_engine, "trigger_signal", fake_trigger_signal)
     res_sim = client.post("/api/floor/simulate-signal?strategy_id=pippo-30m-alpha&symbol=ETHUSDT")
     assert res_sim.status_code == 200
     sim_data = res_sim.json()
     assert sim_data["ticket"]["symbol"] == "ETH/USDT"
     assert sim_data["ticket"]["asset"] == "ETHUSDT"
+    assert disk_before == {str(path): path.read_bytes() for path in catalog_files}
+    assert models_before == {
+        symbol: {
+            sid: (model.position_status, model.entry_price, model.entry_time, model.be_active, model.current_sl)
+            for sid, model in live_signal_engine.get_models(symbol).items()
+        }
+        for symbol in ["BTCUSDT", "ETHUSDT"]
+    }
+    assert catalogs_before == (
+        json.dumps(main.STRATEGIES_CATALOG, sort_keys=True),
+        json.dumps(main.STRATEGIES_CATALOG_ETH, sort_keys=True),
+    )

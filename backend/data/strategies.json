@@ -1833,109 +1833,14 @@
         "position": "belowBar",
         "color": "#30D158",
         "shape": "arrowUp",
-        "text": "ACTIVE LONG @ $80,073",
-        "size": 3,
-        "entryPrice": 80073.09,
-        "side": "LONG",
-        "status": "OPEN",
-        "isActive": false,
-        "tradeNo": 76
-      },
-      {
-        "time": 1789740000,
-        "position": "aboveBar",
-        "color": "#FF9F0A",
-        "shape": "circle",
-        "text": "BE LOCKED @ $80,233 (+0.2%)",
-        "size": 2,
-        "exitPrice": 80233.24,
-        "isBreakeven": true,
-        "tradeNo": 76,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:32:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #76",
-        "tradeNo": 76,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:35:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #77",
-        "tradeNo": 77,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:36:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #78",
-        "tradeNo": 78,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:39:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #79",
-        "tradeNo": 79,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:40:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #80",
-        "tradeNo": 80,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:41:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #81",
-        "tradeNo": 81,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:42:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #82",
-        "tradeNo": 82,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:44:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #83",
-        "tradeNo": 83,
-        "isActive": false
-      },
-      {
-        "time": 1789738200,
-        "position": "belowBar",
-        "color": "#30D158",
-        "shape": "arrowUp",
         "text": "ACTIVE LONG @ $80,073.09",
         "size": 3,
         "entryPrice": 80073.09,
         "side": "LONG",
         "status": "OPEN",
-        "isActive": false
+        "isActive": true,
+        "eventType": "entry",
+        "tradeNo": 76
       },
       {
         "time": 1789740000,
@@ -1945,56 +1850,10 @@
         "text": "BE LOCKED @ $80,233.24 (+0.2%)",
         "size": 2,
         "exitPrice": 80233.24,
-        "isBreakeven": true
-      },
-      {
-        "time": "2026-09-23 23:12:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #84",
-        "tradeNo": 84,
+        "isBreakeven": true,
+        "eventType": "breakeven",
+        "tradeNo": 76,
         "isActive": false
-      },
-      {
-        "time": "2026-09-24 00:48:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #85",
-        "tradeNo": 85,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-24 00:49:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #86",
-        "tradeNo": 86,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-24 00:50:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #87",
-        "tradeNo": 87,
-        "isActive": false
-      },
-      {
-        "time": 1789736400,
-        "position": "belowBar",
-        "color": "#30D158",
-        "shape": "arrowUp",
-        "text": "ACTIVE LONG @ ",
-        "size": 3,
-        "entryPrice": 80073.09,
-        "side": "LONG",
-        "status": "OPEN",
-        "isActive": true,
-        "tradeNo": 76
       }
     ],
     "trades": [
@@ -3063,7 +2922,10 @@
         "status": "OPEN",
         "stop_loss": 80233.24,
         "take_profit": 140127.91,
-        "is_active": true
+        "is_active": true,
+        "partial_taken": false,
+        "partial_exit_price": null,
+        "partial_position_pct": 0.0
       }
     ],
     "has_active_signal": true,
@@ -3093,7 +2955,9 @@
         "informan"
       ],
       "status": "LIVE_SIGNAL",
-      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY",
+      "be_active": true,
+      "partial_taken": false
     },
     "total_return_pct": 3037.06,
     "win_rate_pct": 73.33,
@@ -13399,13 +13263,14 @@
         "position": "belowBar",
         "color": "#30D158",
         "shape": "arrowUp",
-        "text": "ACTIVE LONG @ $84,713.66",
+        "text": "ENTRY LONG @ $84,713.66",
         "size": 3,
         "entryPrice": 84713.66,
         "side": "LONG",
         "status": "CLOSED",
         "isActive": false,
-        "tradeNo": 444
+        "tradeNo": 444,
+        "eventType": "entry"
       },
       {
         "time": 1790343000,
@@ -36437,13 +36302,14 @@
         "position": "belowBar",
         "color": "#30D158",
         "shape": "arrowUp",
-        "text": "ACTIVE LONG @ $84,713.66",
+        "text": "ENTRY LONG @ $84,713.66",
         "size": 3,
         "entryPrice": 84713.66,
         "side": "LONG",
         "status": "CLOSED",
         "isActive": false,
-        "tradeNo": 726
+        "tradeNo": 726,
+        "eventType": "entry"
       },
       {
         "time": 1790343000,
@@ -48243,109 +48109,14 @@
         "position": "belowBar",
         "color": "#30D158",
         "shape": "arrowUp",
-        "text": "ACTIVE LONG @ $80,073",
-        "size": 3,
-        "entryPrice": 80073.09,
-        "side": "LONG",
-        "status": "OPEN",
-        "isActive": false,
-        "tradeNo": 66
-      },
-      {
-        "time": 1789740000,
-        "position": "aboveBar",
-        "color": "#FF9F0A",
-        "shape": "circle",
-        "text": "BE LOCKED @ $80,233 (+0.2%)",
-        "size": 2,
-        "exitPrice": 80233.24,
-        "isBreakeven": true,
-        "tradeNo": 66,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:32:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #66",
-        "tradeNo": 66,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:35:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #67",
-        "tradeNo": 67,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:36:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #68",
-        "tradeNo": 68,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:39:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #69",
-        "tradeNo": 69,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:40:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #70",
-        "tradeNo": 70,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:41:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #71",
-        "tradeNo": 71,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:42:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #72",
-        "tradeNo": 72,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:44:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #73",
-        "tradeNo": 73,
-        "isActive": false
-      },
-      {
-        "time": 1789736400,
-        "position": "belowBar",
-        "color": "#30D158",
-        "shape": "arrowUp",
         "text": "ACTIVE LONG @ $80,073.09",
         "size": 3,
         "entryPrice": 80073.09,
         "side": "LONG",
         "status": "OPEN",
-        "isActive": false
+        "isActive": true,
+        "eventType": "entry",
+        "tradeNo": 66
       },
       {
         "time": 1789740000,
@@ -48355,56 +48126,10 @@
         "text": "BE LOCKED @ $80,233.24 (+0.2%)",
         "size": 2,
         "exitPrice": 80233.24,
-        "isBreakeven": true
-      },
-      {
-        "time": "2026-09-23 23:12:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #74",
-        "tradeNo": 74,
+        "isBreakeven": true,
+        "eventType": "breakeven",
+        "tradeNo": 66,
         "isActive": false
-      },
-      {
-        "time": "2026-09-24 00:48:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #75",
-        "tradeNo": 75,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-24 00:49:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #76",
-        "tradeNo": 76,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-24 00:50:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #77",
-        "tradeNo": 77,
-        "isActive": false
-      },
-      {
-        "time": 1789736400,
-        "position": "belowBar",
-        "color": "#30D158",
-        "shape": "arrowUp",
-        "text": "ACTIVE LONG @ ",
-        "size": 3,
-        "entryPrice": 80073.09,
-        "side": "LONG",
-        "status": "OPEN",
-        "isActive": true,
-        "tradeNo": 66
       }
     ],
     "trades": [
@@ -49333,7 +49058,10 @@
         "status": "OPEN",
         "stop_loss": 80233.24,
         "take_profit": 140127.91,
-        "is_active": true
+        "is_active": true,
+        "partial_taken": false,
+        "partial_exit_price": null,
+        "partial_position_pct": 0.0
       }
     ],
     "has_active_signal": true,
@@ -49363,7 +49091,9 @@
         "informan"
       ],
       "status": "LIVE_SIGNAL",
-      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY",
+      "be_active": true,
+      "partial_taken": false
     },
     "total_return_pct": 2392.04,
     "win_rate_pct": 64.62,
@@ -51205,12 +50935,13 @@
         "position": "belowBar",
         "color": "#30D158",
         "shape": "arrowUp",
-        "text": "ACTIVE LONG @ $80,073",
+        "text": "ACTIVE LONG @ $80,073.09",
         "size": 3,
         "entryPrice": 80073.09,
         "side": "LONG",
         "status": "OPEN",
-        "isActive": false,
+        "isActive": true,
+        "eventType": "entry",
         "tradeNo": 76
       },
       {
@@ -51218,133 +50949,13 @@
         "position": "aboveBar",
         "color": "#FF9F0A",
         "shape": "circle",
-        "text": "BE LOCKED @ $80,233 (+0.2%)",
+        "text": "BE LOCKED @ $80,233.24 (+0.2%)",
         "size": 2,
         "exitPrice": 80233.24,
         "isBreakeven": true,
+        "eventType": "breakeven",
         "tradeNo": 76,
         "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:33:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #76",
-        "tradeNo": 76,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:35:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #77",
-        "tradeNo": 77,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:36:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #78",
-        "tradeNo": 78,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:39:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #79",
-        "tradeNo": 79,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:40:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #80",
-        "tradeNo": 80,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:41:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #81",
-        "tradeNo": 81,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:42:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #82",
-        "tradeNo": 82,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:44:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #83",
-        "tradeNo": 83,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 23:12:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #84",
-        "tradeNo": 84,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-24 00:48:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #85",
-        "tradeNo": 85,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-24 00:49:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #86",
-        "tradeNo": 86,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-24 00:50:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #87",
-        "tradeNo": 87,
-        "isActive": false
-      },
-      {
-        "time": 1789736400,
-        "position": "belowBar",
-        "color": "#30D158",
-        "shape": "arrowUp",
-        "text": "ACTIVE LONG @ ",
-        "size": 3,
-        "entryPrice": 80073.09,
-        "side": "LONG",
-        "status": "OPEN",
-        "isActive": true,
-        "tradeNo": 76
       }
     ],
     "trades": [
@@ -52723,6 +52334,7 @@
         "side": "SHORT",
         "status": "OPEN",
         "isActive": true,
+        "eventType": "entry",
         "tradeNo": 6
       }
     ],
@@ -52801,7 +52413,10 @@
         "is_active": true,
         "stop_loss": 0.0,
         "take_profit": 0.0,
-        "be_activated": false
+        "be_activated": false,
+        "partial_taken": false,
+        "partial_exit_price": null,
+        "partial_position_pct": 0.0
       }
     ],
     "has_active_signal": true,
@@ -52819,8 +52434,8 @@
       "current_price": 83778.01,
       "stop_loss": 0.0,
       "stop_loss_pct": 0.0,
-      "breakeven_trigger": 94261.44,
-      "breakeven_trigger_pct": -0.0,
+      "breakeven_trigger": null,
+      "breakeven_trigger_pct": 0.0,
       "take_profit": 0.0,
       "take_profit_pct": -0.0,
       "risk_reward_ratio": "Regime-managed",
@@ -52831,7 +52446,9 @@
         "informan"
       ],
       "status": "LIVE_SIGNAL",
-      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY",
+      "be_active": false,
+      "partial_taken": false
     },
     "total_return_pct": 1751.05,
     "win_rate_pct": 60.0,
@@ -56334,91 +55951,8 @@
         "side": "LONG",
         "status": "OPEN",
         "isActive": true,
+        "eventType": "entry",
         "tradeNo": 148
-      },
-      {
-        "time": 1789747200,
-        "position": "aboveBar",
-        "color": "#FF9F0A",
-        "shape": "circle",
-        "text": "BE LOCKED @ $80,887 (+0.2%)",
-        "size": 2,
-        "exitPrice": 80887.05,
-        "isBreakeven": true,
-        "tradeNo": 148,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:32:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #148",
-        "tradeNo": 148,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:35:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #149",
-        "tradeNo": 149,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:36:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #150",
-        "tradeNo": 150,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:39:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #151",
-        "tradeNo": 151,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:40:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #152",
-        "tradeNo": 152,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:41:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #153",
-        "tradeNo": 153,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:42:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #154",
-        "tradeNo": 154,
-        "isActive": false
-      },
-      {
-        "time": "2026-09-23 14:44:00",
-        "position": "aboveBar",
-        "color": "#EF4444",
-        "shape": "arrowDown",
-        "text": "EXIT Fast_Breakeven #155",
-        "tradeNo": 155,
-        "isActive": false
       }
     ],
     "trades": [
@@ -58369,8 +57903,8 @@
       "current_price": 84505.46,
       "stop_loss": 68616.76,
       "stop_loss_pct": -15.0,
-      "breakeven_trigger": 84761.88,
-      "breakeven_trigger_pct": 5.0,
+      "breakeven_trigger": null,
+      "breakeven_trigger_pct": 0.0,
       "take_profit": 141269.8,
       "take_profit_pct": 75.0,
       "risk_reward_ratio": "5.0x",
@@ -58382,7 +57916,8 @@
       ],
       "status": "LIVE_SIGNAL",
       "execution_mode": "AUTONOMOUS_ON_THE_FLY",
-      "be_active": false
+      "be_active": false,
+      "partial_taken": false
     },
     "total_return_pct": 1240.26,
     "win_rate_pct": 43.54,
@@ -63712,6 +63247,7 @@
         "side": "SHORT",
         "status": "OPEN",
         "isActive": true,
+        "eventType": "entry",
         "tradeNo": 105
       }
     ],
@@ -65084,7 +64620,10 @@
         "status": "OPEN",
         "stop_loss": 87532.2,
         "take_profit": 66691.2,
-        "is_active": true
+        "is_active": true,
+        "partial_taken": false,
+        "partial_exit_price": null,
+        "partial_position_pct": 0.0
       }
     ],
     "has_active_signal": true,
@@ -65114,7 +64653,9 @@
         "informan"
       ],
       "status": "LIVE_SIGNAL",
-      "execution_mode": "AUTONOMOUS_ON_THE_FLY"
+      "execution_mode": "AUTONOMOUS_ON_THE_FLY",
+      "be_active": false,
+      "partial_taken": false
     },
     "total_return_pct": 71.19,
     "win_rate_pct": 61.54,

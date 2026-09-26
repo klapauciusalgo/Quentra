@@ -524,6 +524,18 @@ def _normalize_event_timestamp(value):
     return int(parsed.timestamp())
 
 
+def _is_close_marker(marker: dict) -> bool:
+    """Return True only for a terminal exit marker, not a breakeven guide."""
+    if marker.get("isBreakeven") is True:
+        return False
+    event_type = str(marker.get("eventType", "")).strip().lower()
+    if event_type == "exit":
+        return True
+    if marker.get("pnlPct") is not None or marker.get("exitPrice") is not None:
+        return True
+    return str(marker.get("text", "")).strip().upper().startswith(("EXIT", "CLOSE"))
+
+
 def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
     from live_signal_engine import deduplicate_markers, is_open_trade_record, live_signal_engine
     sym = symbol.upper()
@@ -532,8 +544,19 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
         return s
 
     s_copy = dict(s)
+    source_trades = [dict(t) for t in s.get("trades", [])]
+    known_trade_numbers = {
+        str(t.get("trade_no"))
+        for t in source_trades
+        if t.get("trade_no") is not None
+    }
+    open_trade_numbers = {
+        str(t.get("trade_no"))
+        for t in source_trades
+        if t.get("trade_no") is not None and is_open_trade_record(t)
+    }
     # Strip any previously stored OPEN / RUNNING trades to avoid duplication
-    base_trades = [dict(t) for t in s.get("trades", []) if not is_open_trade_record(t)]
+    base_trades = [dict(t) for t in source_trades if not is_open_trade_record(t)]
     for trade in base_trades:
         # CLOSED is authoritative. Older persistence code left is_active=true,
         # which made the same trade render as active in the bottom strip.
@@ -542,9 +565,54 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
 
     base_markers = []
     for marker in s.get("markers", []):
+        marker_trade_no = marker.get("tradeNo")
+        marker_trade_key = str(marker_trade_no) if marker_trade_no is not None else None
+        is_live_marker = (
+            marker.get("isActive") is True
+            or marker.get("status") == "OPEN"
+            or (
+                marker_trade_key is None
+                and str(marker.get("text", "")).strip().upper().startswith("ACTIVE")
+            )
+        )
+        if is_live_marker:
+            # Active markers are stateful, not historical events. Keep only
+            # the marker that matches the currently-open model entry.
+            if model.position_status != "OPEN":
+                continue
+            try:
+                marker_entry_price = float(marker.get("entryPrice"))
+            except (TypeError, ValueError):
+                continue
+            if abs(marker_entry_price - float(model.entry_price)) >= 0.01:
+                continue
+        if marker_trade_no is not None:
+            # A persisted marker for a trade that does not exist in the trade
+            # ledger is stale telemetry. Never render it as a sell/exit.
+            if marker_trade_key not in known_trade_numbers:
+                continue
+            # An open trade cannot also have a terminal exit marker. This is
+            # the exact failure mode that made live #66 look like many sells.
+            if marker_trade_key in open_trade_numbers and _is_close_marker(marker):
+                continue
+        if marker.get("isBreakeven") is True and (
+            marker_trade_key in open_trade_numbers
+            or marker_trade_key is None
+        ):
+            # The engine emits one canonical breakeven marker below. Do not
+            # retain an unbound/orphan persisted breakeven marker.
+            continue
         if marker.get("isActive") is True or marker.get("status") == "OPEN":
             continue
         normalized = dict(marker)
+        if (
+            marker_trade_key in known_trade_numbers
+            and marker_trade_key not in open_trade_numbers
+            and str(normalized.get("text", "")).strip().upper().startswith("ACTIVE")
+        ):
+            normalized["text"] = str(normalized.get("text", "")).replace("ACTIVE", "ENTRY", 1)
+            normalized["eventType"] = "entry"
+            normalized["isActive"] = False
         marker_time = _normalize_event_timestamp(normalized.get("time"))
         if marker_time is None:
             continue

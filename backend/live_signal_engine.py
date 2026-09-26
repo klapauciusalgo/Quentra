@@ -12,6 +12,9 @@ Executes quantitative algorithmic strategy rules on-the-fly for BTCUSDT and ETHU
 import os
 import json
 import time
+import hashlib
+import tempfile
+import fcntl
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
@@ -20,6 +23,31 @@ import pandas as pd
 
 logger = logging.getLogger("live_signal_engine")
 logger.setLevel(logging.INFO)
+
+
+def _atomic_json_dump(path: str, payload: Any):
+    """Serialize a catalog atomically and coordinate writers across processes."""
+    lock_name = f"quentra-catalog-{hashlib.sha256(os.path.abspath(path).encode()).hexdigest()}.lock"
+    lock_path = os.path.join(tempfile.gettempdir(), lock_name)
+    directory = os.path.dirname(path) or "."
+    original_mode = os.stat(path).st_mode if os.path.exists(path) else None
+    temp_path = None
+    with open(lock_path, "a+") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            fd, temp_path = tempfile.mkstemp(prefix=".quentra-", suffix=".json", dir=directory)
+            if original_mode is not None:
+                os.fchmod(fd, original_mode)
+            with os.fdopen(fd, "w") as temp_file:
+                json.dump(payload, temp_file, indent=2)
+                temp_file.flush()
+                os.fsync(temp_file.fileno())
+            os.replace(temp_path, path)
+            temp_path = None
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.unlink(temp_path)
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def _marker_event_type(marker: dict) -> str:
@@ -57,6 +85,77 @@ def _marker_priority(marker: dict) -> int:
     if marker.get("isActive") is False:
         priority += 1
     return priority
+
+
+def _marker_timestamp_seconds(value: Any) -> Optional[int]:
+    if isinstance(value, (int, float)) and np.isfinite(value):
+        numeric = float(value)
+        return int(numeric / 1000) if numeric > 1e12 else int(numeric)
+    if value is None:
+        return None
+    parsed = pd.to_datetime(str(value).replace(" UTC", ""), utc=True, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    return int(parsed.timestamp())
+
+
+def _marker_price_matches(marker: dict, field: str, expected: float) -> bool:
+    try:
+        actual = float(marker.get(field))
+    except (TypeError, ValueError):
+        return False
+    return np.isfinite(actual) and abs(actual - expected) < 0.01
+
+
+def _canonical_breakeven_marker(model: "StrategyModel", marker_time: int, trade_no: Any = None) -> dict:
+    return {
+        "time": marker_time,
+        "position": "aboveBar" if model.direction == "LONG" else "belowBar",
+        "color": "#FF9F0A",
+        "shape": "circle",
+        "text": f"BE LOCKED @ ${model.current_sl:,.2f} (+0.2%)",
+        "size": 2,
+        "exitPrice": model.current_sl,
+        "isBreakeven": True,
+        "eventType": "breakeven",
+        "tradeNo": trade_no,
+        "isActive": False,
+    }
+
+
+def _canonical_active_markers(model: "StrategyModel", trade_no: Any = None) -> List[dict]:
+    entry_time = _marker_timestamp_seconds(model.entry_time) or int(time.time())
+    existing_be_time = next(
+        (
+            _marker_timestamp_seconds(marker.get("time"))
+            for marker in getattr(model, "active_markers", [])
+            if marker.get("isBreakeven") is True
+            and _marker_timestamp_seconds(marker.get("time")) is not None
+        ),
+        None,
+    )
+    markers = [{
+        "time": entry_time,
+        "position": "belowBar" if model.direction == "LONG" else "aboveBar",
+        "color": "#30D158" if model.direction == "LONG" else "#FF453A",
+        "shape": "arrowUp" if model.direction == "LONG" else "arrowDown",
+        "text": f"ACTIVE {model.direction} @ ${model.entry_price:,.2f}",
+        "size": 3,
+        "entryPrice": model.entry_price,
+        "side": model.direction,
+        "status": "OPEN",
+        "isActive": True,
+        "eventType": "entry",
+        "tradeNo": trade_no,
+    }]
+    if model.be_active and float(model.current_sl or 0) > 0:
+        tf_sec = {"30m": 1800, "1h": 3600, "4h": 14400, "1w": 604800}.get(model.timeframe, 3600)
+        markers.append(_canonical_breakeven_marker(
+            model,
+            existing_be_time or (entry_time + tf_sec),
+            trade_no,
+        ))
+    return markers
 
 
 def deduplicate_markers(markers: List[dict]) -> List[dict]:
@@ -514,7 +613,6 @@ class LiveSignalEngine:
             is_open_trade = is_open_trade_record(last_trade)
 
             if is_open_trade:
-                protection_normalized = False
                 entry_p = float(last_trade.get("entry_price", 0.0))
                 entry_time = str(last_trade.get("entry_time", ""))
                 curr_sl = float(last_trade.get("stop_loss", 0.0))
@@ -546,7 +644,6 @@ class LiveSignalEngine:
                 # Scalp-Runner's BE is coupled to its partial TP. Older
                 # records may contain a generic BE without the 30% harvest.
                 if partial_tp_cfg > 0 and not partial_taken:
-                    protection_normalized = bool(be_active or abs(curr_sl - normalized_sl) > 0.01)
                     model.be_active = False
                     model.current_sl = normalized_sl
                 # Strategies without a breakeven rule must always restore the
@@ -554,7 +651,6 @@ class LiveSignalEngine:
                 # a previous generic BE implementation.
                 elif model.config.get("be_pct", 0.0) <= 0:
                     model.be_active = False
-                    protection_normalized = bool(be_active or abs(curr_sl - normalized_sl) > 0.01)
                     model.current_sl = normalized_sl
                     if model.active_ticket:
                         model.active_ticket["stop_loss"] = model.current_sl
@@ -601,12 +697,98 @@ class LiveSignalEngine:
                         normalized = dict(marker)
                         normalized["tradeNo"] = trade_no
                         active_markers.append(normalized)
-                model.active_markers = deduplicate_markers(active_markers)
-                if protection_normalized:
-                    try:
-                        self._persist_opened_trade(model, model.active_ticket or {})
-                    except Exception as exc:
-                        logger.error(f"Error normalizing persisted protection state for {model.strat_id}: {exc}")
+                # A live trade has exactly one entry marker and, when
+                # protected, one breakeven marker. Older runtime persistence
+                # could append a marker on every tick, producing a stack of
+                # fake BUY/SELL points for the same still-open trade.
+                matching_entries = [
+                    marker for marker in active_markers
+                    if not marker.get("isBreakeven")
+                    and _marker_price_matches(marker, "entryPrice", entry_p)
+                ]
+                matching_breakevens = [
+                    marker for marker in active_markers
+                    if marker.get("isBreakeven") is True
+                    and _marker_price_matches(marker, "exitPrice", curr_sl)
+                ]
+
+                try:
+                    canonical_entry_time = int(pd.to_datetime(str(entry_time).replace(" UTC", ""), utc=True).timestamp())
+                except Exception:
+                    canonical_entry_time = int(time.time())
+
+                if matching_entries:
+                    selected_entry = min(
+                        matching_entries,
+                        key=lambda marker: abs(
+                            int(_marker_timestamp_seconds(marker.get("time")) or canonical_entry_time)
+                            - canonical_entry_time
+                        ),
+                    )
+                else:
+                    selected_entry = {
+                        "time": canonical_entry_time,
+                        "position": "belowBar" if model.direction == "LONG" else "aboveBar",
+                        "color": "#30D158" if model.direction == "LONG" else "#FF453A",
+                        "shape": "arrowUp" if model.direction == "LONG" else "arrowDown",
+                        "text": f"ACTIVE {model.direction} @ ${entry_p:,.2f}",
+                        "size": 3,
+                        "entryPrice": entry_p,
+                        "side": model.direction,
+                        "status": "OPEN",
+                        "isActive": True,
+                        "tradeNo": trade_no,
+                    }
+                selected_entry = dict(selected_entry)
+                selected_entry.update({
+                    "time": canonical_entry_time,
+                    "position": "belowBar" if model.direction == "LONG" else "aboveBar",
+                    "color": "#30D158" if model.direction == "LONG" else "#FF453A",
+                    "shape": "arrowUp" if model.direction == "LONG" else "arrowDown",
+                    "text": f"ACTIVE {model.direction} @ ${entry_p:,.2f}",
+                    "size": 3,
+                    "entryPrice": entry_p,
+                    "side": model.direction,
+                    "status": "OPEN",
+                    "isActive": True,
+                    "eventType": "entry",
+                    "tradeNo": trade_no,
+                })
+
+                selected_markers = [selected_entry]
+                if model.be_active:
+                    selected_be = min(
+                        matching_breakevens,
+                        key=lambda marker: abs(
+                            int(_marker_timestamp_seconds(marker.get("time")) or canonical_entry_time)
+                            - canonical_entry_time
+                        ),
+                    ) if matching_breakevens else {}
+                    selected_be = dict(selected_be)
+                    tf_sec = {"30m": 1800, "1h": 3600, "4h": 14400, "1w": 604800}.get(model.timeframe, 3600)
+                    selected_be.update({
+                        "time": canonical_entry_time + tf_sec,
+                        "position": "aboveBar" if model.direction == "LONG" else "belowBar",
+                        "color": "#FF9F0A",
+                        "shape": "circle",
+                        "text": f"BE LOCKED @ ${curr_sl:,.2f} (+0.2%)",
+                        "size": 2,
+                        "exitPrice": curr_sl,
+                        "isBreakeven": True,
+                        "eventType": "breakeven",
+                        "tradeNo": trade_no,
+                        "isActive": False,
+                    })
+                    selected_markers.append(selected_be)
+                model.active_markers = deduplicate_markers(selected_markers)
+                # Persist the canonical lifecycle on every restore, not only
+                # when stop-loss protection changed. This removes legacy
+                # duplicate live/BE markers even when protection is already
+                # numerically correct.
+                try:
+                    self._persist_opened_trade(model, model.active_ticket or {})
+                except Exception as exc:
+                    logger.error(f"Error normalizing persisted lifecycle for {model.strat_id}: {exc}")
                 logger.info(f"🚀 [STATE SYNC] Restored active {model.direction} trade for [{sym}] {model.name}: Entry at {entry_time} (SL: {model.current_sl}, BE: {model.be_active})")
             else:
                 model.position_status = "FLAT"
@@ -962,6 +1144,32 @@ class LiveSignalEngine:
         be_pct = cfg.get("be_pct", 0.0)
         partial_tp = float(cfg.get("partial_tp", 0.0) or 0.0)
         partial_weight = float(cfg.get("partial_weight", 0.0) or 0.0)
+
+        def upsert_breakeven_marker():
+            try:
+                marker_time = int(pd.to_datetime(candle_time, utc=True).timestamp())
+            except Exception:
+                marker_time = int(time.time())
+            trade_no = next(
+                (
+                    marker.get("tradeNo")
+                    for marker in getattr(model, "active_markers", [])
+                    if marker.get("tradeNo") is not None
+                ),
+                None,
+            )
+            if isinstance(model.active_ticket, dict):
+                ticket_trade_no = model.active_ticket.get("trade_no")
+                if ticket_trade_no is not None:
+                    trade_no = ticket_trade_no
+            model.active_markers = [
+                marker for marker in model.active_markers
+                if marker.get("isBreakeven") is not True
+            ]
+            model.active_markers.append(
+                _canonical_breakeven_marker(model, marker_time, trade_no)
+            )
+
         partial_hit = (
             partial_tp > 0
             and partial_weight > 0
@@ -981,6 +1189,7 @@ class LiveSignalEngine:
                 model.active_ticket["stop_loss"] = model.current_sl
                 model.active_ticket["be_active"] = True
                 model.active_ticket["partial_taken"] = True
+            upsert_breakeven_marker()
             events.append({
                 "type": "PARTIAL_TAKE_PROFIT",
                 "symbol": fmt_sym,
@@ -1008,20 +1217,7 @@ class LiveSignalEngine:
             )
             if model.active_ticket:
                 model.active_ticket["stop_loss"] = model.current_sl
-            try:
-                marker_time = int(pd.to_datetime(candle_time, utc=True).timestamp())
-            except Exception:
-                marker_time = int(time.time())
-            model.active_markers.append({
-                "time": marker_time,
-                "position": "aboveBar" if model.direction == "LONG" else "belowBar",
-                "color": "#FF9F0A",
-                "shape": "circle",
-                "text": f"BE LOCKED @ ${model.current_sl:,.2f} (+0.2%)",
-                "size": 2,
-                "exitPrice": model.current_sl,
-                "isBreakeven": True,
-            })
+            upsert_breakeven_marker()
             logger.info(
                 f"⚡ [BREAKEVEN ACTIVATED] [{sym}] {model.name} "
                 f"locked BE stop at ${model.current_sl:,.2f} on candle close"
@@ -1387,7 +1583,8 @@ class LiveSignalEngine:
                 "entryPrice": entry_p,
                 "side": model.direction,
                 "status": "OPEN",
-                "isActive": True
+                "isActive": True,
+                "eventType": "entry",
             }
         ]
         if getattr(model, "be_active", False):
@@ -1400,7 +1597,8 @@ class LiveSignalEngine:
                 "text": f"BE LOCKED @ ${model.current_sl:,.2f} (+0.2%)",
                 "size": 2,
                 "exitPrice": model.current_sl,
-                "isBreakeven": True
+                "isBreakeven": True,
+                "eventType": "breakeven",
             })
         model.active_markers = markers
         model.active_ticket = ticket
@@ -1594,8 +1792,7 @@ class LiveSignalEngine:
                 markers.append(exit_marker)
                 strat["markers"] = deduplicate_markers(markers)
 
-                with open(path, "w") as f:
-                    json.dump(strategies, f, indent=2)
+                _atomic_json_dump(path, strategies)
 
                 updated_any = True
                 logger.info(f"💾 [AUTO-PERSIST] Updated disk strategy file: {path} for {model.strat_id}")
@@ -1617,8 +1814,7 @@ class LiveSignalEngine:
             }
             for path in paths_to_update:
                 updated = process_strategies(path, **recalc_kwargs)
-                with open(path, "w") as f:
-                    json.dump(updated, f, indent=2)
+                _atomic_json_dump(path, updated)
             logger.info(
                 f"📊 [AUTO-RECALCULATE] Harmonized {sym} metrics across disk files for {model.strat_id}"
             )
@@ -1665,16 +1861,18 @@ class LiveSignalEngine:
 
                 # Check if a trade with this exact entry_time already exists
                 existing_entry = next((t for t in trades if t.get("entry_time") == model.entry_time), None)
-                if existing_entry and existing_entry.get("status") == "CLOSED":
-                    # This trade was already closed in history; do not re-open or duplicate
+                open_trades = [trade for trade in trades if is_open_trade_record(trade)]
+                if existing_entry and not is_open_trade_record(existing_entry) and not open_trades:
+                    # This trade was already closed in history; do not re-open or duplicate.
                     continue
 
                 strat["has_active_signal"] = True
                 strat["active_ticket"] = ticket
 
-                has_open = any(is_open_trade_record(t) for t in trades)
-                active_trade = existing_entry
-                if not has_open and not existing_entry:
+                active_trade = existing_entry if is_open_trade_record(existing_entry or {}) else None
+                if active_trade is None and open_trades:
+                    active_trade = open_trades[-1]
+                if active_trade is None:
                     trade_no = len(trades) + 1
                     open_trade = {
                         "trade_no": trade_no,
@@ -1698,37 +1896,56 @@ class LiveSignalEngine:
                     }
                     trades.append(open_trade)
                     active_trade = open_trade
-                elif existing_entry and is_open_trade_record(existing_entry):
-                    # Update active parameters on the existing open trade
-                    existing_entry["status"] = "OPEN"
-                    existing_entry["exit_time"] = "RUNNING"
-                    existing_entry["is_active"] = True
-                    existing_entry["stop_loss"] = model.current_sl
-                    existing_entry["take_profit"] = model.target_tp
-                    existing_entry["be_activated"] = model.be_active
-                    existing_entry["exit_reason"] = f"Active Signal ({'BE Locked' if model.be_active else 'Trailing'})"
-                    existing_entry["partial_taken"] = model.partial_taken
-                    existing_entry["partial_exit_price"] = model.partial_exit_price if model.partial_taken else None
-                    existing_entry["partial_position_pct"] = round(float(model.config.get("partial_weight", 0.0) or 0.0) * 100.0, 2)
 
-                if active_trade is None:
-                    active_trade = next((
-                        trade for trade in reversed(trades)
-                        if is_open_trade_record(trade)
-                    ), None)
+                # A strategy has one authoritative active position. Remove
+                # legacy duplicate OPEN/RUNNING ledger records before writing.
+                trades[:] = [
+                    trade for trade in trades
+                    if not is_open_trade_record(trade) or trade is active_trade
+                ]
+                active_trade["status"] = "OPEN"
+                active_trade["exit_time"] = "RUNNING"
+                active_trade["is_active"] = True
+                active_trade["stop_loss"] = model.current_sl
+                active_trade["take_profit"] = model.target_tp
+                active_trade["be_activated"] = model.be_active
+                active_trade["exit_reason"] = f"Active Signal ({'BE Locked' if model.be_active else 'Trailing'})"
+                active_trade["partial_taken"] = model.partial_taken
+                active_trade["partial_exit_price"] = model.partial_exit_price if model.partial_taken else None
+                active_trade["partial_position_pct"] = round(float(model.config.get("partial_weight", 0.0) or 0.0) * 100.0, 2)
 
-                # Add active markers
-                if hasattr(model, "active_markers") and model.active_markers:
-                    markers = strat.get("markers", [])
-                    for am in model.active_markers:
+                # Add one canonical live entry and, when protected, one
+                # canonical breakeven marker. Never append runtime markers
+                # blindly: restart/tick persistence used to create duplicates.
+                if active_trade:
+                    active_trade_no = active_trade.get("trade_no") if active_trade else None
+                    model.active_markers = _canonical_active_markers(model, active_trade_no)
+                    canonical_markers = model.active_markers
+                    markers = []
+                    for marker in strat.get("markers", []):
+                        marker_no = marker.get("tradeNo")
+                        same_trade = (
+                            active_trade_no is not None
+                            and marker_no is not None
+                            and str(marker_no) == str(active_trade_no)
+                        )
+                        is_live_marker = (
+                            marker.get("isActive") is True
+                            or str(marker.get("status", "")).upper() == "OPEN"
+                            or str(marker.get("text", "")).strip().upper().startswith("ACTIVE")
+                        )
+                        is_breakeven = marker.get("isBreakeven") is True
+                        if same_trade or is_live_marker or (is_breakeven and marker_no is None):
+                            continue
+                        markers.append(marker)
+                    for am in canonical_markers:
                         normalized = dict(am)
                         if active_trade:
                             normalized["tradeNo"] = active_trade.get("trade_no")
                         markers.append(normalized)
                     strat["markers"] = deduplicate_markers(markers)
 
-                with open(path, "w") as f:
-                    json.dump(strategies, f, indent=2)
+                _atomic_json_dump(path, strategies)
 
                 updated_any = True
                 logger.info(f"💾 [AUTO-PERSIST] Persisted OPEN trade to {path} for {model.strat_id}")

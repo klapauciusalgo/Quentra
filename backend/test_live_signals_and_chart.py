@@ -103,20 +103,20 @@ def test_pippo_30m_new_gen_details(client):
     assert data["name"] == "Pippo 30m New Gen"
     assert data["timeframe"] == "30m"
     assert data["type"] == "LONG"
-    assert data["metrics"]["total_trades"] == 443
-    assert data["metrics"]["win_rate_pct"] == 34.99
-    assert data["metrics"]["profit_factor"] in [1.80, 1.96, 1.98, 2.0]
+    assert data["metrics"]["total_trades"] == 444
+    assert data["metrics"]["win_rate_pct"] == 34.91
+    assert data["metrics"]["profit_factor"] == 1.97
     assert len(data["yearly_stats"]) == 7
     # Verify all 7 years are positive
     assert all(y["total_return_pct"] > 0 for y in data["yearly_stats"])
     
-    # Verify closed trade #443 (autonomous confirmation of exit via Force Close MA)
+    # Verify closed trade #444 (autonomous confirmation of exit via Force Close MA)
     last_trade = data["trades"][-1]
-    assert last_trade["trade_no"] == 443
+    assert last_trade["trade_no"] == 444
     assert last_trade["status"] == "CLOSED"
-    assert last_trade["exit_price"] == 85854.33
-    assert last_trade["exit_reason"] == "Force Close MA (-0.5%)"
-    assert last_trade["net_return_pct"] == 5.58
+    assert last_trade["exit_price"] == 83923.71
+    assert last_trade["exit_reason"] == "Force_Close_MA"
+    assert last_trade["net_return_pct"] == -1.11
     assert data["has_active_signal"] is False
 
 def test_closed_trade_and_marker_contract_is_canonical(client):
@@ -163,17 +163,17 @@ def test_pippo_30m_grd_details(client):
     assert data["name"] == "Pippo 30m Grd"
     assert data["timeframe"] == "30m"
     assert data["type"] == "LONG"
-    assert data["metrics"]["total_trades"] == 725
-    assert data["metrics"]["win_rate_pct"] in [32.83, 32.87, 32.73]
+    assert data["metrics"]["total_trades"] == 726
+    assert data["metrics"]["win_rate_pct"] == 32.78
     assert len(data["yearly_stats"]) == 7
     
-    # Verify closed trade #725 (autonomous confirmation of exit via Force Close MA)
+    # Verify closed trade #726 (autonomous confirmation of exit via Force Close MA)
     last_trade = data["trades"][-1]
-    assert last_trade["trade_no"] == 725
+    assert last_trade["trade_no"] == 726
     assert last_trade["status"] == "CLOSED"
-    assert last_trade["exit_price"] == 85854.33
-    assert last_trade["exit_reason"] == "Force Close MA (-0.5%)"
-    assert last_trade["net_return_pct"] == 5.58
+    assert last_trade["exit_price"] == 83923.71
+    assert last_trade["exit_reason"] == "Force_Close_MA"
+    assert last_trade["net_return_pct"] == -1.11
     assert data["has_active_signal"] is False
 
 def test_klines_endpoint(client):

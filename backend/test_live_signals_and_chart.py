@@ -119,6 +119,43 @@ def test_pippo_30m_new_gen_details(client):
     assert last_trade["net_return_pct"] == 5.58
     assert data["has_active_signal"] is False
 
+def test_closed_trade_and_marker_contract_is_canonical(client):
+    res = client.get("/api/strategies/pippo-30m-new-gen")
+    assert res.status_code == 200
+    data = res.json()
+
+    # A terminal trade can never remain active because of a legacy flag.
+    assert all(
+        trade.get("is_active") is not True
+        for trade in data["trades"]
+        if str(trade.get("status", "")).upper() == "CLOSED"
+    )
+
+    # The API boundary must emit chart-compatible seconds even when disk data
+    # contains legacy datetime strings.
+    assert all(isinstance(marker.get("time"), int) for marker in data["markers"])
+
+    # Every persisted exit event must carry enough metadata for the frontend
+    # to classify it as a close, including legacy arrow-shaped exits.
+    exit_markers = [
+        marker for marker in data["markers"]
+        if str(marker.get("text", "")).upper().startswith("EXIT")
+    ]
+    assert exit_markers
+    assert all(
+        marker.get("exitPrice") is not None
+        or marker.get("pnlPct") is not None
+        or marker.get("eventType") == "exit"
+        for marker in exit_markers
+    )
+
+def test_live_telemetry_restores_latest_closed_trade_after_initialization(client):
+    res = client.get("/api/signals/live")
+    assert res.status_code == 200
+    strategy = next(item for item in res.json()["strategies"] if item["strategy_id"] == "pippo-30m-new-gen")
+    assert strategy["last_closed_trade"] is not None
+    assert strategy["last_closed_trade"]["status"] == "CLOSED"
+
 def test_pippo_30m_grd_details(client):
     res = client.get("/api/strategies/pippo-30m-grd")
     assert res.status_code == 200

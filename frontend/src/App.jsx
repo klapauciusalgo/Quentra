@@ -70,6 +70,7 @@ function TradingApp() {
   });
   const [floor, setFloor] = useState(DEFAULT_FLOOR_STATE);
   const [strategies, setStrategies] = useState(strategiesData || []);
+  const catalogSymbolRef = useRef('BTCUSDT');
   const [selectedStrategyId, setSelectedStrategyId] = useState(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -102,6 +103,30 @@ function TradingApp() {
   // Active Working Signals (BUY / SELL) & Notification Events
   const [activeSignals, setActiveSignals] = useState([]);
   const [signalNotifications, setSignalNotifications] = useState([]);
+  const activeSignalsRef = useRef([]);
+  const signalNotificationsRef = useRef([]);
+
+  const replaceActiveSignals = (nextSignals) => {
+    activeSignalsRef.current = nextSignals;
+    setActiveSignals(nextSignals);
+  };
+
+  const appendSignalNotification = (notification) => {
+    const eventKey = notification.event_key || [
+      notification.type,
+      notification.strategy_id || notification.strategy,
+      notification.entry_time || notification.exit_time || notification.timestamp,
+    ].join(':');
+    setSignalNotifications((previous) => {
+      if (previous.some((item) => item.event_key === eventKey)) return previous;
+      const next = [{ ...notification, id: eventKey, event_key: eventKey }, ...previous].slice(0, 20);
+      signalNotificationsRef.current = next;
+      return next;
+    });
+  };
+
+  activeSignalsRef.current = activeSignals;
+  signalNotificationsRef.current = signalNotifications;
 
   // Theme Management (Light Mode is Default)
   const [theme, setTheme] = useState(() => {
@@ -188,16 +213,28 @@ function TradingApp() {
       refreshId === liveRefreshIdRef.current && selectedAssetRef.current === symbol
     );
 
+    let catalogApplied = false;
     if (replaceCatalog && strategiesResult.status === 'fulfilled' && strategiesResult.value?.ok && isCurrentRefresh()) {
-      const catalog = await strategiesResult.value.json();
-      if (isCurrentRefresh() && Array.isArray(catalog) && catalog.length > 0) {
-        setStrategies(catalog);
-        const selected = catalog.find((strategy) => strategy.id === selectedStrategyRef.current) || catalog[0];
-        if (selected?.timeframe) setTimeframe(selected.timeframe.toLowerCase());
+      try {
+        const contentType = strategiesResult.value.headers.get('content-type') || '';
+        const catalog = contentType.includes('application/json') ? await strategiesResult.value.json() : null;
+        if (isCurrentRefresh() && Array.isArray(catalog) && catalog.length > 0) {
+          setStrategies(catalog);
+          catalogSymbolRef.current = symbol;
+          catalogApplied = true;
+          const selected = catalog.find((strategy) => strategy.id === selectedStrategyRef.current) || catalog[0];
+          if (selected?.timeframe) setTimeframe(selected.timeframe.toLowerCase());
+        }
+      } catch (error) {
+        catalogApplied = false;
       }
-    } else if (replaceCatalog && isCurrentRefresh()) {
+    }
+    if (replaceCatalog && isCurrentRefresh() && !catalogApplied && catalogSymbolRef.current !== symbol) {
+      // Keep the last authoritative catalog on transient API failures. Only
+      // use the matching bundled catalog when this asset has no live catalog.
       const fallbackCatalog = symbol === 'ETHUSDT' ? strategiesDataEth : strategiesData;
       setStrategies(fallbackCatalog);
+      catalogSymbolRef.current = symbol;
     }
 
     const signalsAvailable = signalsResult.status === 'fulfilled' && Boolean(signalsResult.value?.ok);
@@ -209,29 +246,88 @@ function TradingApp() {
       const data = await signalsResult.value.json();
       if (isCurrentRefresh() && Array.isArray(data?.strategies)) {
         const price = data.current_price || (symbol === 'ETHUSDT' ? data.current_eth_price : data.current_btc_price);
-        setActiveSignals(
-          data.strategies
-            .filter((strategy) => strategy.position_status === 'IN_POSITION' || strategy.position_status === 'OPEN')
-            .map((strategy) => ({
-              id: `${symbol}-${strategy.strategy_id}`,
-              asset: symbol,
-              strategy_id: strategy.strategy_id,
-              strategy_name: strategy.name,
-              timeframe: strategy.timeframe,
-              direction: strategy.direction,
-              action: strategy.direction === 'LONG' ? 'BUY' : 'SELL',
-              entry_price: strategy.entry_price || price,
-              current_price: price,
-              floating_pnl_pct: strategy.floating_pnl_pct || 0.0,
-              stop_loss: strategy.stop_loss,
-              be_active: strategy.be_active,
-              partial_taken: strategy.partial_taken,
-              partial_exit_price: strategy.partial_exit_price,
-              take_profit: strategy.take_profit,
-              timestamp: strategy.entry_time || new Date().toLocaleTimeString(),
-              status: 'IN_POSITION',
-            }))
+        const nextSignals = data.strategies
+          .filter((strategy) => strategy.position_status === 'IN_POSITION' || strategy.position_status === 'OPEN')
+          .map((strategy) => ({
+            id: `${symbol}-${strategy.strategy_id}`,
+            asset: symbol,
+            strategy_id: strategy.strategy_id,
+            strategy_name: strategy.name,
+            timeframe: strategy.timeframe,
+            direction: strategy.direction,
+            action: strategy.direction === 'LONG' ? 'BUY' : 'SELL',
+            entry_price: strategy.entry_price || price,
+            entry_time: strategy.entry_time,
+            current_price: price,
+            floating_pnl_pct: strategy.floating_pnl_pct || 0.0,
+            stop_loss: strategy.stop_loss,
+            be_active: strategy.be_active,
+            partial_taken: strategy.partial_taken,
+            partial_exit_price: strategy.partial_exit_price,
+            take_profit: strategy.take_profit,
+            timestamp: strategy.entry_time || new Date().toLocaleTimeString(),
+            status: 'IN_POSITION',
+          }));
+
+        const previousByStrategy = new Map(
+          activeSignalsRef.current
+            .filter((signal) => signal.asset === symbol)
+            .map((signal) => [signal.strategy_id, signal])
         );
+        const nextByStrategy = new Map(nextSignals.map((signal) => [signal.strategy_id, signal]));
+
+        nextSignals.forEach((signal) => {
+          const previous = previousByStrategy.get(signal.strategy_id);
+          const isNewEntry = !previous || (
+            signal.entry_time && previous.entry_time && signal.entry_time !== previous.entry_time
+          );
+          if (isNewEntry) {
+            appendSignalNotification({
+              type: 'NEW_SIGNAL',
+              title: previous ? `NEW ENTRY: ${signal.action} SIGNAL` : `ACTIVE ENTRY RECOVERED: ${signal.action}`,
+              strategy: signal.strategy_name,
+              strategy_id: signal.strategy_id,
+              direction: signal.direction,
+              price: signal.entry_price,
+              stop_loss: signal.stop_loss,
+              entry_time: signal.entry_time,
+              timestamp: new Date().toLocaleTimeString(),
+              event_key: `NEW_SIGNAL:${symbol}:${signal.strategy_id}:${signal.entry_time || signal.entry_price}`,
+            });
+          }
+        });
+
+        // If a WebSocket exit was missed, reconcile it from the authoritative
+        // telemetry snapshot so the notification history still catches up.
+        previousByStrategy.forEach((previous, strategyId) => {
+          const next = nextByStrategy.get(strategyId);
+          const entryChanged = Boolean(
+            next?.entry_time && previous.entry_time && next.entry_time !== previous.entry_time
+          );
+          if (next && !entryChanged) return;
+          const strategy = data.strategies.find((item) => item.strategy_id === strategyId);
+          const closed = strategy?.last_closed_trade;
+          if (!closed) return;
+          appendSignalNotification({
+            type: 'SIGNAL_EXIT',
+            title: `POSITION CLOSED: ${previous.strategy_name}`,
+            strategy: previous.strategy_name,
+            strategy_id: strategyId,
+            reason: closed.reason || closed.exit_reason || 'Market Exit',
+            pnl: closed.net_return_pct !== undefined
+              ? `${closed.net_return_pct > 0 ? '+' : ''}${closed.net_return_pct}%`
+              : '',
+            price: closed.exit_price,
+            exit_time: closed.exit_time,
+            timestamp: new Date().toLocaleTimeString(),
+            event_key: `SIGNAL_EXIT:${symbol}:${strategyId}:${closed.exit_time || closed.trade_no || closed.exit_price}`,
+          });
+        });
+
+        replaceActiveSignals([
+          ...activeSignalsRef.current.filter((signal) => signal.asset !== symbol),
+          ...nextSignals,
+        ]);
       }
     }
   };
@@ -306,22 +402,6 @@ function TradingApp() {
         if (data && (data.market_regime || data.session)) setFloor(data);
       })
       .catch(() => {});
-
-    // Strategies
-    fetch(`${API_BASE}/api/strategies`)
-      .then((r) => {
-        const ct = r.headers.get('content-type') || '';
-        if (r.ok && ct.includes('application/json')) return r.json();
-        throw new Error('Not JSON');
-      })
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setStrategies(data);
-        }
-      })
-      .catch(() => {
-        // Initialized with bundled strategiesData
-      });
 
     refreshLiveState(selectedAssetRef.current);
 
@@ -529,6 +609,7 @@ function TradingApp() {
               action: action,
               entry_price: msg.ticket?.entry_price || msg.ticket?.current_price,
               current_price: msg.ticket?.current_price || msg.ticket?.entry_price,
+              entry_time: msg.ticket?.entry_time || msg.candle_time,
               floating_pnl_pct: 0.0,
               stop_loss: msg.ticket?.stop_loss,
               be_active: msg.ticket?.be_active || false,
@@ -539,22 +620,24 @@ function TradingApp() {
               status: 'IN_POSITION',
             };
             if (asset === selectedAssetRef.current) {
-              setActiveSignals((prev) => [newSig, ...prev.filter((s) => s.strategy_id !== newSig.strategy_id)]);
+              replaceActiveSignals([
+                newSig,
+                ...activeSignalsRef.current.filter((s) => s.strategy_id !== newSig.strategy_id || s.asset !== asset),
+              ]);
               refreshLiveState(asset);
             }
-            setSignalNotifications((prev) => [
-              {
-                id: `notif-${Date.now()}`,
-                type: 'NEW_SIGNAL',
-                title: `AUTONOMOUS ${action} SIGNAL`,
-                strategy: newSig.strategy_name,
-                direction: direction,
-                price: newSig.entry_price,
-                stop_loss: newSig.stop_loss,
-                timestamp: new Date().toLocaleTimeString(),
-              },
-              ...prev.slice(0, 19),
-            ]);
+            appendSignalNotification({
+              type: 'NEW_SIGNAL',
+              title: `AUTONOMOUS ${action} SIGNAL`,
+              strategy: newSig.strategy_name,
+              strategy_id: newSig.strategy_id,
+              direction,
+              price: newSig.entry_price,
+              stop_loss: newSig.stop_loss,
+              entry_time: newSig.entry_time,
+              timestamp: new Date().toLocaleTimeString(),
+              event_key: `NEW_SIGNAL:${asset}:${newSig.strategy_id}:${newSig.entry_time || newSig.entry_price}`,
+            });
             setBannerAlert({
               title: `AUTONOMOUS ${direction} SIGNAL DISPATCHED!`,
               strategy: `${msg.ticket?.strategy_name} @ $${Number(msg.ticket?.entry_price || 0).toLocaleString()} (SL: $${Number(msg.ticket?.stop_loss || 0).toLocaleString()})`,
@@ -564,8 +647,8 @@ function TradingApp() {
           } else if (msg.type === 'PARTIAL_TAKE_PROFIT') {
             const asset = msg.asset || 'BTCUSDT';
             if (asset === selectedAssetRef.current && msg.strategy_id) {
-              setActiveSignals((prev) =>
-                prev.map((s) =>
+              replaceActiveSignals(
+                activeSignalsRef.current.map((s) =>
                   s.strategy_id === msg.strategy_id
                     ? {
                         ...s,
@@ -579,26 +662,24 @@ function TradingApp() {
               );
               refreshLiveState(asset, false);
             }
-            setSignalNotifications((prev) => [
-              {
-                id: `notif-${Date.now()}`,
-                type: 'PARTIAL_TAKE_PROFIT',
-                title: `PARTIAL TAKE PROFIT: ${msg.strategy_name || ''}`,
-                strategy: msg.strategy_name || '',
-                price: msg.price,
-                partial_pct: msg.partial_pct,
-                new_stop_loss: msg.new_stop_loss,
-                timestamp: new Date().toLocaleTimeString(),
-              },
-              ...prev.slice(0, 19),
-            ]);
+            appendSignalNotification({
+              type: 'PARTIAL_TAKE_PROFIT',
+              title: `PARTIAL TAKE PROFIT: ${msg.strategy_name || ''}`,
+              strategy: msg.strategy_name || '',
+              strategy_id: msg.strategy_id,
+              price: msg.price,
+              partial_pct: msg.partial_pct,
+              new_stop_loss: msg.new_stop_loss,
+              timestamp: new Date().toLocaleTimeString(),
+              event_key: `PARTIAL_TAKE_PROFIT:${asset}:${msg.strategy_id}:${msg.price || msg.timestamp || Date.now()}`,
+            });
           } else if (msg.type === 'POSITION_CLOSED') {
             // Protection exits emit POSITION_CLOSED followed by SIGNAL_EXIT.
             // Reconcile immediately without creating a duplicate notification;
             // SIGNAL_EXIT remains the user-facing event.
             const asset = msg.asset || msg.trade?.asset || 'BTCUSDT';
             if (msg.strategy_id && asset === selectedAssetRef.current) {
-              setActiveSignals((prev) => prev.filter((s) => s.strategy_id !== msg.strategy_id));
+              replaceActiveSignals(activeSignalsRef.current.filter((s) => s.strategy_id !== msg.strategy_id || s.asset !== asset));
               refreshLiveState(asset, false);
             }
           } else if (msg.type === 'SIGNAL_EXIT') {
@@ -607,22 +688,21 @@ function TradingApp() {
             const pnl = msg.trade?.net_return_pct;
             const pnlStr = pnl !== undefined ? `${pnl > 0 ? '+' : ''}${pnl}%` : '';
             if (msg.strategy_id && asset === selectedAssetRef.current) {
-              setActiveSignals((prev) => prev.filter((s) => s.strategy_id !== msg.strategy_id));
+              replaceActiveSignals(activeSignalsRef.current.filter((s) => s.strategy_id !== msg.strategy_id || s.asset !== asset));
               refreshLiveState(asset);
             }
-            setSignalNotifications((prev) => [
-              {
-                id: `notif-${Date.now()}`,
-                type: 'SIGNAL_EXIT',
-                title: `POSITION CLOSED: ${msg.strategy_name || ''}`,
-                strategy: msg.strategy_name || '',
-                reason: msg.trade?.reason || 'Market Exit',
-                pnl: pnlStr,
-                price: msg.trade?.exit_price,
-                timestamp: new Date().toLocaleTimeString(),
-              },
-              ...prev.slice(0, 19),
-            ]);
+            appendSignalNotification({
+              type: 'SIGNAL_EXIT',
+              title: `POSITION CLOSED: ${msg.strategy_name || ''}`,
+              strategy: msg.strategy_name || '',
+              strategy_id: msg.strategy_id,
+              reason: msg.trade?.reason || 'Market Exit',
+              pnl: pnlStr,
+              price: msg.trade?.exit_price,
+              exit_time: msg.trade?.exit_time || msg.candle_time,
+              timestamp: new Date().toLocaleTimeString(),
+              event_key: `SIGNAL_EXIT:${asset}:${msg.strategy_id}:${msg.trade?.exit_time || msg.trade?.trade_no || msg.trade?.exit_price}`,
+            });
             setBannerAlert({
               title: `AUTONOMOUS POSITION CLOSED: ${msg.strategy_name || ''}`,
               strategy: `Exit Reason: ${msg.trade?.reason || 'Market'} | PnL: ${pnlStr}`,
@@ -633,8 +713,8 @@ function TradingApp() {
             playRetroSound('select');
             const asset = msg.asset || 'BTCUSDT';
             if (asset === selectedAssetRef.current) {
-              setActiveSignals((prev) =>
-                prev.map((s) =>
+              replaceActiveSignals(
+                activeSignalsRef.current.map((s) =>
                   s.strategy_id === msg.strategy_id
                     ? { ...s, stop_loss: msg.new_stop_loss, be_active: true }
                     : s
@@ -642,18 +722,16 @@ function TradingApp() {
               );
               refreshLiveState(asset);
             }
-            setSignalNotifications((prev) => [
-              {
-                id: `notif-${Date.now()}`,
-                type: 'BREAKEVEN_LOCKED',
-                title: `DYNAMIC BREAKEVEN ENGAGED`,
-                strategy: msg.strategy_name || '',
-                price: msg.price,
-                new_stop_loss: msg.new_stop_loss,
-                timestamp: new Date().toLocaleTimeString(),
-              },
-              ...prev.slice(0, 19),
-            ]);
+            appendSignalNotification({
+              type: 'BREAKEVEN_LOCKED',
+              title: `DYNAMIC BREAKEVEN ENGAGED`,
+              strategy: msg.strategy_name || '',
+              strategy_id: msg.strategy_id,
+              price: msg.price,
+              new_stop_loss: msg.new_stop_loss,
+              timestamp: new Date().toLocaleTimeString(),
+              event_key: `BREAKEVEN_LOCKED:${asset}:${msg.strategy_id}:${msg.price || msg.timestamp || Date.now()}`,
+            });
             setBannerAlert({
               title: `DYNAMIC BREAKEVEN ENGAGED!`,
               strategy: `${msg.strategy_name}: Stop Loss advanced to $${Number(msg.new_stop_loss || 0).toLocaleString()} (+0.2% locked)`,
@@ -692,7 +770,7 @@ function TradingApp() {
     playRetroSound('select');
     setSelectedAsset(newAsset);
     selectedAssetRef.current = newAsset;
-    setActiveSignals([]);
+    replaceActiveSignals([]);
 
     // Instantly update active ticker from map to eliminate lag or set clean baseline
     if (tickersMap[newAsset] && tickersMap[newAsset].price > 0) {
@@ -798,23 +876,23 @@ function TradingApp() {
             floating_pnl_pct: 0.0,
             stop_loss: ticket.stop_loss,
             take_profit: ticket.take_profit,
+            entry_time: ticket.entry_time,
             timestamp: new Date().toLocaleTimeString(),
             status: 'IN_POSITION',
           };
-          setActiveSignals((prev) => [newSig, ...prev.filter((s) => s.strategy_id !== newSig.strategy_id)]);
-          setSignalNotifications((prev) => [
-            {
-              id: `notif-${Date.now()}`,
-              type: 'NEW_SIGNAL',
-              title: `AUTONOMOUS ${action} SIGNAL`,
-              strategy: newSig.strategy_name,
-              direction: direction,
-              price: newSig.entry_price,
-              stop_loss: newSig.stop_loss,
-              timestamp: new Date().toLocaleTimeString(),
-            },
-            ...prev.slice(0, 19),
-          ]);
+          replaceActiveSignals([newSig, ...activeSignalsRef.current.filter((s) => s.strategy_id !== newSig.strategy_id)]);
+          appendSignalNotification({
+            type: 'NEW_SIGNAL',
+            title: `AUTONOMOUS ${action} SIGNAL`,
+            strategy: newSig.strategy_name,
+            strategy_id: newSig.strategy_id,
+            direction,
+            price: newSig.entry_price,
+            stop_loss: newSig.stop_loss,
+            entry_time: newSig.entry_time,
+            timestamp: new Date().toLocaleTimeString(),
+            event_key: `NEW_SIGNAL:${selectedAssetRef.current}:${newSig.strategy_id}:${newSig.entry_time || newSig.entry_price}`,
+          });
         }
       })
       .catch(() => {
@@ -838,19 +916,17 @@ function TradingApp() {
           timestamp: new Date().toLocaleTimeString(),
           status: 'IN_POSITION',
         };
-        setActiveSignals((prev) => [newSig, ...prev.filter((s) => s.strategy_id !== newSig.strategy_id)]);
-        setSignalNotifications((prev) => [
-          {
-            id: `notif-${Date.now()}`,
-            type: 'NEW_SIGNAL',
-            title: `AUTONOMOUS ${action} SIGNAL`,
-            strategy: strat.name,
-            direction: strat.type,
-            price: ticker.price,
-            timestamp: new Date().toLocaleTimeString(),
-          },
-          ...prev.slice(0, 19),
-        ]);
+        replaceActiveSignals([newSig, ...activeSignalsRef.current.filter((s) => s.strategy_id !== newSig.strategy_id)]);
+        appendSignalNotification({
+          type: 'NEW_SIGNAL',
+          title: `AUTONOMOUS ${action} SIGNAL`,
+          strategy: strat.name,
+          strategy_id: strat.id,
+          direction: strat.type,
+          price: ticker.price,
+          timestamp: new Date().toLocaleTimeString(),
+          event_key: `NEW_SIGNAL:${selectedAssetRef.current}:${strat.id}:${ticker.price}`,
+        });
         setBannerAlert({
           title: `AUTONOMOUS ${action} SIGNAL DISPATCHED!`,
           strategy: `${strat.name} @ $${Number(ticker.price || 0).toLocaleString()}`,
@@ -870,36 +946,32 @@ function TradingApp() {
     } catch (error) {
       return;
     }
-    setActiveSignals((prev) => {
-      const sig = prev.find((s) => s.strategy_id === strategyId);
-      if (sig) {
-        const isBuy = sig.action === 'BUY' || sig.direction === 'LONG';
-        const floating = isBuy
-          ? ((ticker.price - sig.entry_price) / sig.entry_price) * 100
-          : ((sig.entry_price - ticker.price) / sig.entry_price) * 100;
-        const pnlStr = `${floating >= 0 ? '+' : ''}${floating.toFixed(2)}%`;
-        setSignalNotifications((n) => [
-          {
-            id: `notif-${Date.now()}`,
-            type: 'SIGNAL_EXIT',
-            title: `POSITION CLOSED: ${sig.strategy_name}`,
-            strategy: sig.strategy_name,
-            reason: 'Manual Exit via Bell Menu',
-            pnl: pnlStr,
-            price: ticker.price,
-            timestamp: new Date().toLocaleTimeString(),
-          },
-          ...n.slice(0, 19),
-        ]);
-        setBannerAlert({
-          title: `POSITION CLOSED: ${sig.strategy_name}`,
-          strategy: `Return: ${pnlStr} @ $${Number(ticker.price).toLocaleString()}`,
-          price: ticker.price,
-        });
-        setTimeout(() => setBannerAlert(null), 5000);
-      }
-      return prev.filter((s) => s.strategy_id !== strategyId);
-    });
+    const sig = activeSignalsRef.current.find((s) => s.strategy_id === strategyId);
+    if (sig) {
+      const isBuy = sig.action === 'BUY' || sig.direction === 'LONG';
+      const floating = isBuy
+        ? ((ticker.price - sig.entry_price) / sig.entry_price) * 100
+        : ((sig.entry_price - ticker.price) / sig.entry_price) * 100;
+      const pnlStr = `${floating >= 0 ? '+' : ''}${floating.toFixed(2)}%`;
+      appendSignalNotification({
+        type: 'SIGNAL_EXIT',
+        title: `POSITION CLOSED: ${sig.strategy_name}`,
+        strategy: sig.strategy_name,
+        strategy_id: strategyId,
+        reason: 'Manual Exit via Bell Menu',
+        pnl: pnlStr,
+        price: ticker.price,
+        timestamp: new Date().toLocaleTimeString(),
+        event_key: `SIGNAL_EXIT:${selectedAssetRef.current}:${strategyId}:manual-${Date.now()}`,
+      });
+      setBannerAlert({
+        title: `POSITION CLOSED: ${sig.strategy_name}`,
+        strategy: `Return: ${pnlStr} @ $${Number(ticker.price).toLocaleString()}`,
+        price: ticker.price,
+      });
+      setTimeout(() => setBannerAlert(null), 5000);
+    }
+    replaceActiveSignals(activeSignalsRef.current.filter((s) => s.strategy_id !== strategyId));
   };
 
   // Synchronize top header label with chart's latest candle close if no live WS ticks have arrived recently
@@ -1000,7 +1072,10 @@ function TradingApp() {
         notifications={signalNotifications}
         onSelectStrategy={handleSelectStrategy}
         onCloseSignal={handleCloseSignal}
-        onClearNotifications={() => setSignalNotifications([])}
+        onClearNotifications={() => {
+          signalNotificationsRef.current = [];
+          setSignalNotifications([]);
+        }}
         onGoToLanding={handleGoToLanding}
         selectedAsset={selectedAsset}
         onSelectAsset={handleSelectAsset}

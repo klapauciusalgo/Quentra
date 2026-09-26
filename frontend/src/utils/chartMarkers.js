@@ -1,7 +1,37 @@
+export function normalizeMarkerTime(rawTime) {
+  if (typeof rawTime === 'number' && Number.isFinite(rawTime)) {
+    return rawTime > 1e12 ? Math.floor(rawTime / 1000) : Math.floor(rawTime);
+  }
+
+  if (typeof rawTime !== 'string' || !rawTime.trim()) return null;
+  const text = rawTime.trim();
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    const numeric = Number(text);
+    return Number.isFinite(numeric)
+      ? (numeric > 1e12 ? Math.floor(numeric / 1000) : Math.floor(numeric))
+      : null;
+  }
+
+  const normalized = text.endsWith(' UTC')
+    ? `${text.slice(0, -4).trim()}Z`
+    : /(?:Z|[+-]\d{2}:?\d{2})$/.test(text)
+      ? text
+      : `${text.replace(' ', 'T')}Z`;
+  const timestamp = Date.parse(normalized);
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : null;
+}
+
 function markerEventType(marker) {
   if (marker.isBreakeven) return 'breakeven';
-  if (marker.shape === 'arrowUp' || marker.shape === 'arrowDown') return 'entry';
-  return 'exit';
+  if (marker.eventType === 'entry' || marker.eventType === 'exit') return marker.eventType;
+  if (marker.entryPrice !== undefined && marker.entryPrice !== null) return 'entry';
+  if (
+    marker.exitPrice !== undefined && marker.exitPrice !== null
+    || marker.pnlPct !== undefined && marker.pnlPct !== null
+    || /^\s*(EXIT|CLOSE)/i.test(String(marker.text || ''))
+  ) return 'exit';
+  // Legacy markers without price metadata used arrowUp/arrowDown for entries.
+  return marker.shape === 'arrowUp' || marker.shape === 'arrowDown' ? 'entry' : 'exit';
 }
 
 function markerPrice(marker) {
@@ -15,7 +45,7 @@ function markerIdentity(marker) {
   const side = marker.side || (marker.shape === 'arrowUp' ? 'LONG' : marker.shape === 'arrowDown' ? 'SHORT' : '');
   const price = markerPrice(marker);
   const fallbackTradeNo = price ? '' : (marker.tradeNo ?? '');
-  return [marker.time, eventType, side, price, fallbackTradeNo].join('|');
+  return [normalizeMarkerTime(marker.time) ?? marker.time, eventType, side, price, fallbackTradeNo].join('|');
 }
 
 function markerPriority(marker) {
@@ -84,16 +114,22 @@ export function formatMarkersForDisplay(rawMarkers, mode) {
 export function getProcessedMarkers(rawMarkers, candleArr, mode) {
   if (!rawMarkers?.length || !candleArr?.length) return [];
 
-  const candleTimes = candleArr.map((candle) => candle.time);
+  const candleTimes = candleArr
+    .map((candle) => normalizeMarkerTime(candle.time))
+    .filter((time) => time !== null);
+  if (!candleTimes.length) return [];
   const minTime = candleTimes[0];
   const maxTime = candleTimes[candleTimes.length - 1];
   const averageInterval = candleTimes.length > 1
     ? (maxTime - minTime) / (candleTimes.length - 1)
     : 1800;
 
-  const inRange = deduplicateMarkers(rawMarkers).filter((marker) => (
-    marker.time >= minTime - averageInterval && marker.time <= maxTime + averageInterval * 2
-  ));
+  const inRange = deduplicateMarkers(rawMarkers)
+    .map((marker) => ({ ...marker, time: normalizeMarkerTime(marker.time) }))
+    .filter((marker) => marker.time !== null)
+    .filter((marker) => (
+      marker.time >= minTime - averageInterval && marker.time <= maxTime + averageInterval * 2
+    ));
 
   const mapped = inRange.map((marker) => {
     let low = 0;

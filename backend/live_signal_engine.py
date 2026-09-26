@@ -78,6 +78,9 @@ def is_open_trade_record(trade: dict) -> bool:
     if not trade:
         return False
     status = str(trade.get("status", "")).upper()
+    # A terminal status must win over stale legacy flags or timestamps.
+    if status in {"CLOSED", "EXITED", "FLAT"}:
+        return False
     exit_time = str(trade.get("exit_time", "")).upper()
     return status == "RUNNING" or status.startswith("OPEN") or "RUNNING" in exit_time
 
@@ -157,6 +160,7 @@ class StrategyModel:
         # Recent executed trades log in this session
         self.recent_trades: List[dict] = []
         self.synced_recent_trades: List[dict] = []
+        self.last_closed_trade: Optional[dict] = None
         self.active_markers: List[dict] = []
         self.active_ticket: Optional[dict] = None
 
@@ -501,6 +505,11 @@ class LiveSignalEngine:
         for strat_id, model in models.items():
             strat_data = disk_catalog.get(strat_id, {})
             trades = strat_data.get("trades", [])
+            persisted_closed = next(
+                (trade for trade in reversed(trades) if str(trade.get("status", "")).upper() in {"CLOSED", "EXITED", "FLAT"}),
+                None,
+            )
+            model.last_closed_trade = dict(persisted_closed) if persisted_closed else None
             last_trade = trades[-1] if trades else None
             is_open_trade = is_open_trade_record(last_trade)
 
@@ -748,6 +757,8 @@ class LiveSignalEngine:
                         entry_time = cur_dt
 
             model.synced_recent_trades = replayed_closed
+            if replayed_closed:
+                model.last_closed_trade = replayed_closed[-1]
             if in_pos:
                 model.position_status = "OPEN"
                 model.entry_price = ep
@@ -1351,6 +1362,7 @@ class LiveSignalEngine:
             "partial_position_pct": round(float(cfg.get("partial_weight", 0.0)) * 100.0, 2) if cfg.get("partial_weight", 0.0) else 0.0,
             "partial_taken": False,
             "timestamp": model.entry_time,
+            "entry_time": model.entry_time,
             "contributing_agents": ["quant", "trader", "informan"],
             "status": "LIVE_SIGNAL",
             "execution_mode": "AUTONOMOUS_ON_THE_FLY"
@@ -1451,6 +1463,7 @@ class LiveSignalEngine:
             "partial_position_pct": round(partial_weight * 100.0, 2) if model.partial_taken else 0.0,
         }
         model.recent_trades.append(trade_record)
+        model.last_closed_trade = dict(trade_record)
         if hasattr(model, "synced_recent_trades"):
             model.synced_recent_trades.append(trade_record)
 
@@ -1528,6 +1541,7 @@ class LiveSignalEngine:
 
                 if matching_trade:
                     matching_trade["status"] = "CLOSED"
+                    matching_trade["is_active"] = False
                     matching_trade["exit_price"] = trade_record["exit_price"]
                     matching_trade["exit_time"] = exit_time_str
                     matching_trade["net_return_pct"] = trade_record["net_return_pct"]
@@ -1570,6 +1584,10 @@ class LiveSignalEngine:
                     "color": "#EF4444" if model.direction == "LONG" else "#10B981",
                     "shape": "arrowDown" if model.direction == "LONG" else "arrowUp",
                     "text": f"EXIT {trade_record.get('reason', 'Exit')} #{trade_no}",
+                    "exitPrice": trade_record["exit_price"],
+                    "pnlPct": trade_record["net_return_pct"],
+                    "reason": trade_record.get("reason", "Exit"),
+                    "eventType": "exit",
                     "tradeNo": trade_no,
                     "isActive": False
                 }
@@ -1766,7 +1784,12 @@ class LiveSignalEngine:
                 "exit_confluence_ok": m.exit_confluence_ok,
                 "distance_to_trigger_pct": m.distance_to_trigger_pct,
                 "regime_aligned": m.regime_ok,
-                "recent_trades_count": len(m.recent_trades)
+                "recent_trades_count": len(m.recent_trades),
+                "last_closed_trade": m.last_closed_trade or (
+                    (m.recent_trades or m.synced_recent_trades)[-1]
+                    if (m.recent_trades or m.synced_recent_trades)
+                    else None
+                )
             })
 
         return {

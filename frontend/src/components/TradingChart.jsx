@@ -62,6 +62,13 @@ function formatDuration(startTime, endTime) {
   return `${Math.round(diffHours)} Hours`;
 }
 
+function isTradeRunning(trade) {
+  if (!trade) return false;
+  const status = String(trade.status || '').toUpperCase();
+  if (status === 'CLOSED' || status === 'EXITED' || status === 'FLAT') return false;
+  return status === 'OPEN' || status === 'RUNNING' || trade.is_active === true || String(trade.exit_time).includes('RUNNING');
+}
+
 function calculateRsiData(candles, period = 14, maPeriod = 9) {
   if (!Array.isArray(candles) || candles.length <= period) {
     return { rsi: [], ma: [], levels: [] };
@@ -441,7 +448,7 @@ export default function TradingChart({
     const side = trade.side || trade.type || activeStrategy?.type || 'LONG';
     const isLong = side === 'LONG';
     const isWin = (trade.net_return_pct || 0) > 0;
-    const isRunning = trade.status === 'OPEN' || trade.is_active || String(trade.exit_time).includes('RUNNING');
+    const isRunning = isTradeRunning(trade);
 
     // 1. Entry Line
     if (trade.entry_price) {
@@ -1686,11 +1693,11 @@ export default function TradingChart({
                         {activeTrade.side || activeTrade.type} #{activeTrade.trade_no}
                       </span>
                       <span className={`text-[11px] px-2 py-0.5 rounded-full border ${
-                        activeTrade.status === 'OPEN' || String(activeTrade.exit_time).includes('RUNNING')
+                        isTradeRunning(activeTrade)
                           ? 'border-apple-green/50 bg-apple-green/20 text-apple-green font-semibold animate-pulse'
                           : 'border-black/[0.08] dark:border-white/[0.08] bg-black/[0.04] dark:bg-white/[0.04] text-apple-muted'
                       }`}>
-                        {activeTrade.status === 'OPEN' || String(activeTrade.exit_time).includes('RUNNING') ? 'LIVE RUNNING' : 'CLOSED'}
+                        {isTradeRunning(activeTrade) ? 'LIVE RUNNING' : 'CLOSED'}
                       </span>
                       {activeTrade.be_activated && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-apple-orange/20 text-apple-orange border border-apple-orange/40 font-bold">
@@ -1720,13 +1727,13 @@ export default function TradingChart({
 
                     <div>
                       <div className="text-[10px] text-apple-dim uppercase tracking-wider">
-                        {activeTrade.status === 'OPEN' || String(activeTrade.exit_time).includes('RUNNING') ? 'Current Price' : 'Exit Price'}
+                        {isTradeRunning(activeTrade) ? 'Current Price' : 'Exit Price'}
                       </div>
                       <div className="font-semibold text-apple-text mt-0.5 font-mono tabular-nums">
-                        {formatPrice(activeTrade.status === 'OPEN' ? (liveTicker?.price || activeTrade.exit_price) : activeTrade.exit_price)}
+                        {formatPrice(isTradeRunning(activeTrade) ? (liveTicker?.price || activeTrade.exit_price) : activeTrade.exit_price)}
                       </div>
                       <div className="text-[10px] text-apple-muted truncate">
-                        {activeTrade.status === 'OPEN' || String(activeTrade.exit_time).includes('RUNNING')
+                        {isTradeRunning(activeTrade)
                           ? 'Live Position'
                           : String(activeTrade.exit_time).substring(0, 10)}
                       </div>
@@ -1741,10 +1748,10 @@ export default function TradingChart({
                       </div>
                       <div>
                         <span className="text-[10px] text-apple-dim uppercase mr-1.5">
-                          {activeTrade.status === 'OPEN' ? 'Protection:' : 'Exit:'}
+                          {isTradeRunning(activeTrade) ? 'Protection:' : 'Exit:'}
                         </span>
                         <span className="text-apple-cyan truncate max-w-[120px] inline-block align-bottom font-medium" title={activeTrade.exit_reason}>
-                          {activeTrade.status === 'OPEN' 
+                          {isTradeRunning(activeTrade)
                             ? (activeTrade.be_activated ? 'BE Locked (+0.2%)' : 'Trailing Floor')
                             : (activeTrade.exit_reason || 'Structural')}
                         </span>
@@ -1897,7 +1904,7 @@ export default function TradingChart({
               const actualIdx = tradesList.findIndex((t) => t.trade_no === tr.trade_no);
               const isWin = (tr.net_return_pct || 0) > 0;
               const isCurrent = focusedTradeIndex === actualIdx;
-              const isRunning = tr.status === 'OPEN' || tr.is_active || String(tr.exit_time).includes('RUNNING');
+              const isRunning = isTradeRunning(tr);
               const side = tr.side || tr.type || activeStrategy.type;
               const isLong = side === 'LONG';
 

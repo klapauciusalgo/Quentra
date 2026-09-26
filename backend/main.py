@@ -505,6 +505,25 @@ async def get_klines(
         "candles": sliced,
     }
 
+def _normalize_event_timestamp(value):
+    """Return a chart-compatible Unix timestamp in seconds for legacy values."""
+    if isinstance(value, (int, float)) and np.isfinite(value):
+        numeric = float(value)
+        return int(numeric / 1000) if numeric > 1e12 else int(numeric)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    try:
+        numeric = float(text)
+        return int(numeric / 1000) if numeric > 1e12 else int(numeric)
+    except ValueError:
+        pass
+    parsed = pd.to_datetime(text.replace(" UTC", ""), utc=True, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    return int(parsed.timestamp())
+
+
 def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
     from live_signal_engine import deduplicate_markers, is_open_trade_record, live_signal_engine
     sym = symbol.upper()
@@ -514,11 +533,23 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
 
     s_copy = dict(s)
     # Strip any previously stored OPEN / RUNNING trades to avoid duplication
-    base_trades = [t for t in s.get("trades", []) if not is_open_trade_record(t)]
-    base_markers = [
-        m for m in s.get("markers", [])
-        if m.get("isActive") is not True and m.get("status") != "OPEN"
-    ]
+    base_trades = [dict(t) for t in s.get("trades", []) if not is_open_trade_record(t)]
+    for trade in base_trades:
+        # CLOSED is authoritative. Older persistence code left is_active=true,
+        # which made the same trade render as active in the bottom strip.
+        if str(trade.get("status", "")).upper() in {"CLOSED", "EXITED", "FLAT"}:
+            trade["is_active"] = False
+
+    base_markers = []
+    for marker in s.get("markers", []):
+        if marker.get("isActive") is True or marker.get("status") == "OPEN":
+            continue
+        normalized = dict(marker)
+        marker_time = _normalize_event_timestamp(normalized.get("time"))
+        if marker_time is None:
+            continue
+        normalized["time"] = marker_time
+        base_markers.append(normalized)
 
     # Existing trade timestamps to avoid duplicates
     existing_entries = {str(t.get("entry_time")) for t in base_trades}

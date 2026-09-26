@@ -2,6 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { getProcessedMarkers, isMarkerActive, normalizeMarkerTime } from './chartMarkers.js';
+import { formatUtcPlus7Tick, formatUtcPlus7Time } from './chartTime.js';
+
+test('formats chart crosshair time in UTC+7 regardless of browser timezone', () => {
+  assert.equal(formatUtcPlus7Time(1790343000), '25 Sep 2026, 20:30');
+});
+
+test('formats chart axis ticks in UTC+7 regardless of browser timezone', () => {
+  assert.equal(formatUtcPlus7Tick(1790343000, 3), '20:30');
+  assert.equal(formatUtcPlus7Tick(1790343000, 2), '25 Sep');
+});
 
 test('collapses duplicate live entry and breakeven markers by event identity', () => {
   const entryTime = 1789736400;

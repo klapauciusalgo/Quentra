@@ -10,6 +10,7 @@ import {
   createSeriesMarkers 
 } from 'lightweight-charts';
 import { formatPrice, formatPercent, playRetroSound } from '../utils/formatters';
+import { formatUtcPlus7Tick, formatUtcPlus7Time } from '../utils/chartTime';
 import { getProcessedMarkers } from '../utils/chartMarkers';
 import { API_BASE } from '../config';
 import { 
@@ -626,10 +627,14 @@ export default function TradingChart({
           bottom: 0.2,
         },
       },
+      localization: {
+        timeFormatter: formatUtcPlus7Time,
+      },
       timeScale: {
         borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
         timeVisible: true,
         secondsVisible: false,
+        tickMarkFormatter: formatUtcPlus7Tick,
         rightOffset: 12,
         barSpacing: 8,
       },

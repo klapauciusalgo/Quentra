@@ -156,6 +156,15 @@
 }
 
 @media (max-width: 639px) {
+  .notification-flyout {
+    position: fixed;
+    top: 3.75rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    max-width: none;
+  }
+
   .apple-segmented-container {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));

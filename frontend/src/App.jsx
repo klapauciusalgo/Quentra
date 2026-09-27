@@ -10,6 +10,7 @@ import { playRetroSound } from './utils/formatters';
 import { Bell, BarChart3, Compass, ShieldCheck, Grid } from 'lucide-react';
 import { API_BASE, getWsUrl } from './config';
 import { normalizeNotification } from './utils/notificationUtils';
+import { stripLiveState } from './utils/catalogUtils';
 import strategiesData from './data/strategiesData.json';
 import strategiesDataEth from './data/strategiesData_eth.json';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -70,7 +71,7 @@ function TradingApp() {
     volume_24h: 18905.45,
   });
   const [floor, setFloor] = useState(DEFAULT_FLOOR_STATE);
-  const [strategies, setStrategies] = useState(strategiesData || []);
+  const [strategies, setStrategies] = useState(() => stripLiveState(strategiesData || []));
   const catalogSymbolRef = useRef('BTCUSDT');
   const [selectedStrategyId, setSelectedStrategyId] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -234,7 +235,7 @@ function TradingApp() {
     if (replaceCatalog && isCurrentRefresh() && !catalogApplied && catalogSymbolRef.current !== symbol) {
       // Keep the last authoritative catalog on transient API failures. Only
       // use the matching bundled catalog when this asset has no live catalog.
-      const fallbackCatalog = symbol === 'ETHUSDT' ? strategiesDataEth : strategiesData;
+      const fallbackCatalog = stripLiveState(symbol === 'ETHUSDT' ? strategiesDataEth : strategiesData);
       setStrategies(fallbackCatalog);
       catalogSymbolRef.current = symbol;
     }

@@ -13,6 +13,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture(scope="module")
 def client():
+    from catalog_storage import ensure_runtime_catalog
+
+    # Tests must model a persisted runtime snapshot explicitly; static catalogs
+    # are not allowed to create live positions on their own.
+    ensure_runtime_catalog("BTCUSDT")
+    ensure_runtime_catalog("ETHUSDT")
     main.load_data_into_memory()
     with TestClient(main.app) as c:
         yield c
@@ -266,9 +272,35 @@ def test_runtime_breakeven_markers_are_canonical():
     assert partial_be[0]["exitPrice"] == 100.2
 
 
-def test_persist_open_trade_collapses_duplicate_open_records(tmp_path, monkeypatch):
+def test_static_catalog_open_trade_is_not_restored_without_runtime_overlay(tmp_path, monkeypatch):
     import live_signal_engine as engine_module
 
+    backend_data = tmp_path / "backend" / "data"
+    backend_data.mkdir(parents=True)
+    source = json.loads((REPO_ROOT / "backend/data/strategies.json").read_text())
+    strategy = next(item for item in source if item["id"] == "pippo-1h-enhanced")
+    strategy["trades"] = [next(item for item in strategy["trades"] if item.get("status") == "OPEN")]
+    (backend_data / "strategies.json").write_text(json.dumps(source, indent=2))
+
+    fake_module_file = tmp_path / "backend" / "live_signal_engine.py"
+    fake_module_file.write_text("")
+    monkeypatch.setattr(engine_module, "__file__", str(fake_module_file))
+    model = StrategyModel(
+        "pippo-1h-enhanced", "Pippo 1h Enhanced", "1h", "LONG",
+        {"sl_pct": 0.08, "be_pct": 0.05, "tp_pct": 0.75}, "BTCUSDT"
+    )
+    engine = LiveSignalEngine()
+    engine.strategies = {model.strat_id: model}
+
+    engine.sync_active_positions("BTCUSDT")
+
+    assert model.position_status == "FLAT"
+    assert model.active_ticket is None
+
+
+def test_persist_open_trade_uses_runtime_overlay_and_leaves_static_catalogs_unchanged(tmp_path, monkeypatch):
+    import live_signal_engine as engine_module
+    from catalog_storage import runtime_catalog_path
     backend_data = tmp_path / "backend" / "data"
     frontend_data = tmp_path / "frontend" / "src" / "data"
     backend_data.mkdir(parents=True)
@@ -279,9 +311,16 @@ def test_persist_open_trade_collapses_duplicate_open_records(tmp_path, monkeypat
     duplicate = dict(open_trade)
     duplicate["trade_no"] = 999
     duplicate["entry_time"] = "2026-09-18 13:01:00"
-    strategy["trades"].append(duplicate)
     for path in [backend_data / "strategies.json", frontend_data / "strategiesData.json"]:
         path.write_text(json.dumps(source, indent=2))
+    backend_before = (backend_data / "strategies.json").read_bytes()
+    frontend_before = (frontend_data / "strategiesData.json").read_bytes()
+
+    runtime_source = json.loads((backend_data / "strategies.json").read_text())
+    runtime_strategy = next(item for item in runtime_source if item["id"] == "pippo-1h-enhanced")
+    runtime_strategy["trades"].append(duplicate)
+    (backend_data / "strategies.json").write_text(json.dumps(runtime_source, indent=2))
+    backend_before = (backend_data / "strategies.json").read_bytes()
 
     fake_module_file = tmp_path / "backend" / "live_signal_engine.py"
     fake_module_file.write_text("")
@@ -298,11 +337,13 @@ def test_persist_open_trade_collapses_duplicate_open_records(tmp_path, monkeypat
     model.be_active = True
     LiveSignalEngine()._persist_opened_trade(model, {})
 
-    result = json.loads((backend_data / "strategies.json").read_text())
+    result = json.loads(runtime_catalog_path("BTCUSDT", tmp_path).read_text())
     result_strategy = next(item for item in result if item["id"] == model.strat_id)
     open_records = [item for item in result_strategy["trades"] if item.get("status") == "OPEN"]
     assert len(open_records) == 1
     assert open_records[0]["trade_no"] == open_trade["trade_no"]
+    assert (backend_data / "strategies.json").read_bytes() == backend_before
+    assert (frontend_data / "strategiesData.json").read_bytes() == frontend_before
 
 
 def test_exit_price_only_marker_is_classified_as_close():

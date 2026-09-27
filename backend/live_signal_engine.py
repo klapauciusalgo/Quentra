@@ -21,6 +21,10 @@ from typing import Dict, List, Optional, Any
 import numpy as np
 import pandas as pd
 
+from catalog_storage import (
+    bootstrap_runtime_catalog,
+)
+
 logger = logging.getLogger("live_signal_engine")
 logger.setLevel(logging.INFO)
 
@@ -581,16 +585,39 @@ class LiveSignalEngine:
         except Exception as ex:
             logger.warning(f"Error calculating macro indicators for {sym}: {ex}")
 
+    def _persist_flat_strategy(self, model: StrategyModel, project_root: str):
+        """Remove live-only state from the runtime overlay for a flat strategy."""
+        runtime_path = bootstrap_runtime_catalog(getattr(model, "symbol", "BTCUSDT"), project_root)
+        with runtime_path.open("r") as handle:
+            strategies = json.load(handle)
+        strat = next((item for item in strategies if item.get("id") == model.strat_id), None)
+        if not strat:
+            return
+
+        strat["has_active_signal"] = False
+        strat["active_ticket"] = None
+        strat["markers"] = deduplicate_markers([
+            marker for marker in strat.get("markers", [])
+            if not (
+                marker.get("isActive") is True
+                or marker.get("isBreakeven") is True
+                or str(marker.get("status", "")).upper() == "OPEN"
+                or str(marker.get("text", "")).strip().upper().startswith("ACTIVE")
+            )
+        ])
+        _atomic_json_dump(str(runtime_path), strategies)
+
     def sync_active_positions(self, symbol: str = "BTCUSDT"):
         """
-        Restores active OPEN positions directly from authoritative strategy storage
-        (strategies.json / strategies_eth.json), ensuring RAM and Disk are 100% in sync.
+        Restores active OPEN positions from the effective runtime catalog,
+        ensuring RAM and the mutable runtime overlay stay in sync.
         """
         sym = symbol.upper()
         models = self.get_models(sym)
         backend_dir = os.path.dirname(os.path.abspath(__file__))
-        data_file = "strategies_eth.json" if sym == "ETHUSDT" else "strategies.json"
-        data_path = os.path.join(backend_dir, "data", data_file)
+        project_root = os.path.dirname(backend_dir)
+        runtime_path = bootstrap_runtime_catalog(sym, project_root)
+        data_path = runtime_path
 
         disk_catalog = {}
         if os.path.exists(data_path):
@@ -797,6 +824,10 @@ class LiveSignalEngine:
                 model.partial_exit_price = 0.0
                 model.active_ticket = None
                 model.active_markers = []
+                try:
+                    self._persist_flat_strategy(model, project_root)
+                except Exception as exc:
+                    logger.error(f"Error cleaning flat lifecycle for {model.strat_id}: {exc}")
 
     def _restore_weekly_macro_position(self, symbol: str = "BTCUSDT"):
         """Restore the current MA55 regime from completed weekly candles."""
@@ -1687,8 +1718,10 @@ class LiveSignalEngine:
 
     def _persist_closed_trade(self, model: StrategyModel, trade_record: dict):
         """
-        Persists closed trade into strategies.json and strategiesData.json automatically,
-        and triggers metric recalculation to maintain Single Source of Truth between RAM & Disk.
+        Persist a closed trade into the mutable runtime catalog overlay.
+
+        The source-controlled strategy catalogs and frontend fallback files are
+        never modified by live execution.
         """
         if model.strat_id.startswith("test-"):
             return
@@ -1697,14 +1730,8 @@ class LiveSignalEngine:
         project_root = os.path.dirname(backend_dir)
         sym = getattr(model, "symbol", "BTCUSDT").upper()
         is_eth = (sym == "ETHUSDT")
-        
-        backend_filename = "strategies_eth.json" if is_eth else "strategies.json"
-        frontend_filename = "strategiesData_eth.json" if is_eth else "strategiesData.json"
-        
-        backend_path = os.path.join(backend_dir, "data", backend_filename)
-        frontend_path = os.path.join(project_root, "frontend", "src", "data", frontend_filename)
-
-        paths_to_update = [p for p in [backend_path, frontend_path] if os.path.exists(p)]
+        runtime_path = bootstrap_runtime_catalog(sym, project_root)
+        paths_to_update = [str(runtime_path)]
         updated_any = False
 
         for path in paths_to_update:
@@ -1831,21 +1858,15 @@ class LiveSignalEngine:
             pass
 
     def _persist_opened_trade(self, model: StrategyModel, ticket: dict):
-        """Persists newly opened trade into disk files and updates in-memory catalog."""
+        """Persist an open trade into the mutable runtime catalog overlay."""
         if model.strat_id.startswith("test-"):
             return
 
         backend_dir = os.path.dirname(os.path.abspath(__file__))
-        sym = getattr(model, "symbol", "BTCUSDT").upper()
-        is_eth = (sym == "ETHUSDT")
-
-        backend_filename = "strategies_eth.json" if is_eth else "strategies.json"
-        frontend_filename = "strategiesData_eth.json" if is_eth else "strategiesData.json"
-
         project_root = os.path.dirname(backend_dir)
-        backend_path = os.path.join(backend_dir, "data", backend_filename)
-        frontend_path = os.path.join(project_root, "frontend", "src", "data", frontend_filename)
-        paths_to_update = [p for p in [backend_path, frontend_path] if os.path.exists(p)]
+        sym = getattr(model, "symbol", "BTCUSDT").upper()
+        runtime_path = bootstrap_runtime_catalog(sym, project_root)
+        paths_to_update = [str(runtime_path)]
         updated_any = False
 
         for path in paths_to_update:

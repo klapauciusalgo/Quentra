@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 
 from binance_ws import binance_manager
 from pixel_floor import floor_engine
+from catalog_storage import effective_catalog_path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("quentra_server")
@@ -124,7 +125,7 @@ def load_data_into_memory():
     logger.info(f"Synchronized live klines cache for timeframes: {list(KLINES_CACHE.keys())}")
 
     # 3. Load strategy catalog (load local strategies.json with full rich data & markers, enrich with Supabase)
-    strat_path = os.path.join(DATA_DIR, "strategies.json")
+    strat_path = str(effective_catalog_path("BTCUSDT"))
     local_catalog = []
     if os.path.exists(strat_path):
         with open(strat_path, "r") as f:
@@ -263,7 +264,7 @@ def load_data_into_memory():
         KLINES_CACHE_ETH[tf] = c_list
     logger.info(f"Synchronized live ETH klines cache for timeframes: {list(KLINES_CACHE_ETH.keys())}")
 
-    strat_eth_path = os.path.join(DATA_DIR, "strategies_eth.json")
+    strat_eth_path = str(effective_catalog_path("ETHUSDT"))
     if os.path.exists(strat_eth_path):
         with open(strat_eth_path, "r") as f:
             STRATEGIES_CATALOG_ETH = json.load(f)
@@ -281,6 +282,7 @@ def load_data_into_memory():
     try:
         from live_signal_engine import live_signal_engine
         live_signal_engine.initialize_with_parquets(PARQUET_DFS, symbol="BTCUSDT")
+        reload_local_catalog("BTCUSDT")
         if live_signal_engine.last_price > 0:
             binance_manager.ticker_data["price"] = live_signal_engine.last_price
             binance_manager.ticker_data["status"] = "READY"
@@ -288,6 +290,7 @@ def load_data_into_memory():
             binance_manager.ticker_data_map["BTCUSDT"]["status"] = "READY"
 
         live_signal_engine.initialize_with_parquets(PARQUET_DFS_ETH, symbol="ETHUSDT")
+        reload_local_catalog("ETHUSDT")
         if live_signal_engine.last_price_eth > 0:
             binance_manager.ticker_data_map["ETHUSDT"]["price"] = live_signal_engine.last_price_eth
             binance_manager.ticker_data_map["ETHUSDT"]["status"] = "READY"
@@ -300,7 +303,7 @@ def reload_local_catalog(symbol: str = "BTCUSDT"):
     global STRATEGIES_CATALOG, STRATEGIES_MAP, STRATEGIES_CATALOG_ETH, STRATEGIES_MAP_ETH
     sym = symbol.upper()
     if sym == "ETHUSDT":
-        strat_path = os.path.join(DATA_DIR, "strategies_eth.json")
+        strat_path = str(effective_catalog_path("ETHUSDT"))
         if os.path.exists(strat_path):
             with open(strat_path, "r") as f:
                 STRATEGIES_CATALOG_ETH = json.load(f)

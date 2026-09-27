@@ -16,6 +16,8 @@ import {
   ArrowRight
 } from 'lucide-react';
 import strategiesData from '../data/strategiesData.json';
+import strategiesDataEth from '../data/strategiesData_eth.json';
+import { stripLiveState } from '../utils/catalogUtils';
 
 /**
  * Empirical trade-by-trade compounding simulation under leverage with hard stop loss capping.
@@ -67,7 +69,7 @@ function getHardStopPct(strat) {
 
 export default function RiskCalculator({ 
   currentBtcPrice = 77300,
-  strategies = strategiesData,
+  strategies = [],
   selectedStrategyId = 'pippo-1h-enhanced',
   onSelectStrategy,
   selectedAsset = 'BTCUSDT'
@@ -80,7 +82,8 @@ export default function RiskCalculator({
   const [customLeverage, setCustomLeverage] = useState(2.5);
 
   // Active strategy resolved from props or catalog
-  const stratList = strategies && strategies.length > 0 ? strategies : strategiesData;
+  const fallbackCatalog = stripLiveState(isEth ? strategiesDataEth : strategiesData);
+  const stratList = strategies && strategies.length > 0 ? strategies : fallbackCatalog;
   const activeStrat = stratList.find((s) => s.id === selectedStrategyId) || stratList[0] || {};
   const isLong = activeStrat?.type !== 'SHORT';
   const trades = activeStrat?.trades || [];

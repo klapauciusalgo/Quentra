@@ -162,6 +162,7 @@ def process_strategies(
     *,
     clean_pure_macro=True,
     apply_btc_metadata=True,
+    strategies=None,
 ):
     """Recalculate one strategy catalog from its trade log.
 
@@ -171,8 +172,9 @@ def process_strategies(
     handling another symbol disable those catalog overrides while retaining
     the same metric calculation.
     """
-    with open(input_file, "r") as f:
-        strategies = json.load(f)
+    if strategies is None:
+        with open(input_file, "r") as f:
+            strategies = json.load(f)
 
     for strat in strategies:
         strat_id = strat["id"]

@@ -12,16 +12,50 @@ from live_signal_engine import LiveSignalEngine, StrategyModel, live_signal_engi
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture(scope="module")
-def client():
-    from catalog_storage import ensure_runtime_catalog
+def client(tmp_path_factory):
+    import live_signal_engine as engine_module
+    from catalog_storage import ensure_runtime_catalog, runtime_catalog_path
 
-    # Tests must model a persisted runtime snapshot explicitly; static catalogs
-    # are not allowed to create live positions on their own.
-    ensure_runtime_catalog("BTCUSDT")
-    ensure_runtime_catalog("ETHUSDT")
-    main.load_data_into_memory()
-    with TestClient(main.app) as c:
-        yield c
+    fixture_root = tmp_path_factory.mktemp("live-runtime")
+    fixture_data = fixture_root / "backend" / "data"
+    fixture_data.mkdir(parents=True)
+    for filename in ("strategies.json", "strategies_eth.json"):
+        source = REPO_ROOT / "backend" / "data" / filename
+        (fixture_data / filename).write_bytes(source.read_bytes())
+    ensure_runtime_catalog("BTCUSDT", fixture_root)
+    ensure_runtime_catalog("ETHUSDT", fixture_root)
+    runtime_paths = {
+        "BTCUSDT": runtime_catalog_path("BTCUSDT", fixture_root),
+        "ETHUSDT": runtime_catalog_path("ETHUSDT", fixture_root),
+    }
+
+    patcher = pytest.MonkeyPatch()
+    patcher.setattr(main, "effective_catalog_path", lambda symbol: runtime_paths[symbol.upper()])
+    patcher.setattr(main, "reload_local_catalog", lambda *_args: None)
+    patcher.setattr(engine_module, "__file__", str(fixture_root / "backend" / "live_signal_engine.py"))
+    try:
+        main.load_data_into_memory()
+        with TestClient(main.app) as c:
+            yield c
+    finally:
+        patcher.undo()
+
+def test_reload_local_catalog_uses_effective_runtime_path(tmp_path, monkeypatch):
+    runtime = tmp_path / "strategies.json"
+    runtime_catalog = [{"id": "runtime-only", "name": "Runtime Strategy"}]
+    runtime.write_text(json.dumps(runtime_catalog))
+    previous_catalog = main.STRATEGIES_CATALOG
+    previous_map = main.STRATEGIES_MAP
+    monkeypatch.setattr(main, "effective_catalog_path", lambda symbol: runtime)
+
+    try:
+        main.reload_local_catalog("BTCUSDT")
+        assert main.STRATEGIES_CATALOG == runtime_catalog
+        assert main.STRATEGIES_MAP == {"runtime-only": runtime_catalog[0]}
+    finally:
+        main.STRATEGIES_CATALOG = previous_catalog
+        main.STRATEGIES_MAP = previous_map
+
 
 def test_system_status(client):
     res = client.get("/api/status")

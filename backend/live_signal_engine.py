@@ -12,9 +12,6 @@ Executes quantitative algorithmic strategy rules on-the-fly for BTCUSDT and ETHU
 import os
 import json
 import time
-import hashlib
-import tempfile
-import fcntl
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
@@ -23,35 +20,12 @@ import pandas as pd
 
 from catalog_storage import (
     bootstrap_runtime_catalog,
+    locked_json_catalog,
 )
 
 logger = logging.getLogger("live_signal_engine")
 logger.setLevel(logging.INFO)
 
-
-def _atomic_json_dump(path: str, payload: Any):
-    """Serialize a catalog atomically and coordinate writers across processes."""
-    lock_name = f"quentra-catalog-{hashlib.sha256(os.path.abspath(path).encode()).hexdigest()}.lock"
-    lock_path = os.path.join(tempfile.gettempdir(), lock_name)
-    directory = os.path.dirname(path) or "."
-    original_mode = os.stat(path).st_mode if os.path.exists(path) else None
-    temp_path = None
-    with open(lock_path, "a+") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        try:
-            fd, temp_path = tempfile.mkstemp(prefix=".quentra-", suffix=".json", dir=directory)
-            if original_mode is not None:
-                os.fchmod(fd, original_mode)
-            with os.fdopen(fd, "w") as temp_file:
-                json.dump(payload, temp_file, indent=2)
-                temp_file.flush()
-                os.fsync(temp_file.fileno())
-            os.replace(temp_path, path)
-            temp_path = None
-        finally:
-            if temp_path and os.path.exists(temp_path):
-                os.unlink(temp_path)
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def _marker_event_type(marker: dict) -> str:
@@ -588,24 +562,22 @@ class LiveSignalEngine:
     def _persist_flat_strategy(self, model: StrategyModel, project_root: str):
         """Remove live-only state from the runtime overlay for a flat strategy."""
         runtime_path = bootstrap_runtime_catalog(getattr(model, "symbol", "BTCUSDT"), project_root)
-        with runtime_path.open("r") as handle:
-            strategies = json.load(handle)
-        strat = next((item for item in strategies if item.get("id") == model.strat_id), None)
-        if not strat:
-            return
+        with locked_json_catalog(runtime_path) as strategies:
+            strat = next((item for item in strategies if item.get("id") == model.strat_id), None)
+            if not strat:
+                return
 
-        strat["has_active_signal"] = False
-        strat["active_ticket"] = None
-        strat["markers"] = deduplicate_markers([
-            marker for marker in strat.get("markers", [])
-            if not (
-                marker.get("isActive") is True
-                or marker.get("isBreakeven") is True
-                or str(marker.get("status", "")).upper() == "OPEN"
-                or str(marker.get("text", "")).strip().upper().startswith("ACTIVE")
-            )
-        ])
-        _atomic_json_dump(str(runtime_path), strategies)
+            strat["has_active_signal"] = False
+            strat["active_ticket"] = None
+            strat["markers"] = deduplicate_markers([
+                marker for marker in strat.get("markers", [])
+                if not (
+                    marker.get("isActive") is True
+                    or marker.get("isBreakeven") is True
+                    or str(marker.get("status", "")).upper() == "OPEN"
+                    or str(marker.get("text", "")).strip().upper().startswith("ACTIVE")
+                )
+            ])
 
     def sync_active_positions(self, symbol: str = "BTCUSDT"):
         """
@@ -1736,93 +1708,89 @@ class LiveSignalEngine:
 
         for path in paths_to_update:
             try:
-                with open(path, "r") as f:
-                    strategies = json.load(f)
+                with locked_json_catalog(path) as strategies:
+                    strat = next((s for s in strategies if s.get("id") == model.strat_id), None)
+                    if not strat:
+                        continue
 
-                strat = next((s for s in strategies if s.get("id") == model.strat_id), None)
-                if not strat:
-                    continue
+                    strat["has_active_signal"] = False
+                    strat["active_ticket"] = None
 
-                strat["has_active_signal"] = False
-                strat["active_ticket"] = None
+                    trades = strat.get("trades", [])
+                    matching_trade = None
+                    for t in reversed(trades):
+                        if is_open_trade_record(t):
+                            matching_trade = t
+                            break
 
-                trades = strat.get("trades", [])
-                matching_trade = None
-                for t in reversed(trades):
-                    if is_open_trade_record(t):
-                        matching_trade = t
-                        break
+                    if not matching_trade and trades:
+                        last_t = trades[-1]
+                        if last_t.get("status") != "CLOSED":
+                            matching_trade = last_t
 
-                if not matching_trade and trades:
-                    last_t = trades[-1]
-                    if last_t.get("status") != "CLOSED":
-                        matching_trade = last_t
+                    exit_time_str = trade_record.get("exit_time") or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                    if " UTC" in exit_time_str:
+                        exit_time_str = exit_time_str.replace(" UTC", ":00")
 
-                exit_time_str = trade_record.get("exit_time") or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                if " UTC" in exit_time_str:
-                    exit_time_str = exit_time_str.replace(" UTC", ":00")
+                    trade_no = matching_trade.get("trade_no", len(trades)) if matching_trade else (len(trades) + 1)
 
-                trade_no = matching_trade.get("trade_no", len(trades)) if matching_trade else (len(trades) + 1)
+                    if matching_trade:
+                        matching_trade["status"] = "CLOSED"
+                        matching_trade["is_active"] = False
+                        matching_trade["exit_price"] = trade_record["exit_price"]
+                        matching_trade["exit_time"] = exit_time_str
+                        matching_trade["net_return_pct"] = trade_record["net_return_pct"]
+                        matching_trade["gross_return_pct"] = trade_record.get("gross_return_pct", round(trade_record["net_return_pct"] + 0.18, 2))
+                        matching_trade["exit_reason"] = trade_record.get("reason", "Force Close MA (-0.5%)")
+                        matching_trade["partial_taken"] = trade_record.get("partial_taken", False)
+                        matching_trade["partial_exit_price"] = trade_record.get("partial_exit_price")
+                        matching_trade["partial_position_pct"] = trade_record.get("partial_position_pct", 0.0)
+                    else:
+                        new_trade = {
+                            "trade_no": trade_no,
+                            "side": model.direction,
+                            "type": model.direction,
+                            "entry_time": trade_record.get("entry_time") or exit_time_str,
+                            "exit_time": exit_time_str,
+                            "entry_price": trade_record.get("entry_price") or trade_record["exit_price"],
+                            "exit_price": trade_record["exit_price"],
+                            "gross_return_pct": trade_record.get("gross_return_pct", round(trade_record["net_return_pct"] + 0.18, 2)),
+                            "net_return_pct": trade_record["net_return_pct"],
+                            "exit_reason": trade_record.get("reason", "Force Close MA (-0.5%)"),
+                            "be_activated": getattr(model, "be_active", False),
+                            "status": "CLOSED",
+                            "partial_taken": trade_record.get("partial_taken", False),
+                            "partial_exit_price": trade_record.get("partial_exit_price"),
+                            "partial_position_pct": trade_record.get("partial_position_pct", 0.0),
+                        }
+                        trades.append(new_trade)
 
-                if matching_trade:
-                    matching_trade["status"] = "CLOSED"
-                    matching_trade["is_active"] = False
-                    matching_trade["exit_price"] = trade_record["exit_price"]
-                    matching_trade["exit_time"] = exit_time_str
-                    matching_trade["net_return_pct"] = trade_record["net_return_pct"]
-                    matching_trade["gross_return_pct"] = trade_record.get("gross_return_pct", round(trade_record["net_return_pct"] + 0.18, 2))
-                    matching_trade["exit_reason"] = trade_record.get("reason", "Force Close MA (-0.5%)")
-                    matching_trade["partial_taken"] = trade_record.get("partial_taken", False)
-                    matching_trade["partial_exit_price"] = trade_record.get("partial_exit_price")
-                    matching_trade["partial_position_pct"] = trade_record.get("partial_position_pct", 0.0)
-                else:
-                    new_trade = {
-                        "trade_no": trade_no,
-                        "side": model.direction,
-                        "type": model.direction,
-                        "entry_time": trade_record.get("entry_time") or exit_time_str,
-                        "exit_time": exit_time_str,
-                        "entry_price": trade_record.get("entry_price") or trade_record["exit_price"],
-                        "exit_price": trade_record["exit_price"],
-                        "gross_return_pct": trade_record.get("gross_return_pct", round(trade_record["net_return_pct"] + 0.18, 2)),
-                        "net_return_pct": trade_record["net_return_pct"],
-                        "exit_reason": trade_record.get("reason", "Force Close MA (-0.5%)"),
-                        "be_activated": getattr(model, "be_active", False),
-                        "status": "CLOSED",
-                        "partial_taken": trade_record.get("partial_taken", False),
-                        "partial_exit_price": trade_record.get("partial_exit_price"),
-                        "partial_position_pct": trade_record.get("partial_position_pct", 0.0),
+                    # Markers handling: deactivate active entry marker and append exit marker
+                    markers = strat.get("markers", [])
+                    for m in markers:
+                        if m.get("tradeNo") == trade_no or m.get("isActive") is True:
+                            m["isActive"] = False
+                            if m.get("status") == "OPEN":
+                                m["status"] = "CLOSED"
+
+                    exit_marker = {
+                        "time": exit_time_str,
+                        "position": "aboveBar" if model.direction == "LONG" else "belowBar",
+                        "color": "#EF4444" if model.direction == "LONG" else "#10B981",
+                        "shape": "arrowDown" if model.direction == "LONG" else "arrowUp",
+                        "text": f"EXIT {trade_record.get('reason', 'Exit')} #{trade_no}",
+                        "exitPrice": trade_record["exit_price"],
+                        "pnlPct": trade_record["net_return_pct"],
+                        "reason": trade_record.get("reason", "Exit"),
+                        "eventType": "exit",
+                        "tradeNo": trade_no,
+                        "isActive": False
                     }
-                    trades.append(new_trade)
+                    markers.append(exit_marker)
+                    strat["markers"] = deduplicate_markers(markers)
 
-                # Markers handling: deactivate active entry marker and append exit marker
-                markers = strat.get("markers", [])
-                for m in markers:
-                    if m.get("tradeNo") == trade_no or m.get("isActive") is True:
-                        m["isActive"] = False
-                        if m.get("status") == "OPEN":
-                            m["status"] = "CLOSED"
-
-                exit_marker = {
-                    "time": exit_time_str,
-                    "position": "aboveBar" if model.direction == "LONG" else "belowBar",
-                    "color": "#EF4444" if model.direction == "LONG" else "#10B981",
-                    "shape": "arrowDown" if model.direction == "LONG" else "arrowUp",
-                    "text": f"EXIT {trade_record.get('reason', 'Exit')} #{trade_no}",
-                    "exitPrice": trade_record["exit_price"],
-                    "pnlPct": trade_record["net_return_pct"],
-                    "reason": trade_record.get("reason", "Exit"),
-                    "eventType": "exit",
-                    "tradeNo": trade_no,
-                    "isActive": False
-                }
-                markers.append(exit_marker)
-                strat["markers"] = deduplicate_markers(markers)
-
-                _atomic_json_dump(path, strategies)
-
-                updated_any = True
-                logger.info(f"💾 [AUTO-PERSIST] Updated disk strategy file: {path} for {model.strat_id}")
+                    updated_any = True
+                    logger.info(f"💾 [AUTO-PERSIST] Updated disk strategy file: {path} for {model.strat_id}")
 
             except Exception as e:
                 logger.error(f"Error persisting trade to {path}: {e}", exc_info=True)
@@ -1840,8 +1808,9 @@ class LiveSignalEngine:
                 "apply_btc_metadata": False,
             }
             for path in paths_to_update:
-                updated = process_strategies(path, **recalc_kwargs)
-                _atomic_json_dump(path, updated)
+                with locked_json_catalog(path) as strategies:
+                    updated = process_strategies(path, strategies=strategies, **recalc_kwargs)
+                    strategies[:] = updated
             logger.info(
                 f"📊 [AUTO-RECALCULATE] Harmonized {sym} metrics across disk files for {model.strat_id}"
             )
@@ -1871,105 +1840,101 @@ class LiveSignalEngine:
 
         for path in paths_to_update:
             try:
-                with open(path, "r") as f:
-                    strategies = json.load(f)
+                with locked_json_catalog(path) as strategies:
+                    strat = next((s for s in strategies if s.get("id") == model.strat_id), None)
+                    if not strat:
+                        continue
 
-                strat = next((s for s in strategies if s.get("id") == model.strat_id), None)
-                if not strat:
-                    continue
+                    trades = strat.get("trades", [])
 
-                trades = strat.get("trades", [])
+                    # Check if a trade with this exact entry_time already exists
+                    existing_entry = next((t for t in trades if t.get("entry_time") == model.entry_time), None)
+                    open_trades = [trade for trade in trades if is_open_trade_record(trade)]
+                    if existing_entry and not is_open_trade_record(existing_entry) and not open_trades:
+                        # This trade was already closed in history; do not re-open or duplicate.
+                        continue
 
-                # Check if a trade with this exact entry_time already exists
-                existing_entry = next((t for t in trades if t.get("entry_time") == model.entry_time), None)
-                open_trades = [trade for trade in trades if is_open_trade_record(trade)]
-                if existing_entry and not is_open_trade_record(existing_entry) and not open_trades:
-                    # This trade was already closed in history; do not re-open or duplicate.
-                    continue
+                    strat["has_active_signal"] = True
+                    strat["active_ticket"] = ticket
 
-                strat["has_active_signal"] = True
-                strat["active_ticket"] = ticket
+                    active_trade = existing_entry if is_open_trade_record(existing_entry or {}) else None
+                    if active_trade is None and open_trades:
+                        active_trade = open_trades[-1]
+                    if active_trade is None:
+                        trade_no = len(trades) + 1
+                        open_trade = {
+                            "trade_no": trade_no,
+                            "side": model.direction,
+                            "type": model.direction,
+                            "entry_time": model.entry_time,
+                            "exit_time": "RUNNING",
+                            "entry_price": model.entry_price,
+                            "exit_price": model.entry_price,
+                            "gross_return_pct": 0.0,
+                            "net_return_pct": -0.18,
+                            "exit_reason": f"Active Signal ({'BE Locked' if model.be_active else 'Trailing'})",
+                            "be_activated": model.be_active,
+                            "status": "OPEN",
+                            "stop_loss": model.current_sl,
+                            "take_profit": model.target_tp,
+                            "is_active": True,
+                            "partial_taken": model.partial_taken,
+                            "partial_exit_price": model.partial_exit_price if model.partial_taken else None,
+                            "partial_position_pct": round(float(model.config.get("partial_weight", 0.0) or 0.0) * 100.0, 2)
+                        }
+                        trades.append(open_trade)
+                        active_trade = open_trade
 
-                active_trade = existing_entry if is_open_trade_record(existing_entry or {}) else None
-                if active_trade is None and open_trades:
-                    active_trade = open_trades[-1]
-                if active_trade is None:
-                    trade_no = len(trades) + 1
-                    open_trade = {
-                        "trade_no": trade_no,
-                        "side": model.direction,
-                        "type": model.direction,
-                        "entry_time": model.entry_time,
-                        "exit_time": "RUNNING",
-                        "entry_price": model.entry_price,
-                        "exit_price": model.entry_price,
-                        "gross_return_pct": 0.0,
-                        "net_return_pct": -0.18,
-                        "exit_reason": f"Active Signal ({'BE Locked' if model.be_active else 'Trailing'})",
-                        "be_activated": model.be_active,
-                        "status": "OPEN",
-                        "stop_loss": model.current_sl,
-                        "take_profit": model.target_tp,
-                        "is_active": True,
-                        "partial_taken": model.partial_taken,
-                        "partial_exit_price": model.partial_exit_price if model.partial_taken else None,
-                        "partial_position_pct": round(float(model.config.get("partial_weight", 0.0) or 0.0) * 100.0, 2)
-                    }
-                    trades.append(open_trade)
-                    active_trade = open_trade
+                    # A strategy has one authoritative active position. Remove
+                    # legacy duplicate OPEN/RUNNING ledger records before writing.
+                    trades[:] = [
+                        trade for trade in trades
+                        if not is_open_trade_record(trade) or trade is active_trade
+                    ]
+                    active_trade["status"] = "OPEN"
+                    active_trade["exit_time"] = "RUNNING"
+                    active_trade["is_active"] = True
+                    active_trade["stop_loss"] = model.current_sl
+                    active_trade["take_profit"] = model.target_tp
+                    active_trade["be_activated"] = model.be_active
+                    active_trade["exit_reason"] = f"Active Signal ({'BE Locked' if model.be_active else 'Trailing'})"
+                    active_trade["partial_taken"] = model.partial_taken
+                    active_trade["partial_exit_price"] = model.partial_exit_price if model.partial_taken else None
+                    active_trade["partial_position_pct"] = round(float(model.config.get("partial_weight", 0.0) or 0.0) * 100.0, 2)
 
-                # A strategy has one authoritative active position. Remove
-                # legacy duplicate OPEN/RUNNING ledger records before writing.
-                trades[:] = [
-                    trade for trade in trades
-                    if not is_open_trade_record(trade) or trade is active_trade
-                ]
-                active_trade["status"] = "OPEN"
-                active_trade["exit_time"] = "RUNNING"
-                active_trade["is_active"] = True
-                active_trade["stop_loss"] = model.current_sl
-                active_trade["take_profit"] = model.target_tp
-                active_trade["be_activated"] = model.be_active
-                active_trade["exit_reason"] = f"Active Signal ({'BE Locked' if model.be_active else 'Trailing'})"
-                active_trade["partial_taken"] = model.partial_taken
-                active_trade["partial_exit_price"] = model.partial_exit_price if model.partial_taken else None
-                active_trade["partial_position_pct"] = round(float(model.config.get("partial_weight", 0.0) or 0.0) * 100.0, 2)
+                    # Add one canonical live entry and, when protected, one
+                    # canonical breakeven marker. Never append runtime markers
+                    # blindly: restart/tick persistence used to create duplicates.
+                    if active_trade:
+                        active_trade_no = active_trade.get("trade_no") if active_trade else None
+                        model.active_markers = _canonical_active_markers(model, active_trade_no)
+                        canonical_markers = model.active_markers
+                        markers = []
+                        for marker in strat.get("markers", []):
+                            marker_no = marker.get("tradeNo")
+                            same_trade = (
+                                active_trade_no is not None
+                                and marker_no is not None
+                                and str(marker_no) == str(active_trade_no)
+                            )
+                            is_live_marker = (
+                                marker.get("isActive") is True
+                                or str(marker.get("status", "")).upper() == "OPEN"
+                                or str(marker.get("text", "")).strip().upper().startswith("ACTIVE")
+                            )
+                            is_breakeven = marker.get("isBreakeven") is True
+                            if same_trade or is_live_marker or (is_breakeven and marker_no is None):
+                                continue
+                            markers.append(marker)
+                        for am in canonical_markers:
+                            normalized = dict(am)
+                            if active_trade:
+                                normalized["tradeNo"] = active_trade.get("trade_no")
+                            markers.append(normalized)
+                        strat["markers"] = deduplicate_markers(markers)
 
-                # Add one canonical live entry and, when protected, one
-                # canonical breakeven marker. Never append runtime markers
-                # blindly: restart/tick persistence used to create duplicates.
-                if active_trade:
-                    active_trade_no = active_trade.get("trade_no") if active_trade else None
-                    model.active_markers = _canonical_active_markers(model, active_trade_no)
-                    canonical_markers = model.active_markers
-                    markers = []
-                    for marker in strat.get("markers", []):
-                        marker_no = marker.get("tradeNo")
-                        same_trade = (
-                            active_trade_no is not None
-                            and marker_no is not None
-                            and str(marker_no) == str(active_trade_no)
-                        )
-                        is_live_marker = (
-                            marker.get("isActive") is True
-                            or str(marker.get("status", "")).upper() == "OPEN"
-                            or str(marker.get("text", "")).strip().upper().startswith("ACTIVE")
-                        )
-                        is_breakeven = marker.get("isBreakeven") is True
-                        if same_trade or is_live_marker or (is_breakeven and marker_no is None):
-                            continue
-                        markers.append(marker)
-                    for am in canonical_markers:
-                        normalized = dict(am)
-                        if active_trade:
-                            normalized["tradeNo"] = active_trade.get("trade_no")
-                        markers.append(normalized)
-                    strat["markers"] = deduplicate_markers(markers)
-
-                _atomic_json_dump(path, strategies)
-
-                updated_any = True
-                logger.info(f"💾 [AUTO-PERSIST] Persisted OPEN trade to {path} for {model.strat_id}")
+                    updated_any = True
+                    logger.info(f"💾 [AUTO-PERSIST] Persisted OPEN trade to {path} for {model.strat_id}")
             except Exception as e:
                 logger.error(f"Error persisting open trade to {path}: {e}", exc_info=True)
 

@@ -1,10 +1,12 @@
 import json
+import multiprocessing as mp
 from pathlib import Path
 
 from catalog_storage import (
     bootstrap_runtime_catalog,
     effective_catalog_path,
     ensure_runtime_catalog,
+    locked_json_catalog,
     runtime_catalog_path,
 )
 
@@ -15,6 +17,13 @@ def _make_repo(tmp_path: Path) -> Path:
     (data_dir / "strategies_eth.json").write_text(json.dumps([{"id": "eth-demo", "has_active_signal": False}]))
     (data_dir / "strategies.json").write_text(json.dumps([{"id": "btc-demo", "has_active_signal": False}]))
     return tmp_path
+
+
+def _append_runtime_event(args):
+    path, worker_id, iterations = args
+    for iteration in range(iterations):
+        with locked_json_catalog(path) as catalog:
+            catalog[0].setdefault("events", []).append(f"{worker_id}:{iteration}")
 
 
 def test_runtime_catalog_is_created_from_source_without_touching_source(tmp_path):
@@ -79,6 +88,22 @@ def test_bootstrap_keeps_existing_runtime_state(tmp_path):
     result = json.loads(bootstrap_runtime_catalog("ETHUSDT", repo_root).read_text())
 
     assert result == persisted
+
+
+def test_locked_runtime_updates_do_not_lose_events(tmp_path):
+    repo_root = _make_repo(tmp_path)
+    runtime = ensure_runtime_catalog("BTCUSDT", repo_root)
+    payload = json.loads(runtime.read_text())
+    payload[0]["events"] = []
+    runtime.write_text(json.dumps(payload))
+
+    iterations = 20
+    with mp.get_context("fork").Pool(4) as pool:
+        pool.map(_append_runtime_event, [(str(runtime), worker_id, iterations) for worker_id in range(4)])
+
+    events = json.loads(runtime.read_text())[0]["events"]
+    assert len(events) == 4 * iterations
+    assert len(set(events)) == 4 * iterations
 
 
 def test_runtime_catalogs_are_asset_specific(tmp_path):

@@ -7,7 +7,9 @@ import json
 import os
 import shutil
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any, Iterator
 
 
 _CATALOG_FILES = {
@@ -54,22 +56,48 @@ def _is_live_marker(marker: dict) -> bool:
     )
 
 
-def _atomic_json_write(path: Path, payload: object) -> None:
-    lock_path = path.with_name(f".{path.name}.lock")
+def _runtime_lock_path(path: Path) -> Path:
+    return path.with_name(f".{path.name}.lock")
+
+
+def _write_json_unlocked(path: Path, payload: object) -> None:
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w") as temp_file:
+            json.dump(payload, temp_file, indent=2)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+def atomic_json_write(path: Path, payload: object) -> None:
+    lock_path = _runtime_lock_path(path)
     with lock_path.open("a+") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-        temp_path = Path(temp_name)
         try:
-            with os.fdopen(fd, "w") as temp_file:
-                json.dump(payload, temp_file, indent=2)
-                temp_file.flush()
-                os.fsync(temp_file.fileno())
-            os.replace(temp_path, path)
+            _write_json_unlocked(path, payload)
         finally:
-            if temp_path.exists():
-                temp_path.unlink()
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def locked_json_catalog(path: str | os.PathLike[str]) -> Iterator[list[dict[str, Any]]]:
+    """Hold the runtime lock across a read-modify-write catalog transaction."""
+    catalog_path = Path(path)
+    lock_path = _runtime_lock_path(catalog_path)
+    with lock_path.open("a+") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            with catalog_path.open("r") as handle:
+                catalog = json.load(handle)
+            yield catalog
+            _write_json_unlocked(catalog_path, catalog)
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def bootstrap_runtime_catalog(symbol: str, repo_root: str | os.PathLike[str] | None = None) -> Path:
@@ -100,7 +128,7 @@ def bootstrap_runtime_catalog(symbol: str, repo_root: str | os.PathLike[str] | N
             strategy["active_ticket"] = None
 
     if changed:
-        _atomic_json_write(runtime, catalog)
+        atomic_json_write(runtime, catalog)
     return runtime
 
 

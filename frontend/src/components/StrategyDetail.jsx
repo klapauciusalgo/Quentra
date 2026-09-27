@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { formatPrice, formatPercent, formatDateTime, playRetroSound } from '../utils/formatters';
 import strategiesData from '../data/strategiesData.json';
 import strategiesDataEth from '../data/strategiesData_eth.json';
+import { stripLiveState } from '../utils/catalogUtils';
 import { 
   X, 
   TrendingUp, 
@@ -53,7 +54,7 @@ export default function StrategyDetail({
     setLoading(true);
 
     // Immediate baseline fallback
-    const catalog = selectedAsset === 'ETHUSDT' ? strategiesDataEth : strategiesData;
+    const catalog = stripLiveState(selectedAsset === 'ETHUSDT' ? strategiesDataEth : strategiesData);
     const localStrat = catalog.find((s) => s.id === strategyId);
     if (localStrat) {
       setStrategy(localStrat);

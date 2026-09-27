@@ -309,7 +309,7 @@ def reload_local_catalog(symbol: str = "BTCUSDT"):
                 STRATEGIES_CATALOG_ETH = json.load(f)
                 STRATEGIES_MAP_ETH = {s["id"]: s for s in STRATEGIES_CATALOG_ETH}
     else:
-        strat_path = os.path.join(DATA_DIR, "strategies.json")
+        strat_path = str(effective_catalog_path("BTCUSDT"))
         if os.path.exists(strat_path):
             with open(strat_path, "r") as f:
                 STRATEGIES_CATALOG = json.load(f)

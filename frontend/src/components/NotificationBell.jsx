@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { formatPrice, formatPercent, playRetroSound } from '../utils/formatters';
+import { sortNotificationsNewestFirst } from '../utils/notificationUtils';
 import { 
   Bell, 
   CheckCircle2, 
@@ -56,6 +57,10 @@ export default function NotificationBell({
 
   const activeCount = activeSignals.length;
   const hasActiveSignals = activeCount > 0;
+  const sortedNotifications = useMemo(
+    () => sortNotificationsNewestFirst(notifications),
+    [notifications]
+  );
 
   return (
     <div className="relative" ref={menuRef}>
@@ -139,10 +144,10 @@ export default function NotificationBell({
             </div>
           </div>
 
-          <div className="max-h-[70vh] overflow-y-auto space-y-3 pr-0.5">
+          <div className="max-h-[70vh] overflow-y-auto flex flex-col space-y-3 pr-0.5">
             
             {/* 1. ACTIVE LIVE SIGNALS SECTION (In-Position BUY / SELL) */}
-            <div>
+            <div className="order-2">
               <div className="text-[10px] font-semibold text-apple-dim uppercase tracking-wider mb-2 flex items-center justify-between">
                 <span>Active Executions (Buy / Sell)</span>
                 {hasActiveSignals && (
@@ -307,7 +312,7 @@ export default function NotificationBell({
 
             {/* 2. RECENT NOTIFICATION EVENTS LOG */}
             {notifications.length > 0 && (
-              <div className="pt-2 border-t border-black/[0.06] dark:border-white/[0.06]">
+              <div className="order-1 pt-2 border-t border-black/[0.06] dark:border-white/[0.06]">
                 <div className="text-[10px] font-semibold text-apple-dim uppercase tracking-wider mb-2 flex items-center justify-between">
                   <span>Recent Signal Events</span>
                   <span className="font-mono text-apple-muted text-[10px]">
@@ -316,7 +321,7 @@ export default function NotificationBell({
                 </div>
 
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {notifications.slice(0, 8).map((notif) => (
+                  {sortedNotifications.slice(0, 8).map((notif) => (
                     <div
                       key={notif.id}
                       className="p-2 rounded-lg bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between gap-2"

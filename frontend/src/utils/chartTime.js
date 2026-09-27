@@ -10,7 +10,7 @@ const UTC_PLUS_7_FORMATTER = new Intl.DateTimeFormat('en-US', {
   hourCycle: 'h23',
 });
 
-function toDate(time) {
+export function toUtcDate(time) {
   if (typeof time === 'number' && Number.isFinite(time)) {
     return new Date((time > 1e12 ? time : time * 1000));
   }
@@ -31,7 +31,7 @@ function toDate(time) {
 }
 
 function getParts(time) {
-  const date = toDate(time);
+  const date = toUtcDate(time);
   if (!date) return null;
 
   return Object.fromEntries(

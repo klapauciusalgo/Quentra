@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeNotification } from './notificationUtils.js';
+import { normalizeNotification, sortNotificationsNewestFirst } from './notificationUtils.js';
 
 test('uses the signal event time instead of the platform-open time', () => {
   const notification = normalizeNotification({
@@ -22,6 +22,16 @@ test('uses an explicit backend event timestamp for protection events', () => {
   }, 1790352000000);
 
   assert.equal(notification.timestamp, '26 Sep 2026, 01:30:00');
+});
+
+test('sorts recent signal events by actual event time, newest first', () => {
+  const sorted = sortNotificationsNewestFirst([
+    { id: 'older', event_time: '2026-09-25 13:30:00' },
+    { id: 'newer', event_time: '2026-09-26T01:00:00Z' },
+    { id: 'middle', event_time: 1790352000000 },
+  ]);
+
+  assert.deepEqual(sorted.map((item) => item.id), ['newer', 'middle', 'older']);
 });
 
 test('falls back to notification arrival time only when no event time exists', () => {

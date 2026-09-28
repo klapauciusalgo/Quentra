@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeNotification, sortNotificationsNewestFirst } from './notificationUtils.js';
+import {
+  normalizeNotification,
+  sortNotificationsNewestFirst,
+  getClosedTradeEventKey,
+  reconcileClosedTrades,
+} from './notificationUtils.js';
 
 test('uses the signal event time instead of the platform-open time', () => {
   const notification = normalizeNotification({
@@ -42,4 +47,42 @@ test('falls back to notification arrival time only when no event time exists', (
 
   assert.equal(notification.event_time, 1790352000000);
   assert.equal(notification.timestamp, '25 Sep 2026, 23:00:00');
+});
+
+test('builds a stable identity for a closed trade reconciliation event', () => {
+  const key = getClosedTradeEventKey('BTCUSDT', 'pippo-30m-grd', {
+    trade_no: 727,
+    exit_time: '2026-09-28 00:30:00',
+    exit_price: 84140,
+  });
+
+  assert.equal(key, 'SIGNAL_EXIT:BTCUSDT:pippo-30m-grd:727:2026-09-28 00:30:00:84140');
+});
+
+test('reconciles a newly closed trade even when no active position remains', () => {
+  const seen = new Map();
+  const seenTradeNumbers = new Map();
+  const initial = [{
+    strategy_id: 'pippo-30m-grd',
+    name: 'Pippo 30m Grd',
+    last_closed_trade: { trade_no: 726, exit_time: '2026-09-27 00:00:00', exit_price: 85000 },
+  }];
+  const closed = [{
+    strategy_id: 'pippo-30m-grd',
+    name: 'Pippo 30m Grd',
+    last_closed_trade: { trade_no: 727, exit_time: '2026-09-28 00:30:00', exit_price: 84140 },
+  }];
+
+  assert.deepEqual(reconcileClosedTrades('BTCUSDT', initial, seen, seenTradeNumbers), []);
+  const events = reconcileClosedTrades('BTCUSDT', closed, seen, seenTradeNumbers);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].strategy_id, 'pippo-30m-grd');
+  assert.equal(events[0].event_key, 'SIGNAL_EXIT:BTCUSDT:pippo-30m-grd:727:2026-09-28 00:30:00:84140');
+  const sameTradeWithEnrichedTimestamp = [{
+    ...closed[0],
+    last_closed_trade: { trade_no: 727, exit_time: '2026-09-28 00:30:01', exit_price: 84141 },
+  }];
+  assert.deepEqual(reconcileClosedTrades('BTCUSDT', sameTradeWithEnrichedTimestamp, seen, seenTradeNumbers), []);
+  assert.deepEqual(reconcileClosedTrades('BTCUSDT', closed, seen, seenTradeNumbers), []);
 });

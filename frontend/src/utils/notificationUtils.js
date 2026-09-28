@@ -20,6 +20,46 @@ export function sortNotificationsNewestFirst(notifications) {
     .map(({ notification }) => notification);
 }
 
+export function getClosedTradeEventKey(asset, strategyId, trade) {
+  return [
+    'SIGNAL_EXIT',
+    asset || 'BTCUSDT',
+    strategyId || trade?.strategy_id || '',
+    trade?.trade_no ?? '',
+    trade?.exit_time ?? '',
+    trade?.exit_price ?? '',
+  ].join(':');
+}
+
+export function reconcileClosedTrades(asset, strategies, seenKeys, seenTradeNumbers) {
+  const events = [];
+  for (const strategy of Array.isArray(strategies) ? strategies : []) {
+    const strategyId = strategy?.strategy_id;
+    const closed = strategy?.last_closed_trade;
+    if (!strategyId || !closed) continue;
+
+    const stateKey = `${asset || 'BTCUSDT'}:${strategyId}`;
+    const eventKey = getClosedTradeEventKey(asset, strategyId, closed);
+    const previousKey = seenKeys.get(stateKey);
+    const tradeNo = closed.trade_no !== undefined && closed.trade_no !== null
+      ? String(closed.trade_no)
+      : '';
+    const previousTradeNo = seenTradeNumbers?.get(stateKey);
+    const sameTrade = tradeNo && previousTradeNo === tradeNo;
+    if ((previousKey || previousTradeNo) && previousKey !== eventKey && !sameTrade) {
+      events.push({
+        strategy_id: strategyId,
+        strategy_name: strategy.name || '',
+        trade: closed,
+        event_key: eventKey,
+      });
+    }
+    seenKeys.set(stateKey, eventKey);
+    if (seenTradeNumbers && tradeNo) seenTradeNumbers.set(stateKey, tradeNo);
+  }
+  return events;
+}
+
 export function normalizeNotification(notification, fallbackTime = Date.now()) {
   const eventTime = getNotificationEventTime(notification, fallbackTime);
   const formattedTime = formatUtcPlus7EventTime(eventTime);

@@ -9,7 +9,11 @@ import RiskCalculator from './components/RiskCalculator';
 import { playRetroSound } from './utils/formatters';
 import { Bell, BarChart3, Compass, ShieldCheck, Grid } from 'lucide-react';
 import { API_BASE, getWsUrl } from './config';
-import { normalizeNotification } from './utils/notificationUtils';
+import {
+  normalizeNotification,
+  getClosedTradeEventKey,
+  reconcileClosedTrades,
+} from './utils/notificationUtils';
 import { stripLiveState } from './utils/catalogUtils';
 import strategiesData from './data/strategiesData.json';
 import strategiesDataEth from './data/strategiesData_eth.json';
@@ -107,6 +111,8 @@ function TradingApp() {
   const [signalNotifications, setSignalNotifications] = useState([]);
   const activeSignalsRef = useRef([]);
   const signalNotificationsRef = useRef([]);
+  const closedTradeKeysRef = useRef(new Map());
+  const closedTradeNumbersRef = useRef(new Map());
 
   const replaceActiveSignals = (nextSignals) => {
     activeSignalsRef.current = nextSignals;
@@ -126,6 +132,46 @@ function TradingApp() {
       signalNotificationsRef.current = next;
       return next;
     });
+  };
+
+  const rememberClosedTrade = (asset, strategyId, trade) => {
+    if (!strategyId || !trade) return '';
+    const stateKey = `${asset || 'BTCUSDT'}:${strategyId}`;
+    const key = getClosedTradeEventKey(asset, strategyId, trade);
+    closedTradeKeysRef.current.set(stateKey, key);
+    if (trade.trade_no !== undefined && trade.trade_no !== null) {
+      closedTradeNumbersRef.current.set(stateKey, String(trade.trade_no));
+    }
+    return key;
+  };
+
+  const appendClosedTradeNotification = (asset, strategyName, strategyId, trade) => {
+    if (!strategyId || !trade) return false;
+    const stateKey = `${asset || 'BTCUSDT'}:${strategyId}`;
+    const eventKey = getClosedTradeEventKey(asset, strategyId, trade);
+    const previousKey = closedTradeKeysRef.current.get(stateKey);
+    const previousTradeNo = closedTradeNumbersRef.current.get(stateKey);
+    const tradeNo = trade.trade_no !== undefined && trade.trade_no !== null
+      ? String(trade.trade_no)
+      : '';
+    if (previousKey === eventKey || (tradeNo && previousTradeNo === tradeNo)) return false;
+
+    rememberClosedTrade(asset, strategyId, trade);
+    appendSignalNotification({
+      type: 'SIGNAL_EXIT',
+      title: `POSITION CLOSED: ${strategyName || ''}`,
+      strategy: strategyName || '',
+      strategy_id: strategyId,
+      reason: trade.reason || trade.exit_reason || 'Market Exit',
+      pnl: trade.net_return_pct !== undefined
+        ? `${trade.net_return_pct > 0 ? '+' : ''}${trade.net_return_pct}%`
+        : '',
+      price: trade.exit_price,
+      exit_time: trade.exit_time,
+      event_time: trade.exit_time,
+      event_key: eventKey,
+    });
+    return true;
   };
 
   activeSignalsRef.current = activeSignals;
@@ -300,31 +346,19 @@ function TradingApp() {
           }
         });
 
-        // If a WebSocket exit was missed, reconcile it from the authoritative
-        // telemetry snapshot so the notification history still catches up.
-        previousByStrategy.forEach((previous, strategyId) => {
-          const next = nextByStrategy.get(strategyId);
-          const entryChanged = Boolean(
-            next?.entry_time && previous.entry_time && next.entry_time !== previous.entry_time
+        const newlyClosedTrades = reconcileClosedTrades(
+          symbol,
+          data.strategies,
+          closedTradeKeysRef.current,
+          closedTradeNumbersRef.current,
+        );
+        newlyClosedTrades.forEach((event) => {
+          appendClosedTradeNotification(
+            symbol,
+            event.strategy_name,
+            event.strategy_id,
+            event.trade,
           );
-          if (next && !entryChanged) return;
-          const strategy = data.strategies.find((item) => item.strategy_id === strategyId);
-          const closed = strategy?.last_closed_trade;
-          if (!closed) return;
-          appendSignalNotification({
-            type: 'SIGNAL_EXIT',
-            title: `POSITION CLOSED: ${previous.strategy_name}`,
-            strategy: previous.strategy_name,
-            strategy_id: strategyId,
-            reason: closed.reason || closed.exit_reason || 'Market Exit',
-            pnl: closed.net_return_pct !== undefined
-              ? `${closed.net_return_pct > 0 ? '+' : ''}${closed.net_return_pct}%`
-              : '',
-            price: closed.exit_price,
-            exit_time: closed.exit_time,
-            event_time: closed.exit_time,
-            event_key: `SIGNAL_EXIT:${symbol}:${strategyId}:${closed.exit_time || closed.trade_no || closed.exit_price}`,
-          });
         });
 
         replaceActiveSignals([
@@ -677,14 +711,17 @@ function TradingApp() {
               event_key: `PARTIAL_TAKE_PROFIT:${asset}:${msg.strategy_id}:${msg.price || msg.timestamp || Date.now()}`,
             });
           } else if (msg.type === 'POSITION_CLOSED') {
-            // Protection exits emit POSITION_CLOSED followed by SIGNAL_EXIT.
-            // Reconcile immediately without creating a duplicate notification;
-            // SIGNAL_EXIT remains the user-facing event.
+            // Some close flows emit POSITION_CLOSED without a follow-up SIGNAL_EXIT.
+            // Materialize it here; the stable trade identity suppresses a later duplicate.
             const asset = msg.asset || msg.trade?.asset || 'BTCUSDT';
+            const closedTrade = msg.trade
+              ? { ...msg.trade, exit_time: msg.trade.exit_time || msg.candle_time || msg.timestamp }
+              : null;
             if (msg.strategy_id && asset === selectedAssetRef.current) {
               replaceActiveSignals(activeSignalsRef.current.filter((s) => s.strategy_id !== msg.strategy_id || s.asset !== asset));
               refreshLiveState(asset, false);
             }
+            appendClosedTradeNotification(asset, msg.strategy_name, msg.strategy_id, closedTrade);
           } else if (msg.type === 'SIGNAL_EXIT') {
             playRetroSound('alert');
             const asset = msg.asset || 'BTCUSDT';
@@ -694,18 +731,10 @@ function TradingApp() {
               replaceActiveSignals(activeSignalsRef.current.filter((s) => s.strategy_id !== msg.strategy_id || s.asset !== asset));
               refreshLiveState(asset);
             }
-            appendSignalNotification({
-              type: 'SIGNAL_EXIT',
-              title: `POSITION CLOSED: ${msg.strategy_name || ''}`,
-              strategy: msg.strategy_name || '',
-              strategy_id: msg.strategy_id,
-              reason: msg.trade?.reason || 'Market Exit',
-              pnl: pnlStr,
-              price: msg.trade?.exit_price,
-              exit_time: msg.trade?.exit_time || msg.candle_time,
-              event_time: msg.trade?.exit_time || msg.candle_time || msg.timestamp,
-              event_key: `SIGNAL_EXIT:${asset}:${msg.strategy_id}:${msg.trade?.exit_time || msg.trade?.trade_no || msg.trade?.exit_price}`,
-            });
+            const closedTrade = msg.trade
+              ? { ...msg.trade, exit_time: msg.trade.exit_time || msg.candle_time || msg.timestamp }
+              : null;
+            appendClosedTradeNotification(asset, msg.strategy_name, msg.strategy_id, closedTrade);
             setBannerAlert({
               title: `AUTONOMOUS POSITION CLOSED: ${msg.strategy_name || ''}`,
               strategy: `Exit Reason: ${msg.trade?.reason || 'Market'} | PnL: ${pnlStr}`,

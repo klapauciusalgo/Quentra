@@ -84,6 +84,22 @@ test('rebuilds the latest buy and close notifications from persisted trade telem
   assert.equal(events[1].event_key, 'SIGNAL_EXIT:BTCUSDT:pippo-30m-grd:726:2026-09-25 13:30:00:83923.71');
 });
 
+test('uses the newest valid catalog trade when telemetry is stale', () => {
+  const events = buildHistoricalTradeNotifications('BTCUSDT', {
+    id: 'pippo-30m-grd',
+    name: 'Pippo 30m Grd',
+    type: 'LONG',
+    trades: [
+      { trade_no: 726, status: 'CLOSED', entry_time: '2026-09-25 10:30:00', exit_time: '2026-09-25 13:30:00', entry_price: 84713.66, exit_price: 83923.71 },
+      { trade_no: 727, status: 'CLOSED', entry_time: '2026-09-26 09:30:00', exit_time: '2026-09-28 00:30:00', entry_price: 84100.77, exit_price: 84140.0 },
+    ],
+  });
+
+  assert.equal(events.length, 2);
+  assert.equal(events[0].event_key, 'NEW_SIGNAL:BTCUSDT:pippo-30m-grd:727');
+  assert.equal(events[1].event_key, 'SIGNAL_EXIT:BTCUSDT:pippo-30m-grd:727:2026-09-28 00:30:00:84140');
+});
+
 test('reconciles a newly closed trade even when no active position remains', () => {
   const seen = new Map();
   const seenTradeNumbers = new Map();

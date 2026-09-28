@@ -287,11 +287,13 @@ function TradingApp() {
     );
 
     let catalogApplied = false;
+    let fetchedCatalog = null;
     if (replaceCatalog && strategiesResult.status === 'fulfilled' && strategiesResult.value?.ok && isCurrentRefresh()) {
       try {
         const contentType = strategiesResult.value.headers.get('content-type') || '';
         const catalog = contentType.includes('application/json') ? await strategiesResult.value.json() : null;
         if (isCurrentRefresh() && Array.isArray(catalog) && catalog.length > 0) {
+          fetchedCatalog = catalog;
           setStrategies(catalog);
           catalogSymbolRef.current = symbol;
           catalogApplied = true;
@@ -342,9 +344,23 @@ function TradingApp() {
             status: 'IN_POSITION',
           }));
 
-        const historicalStrategy = data.strategies.find(
+        const telemetryStrategy = data.strategies.find(
           (strategy) => strategy.strategy_id === selectedStrategyRef.current,
         );
+        const catalogStrategy = (fetchedCatalog || []).find(
+          (strategy) => strategy.id === selectedStrategyRef.current,
+        );
+        const historicalStrategy = (telemetryStrategy || catalogStrategy)
+          ? {
+              ...(catalogStrategy || {}),
+              ...(telemetryStrategy || {}),
+              strategy_id: telemetryStrategy?.strategy_id || catalogStrategy?.id,
+              trades: [
+                ...(catalogStrategy?.trades || []),
+                ...(telemetryStrategy?.trades || []),
+              ],
+            }
+          : null;
         buildHistoricalTradeNotifications(symbol, historicalStrategy).forEach((event) => {
           if (historicalTradeNotificationKeysRef.current.has(event.event_key)) return;
           historicalTradeNotificationKeysRef.current.add(event.event_key);

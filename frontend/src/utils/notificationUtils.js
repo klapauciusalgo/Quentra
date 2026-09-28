@@ -31,9 +31,32 @@ export function getClosedTradeEventKey(asset, strategyId, trade) {
   ].join(':');
 }
 
+function compareClosedTrades(left, right) {
+  if (!left) return right;
+  if (!right) return left;
+  const leftNo = Number(left.trade_no);
+  const rightNo = Number(right.trade_no);
+  if (Number.isFinite(leftNo) && Number.isFinite(rightNo) && leftNo !== rightNo) {
+    return rightNo > leftNo ? right : left;
+  }
+  const leftTime = toUtcDate(left.exit_time)?.getTime() || 0;
+  const rightTime = toUtcDate(right.exit_time)?.getTime() || 0;
+  return rightTime >= leftTime ? right : left;
+}
+
+export function getLatestClosedTrade(strategy) {
+  let latest = strategy?.last_closed_trade || null;
+  for (const trade of Array.isArray(strategy?.trades) ? strategy.trades : []) {
+    if (['CLOSED', 'EXITED', 'FLAT'].includes(String(trade?.status || '').toUpperCase())) {
+      latest = compareClosedTrades(latest, trade);
+    }
+  }
+  return latest;
+}
+
 export function buildHistoricalTradeNotifications(asset, strategy) {
-  const trade = strategy?.last_closed_trade;
-  const strategyId = strategy?.strategy_id;
+  const trade = getLatestClosedTrade(strategy);
+  const strategyId = strategy?.strategy_id || strategy?.id;
   if (!strategyId || !trade) return [];
 
   const direction = String(trade.side || trade.type || strategy.direction || 'LONG').toUpperCase();

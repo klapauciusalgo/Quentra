@@ -1949,15 +1949,74 @@ class LiveSignalEngine:
         except Exception:
             pass
 
+    def _load_latest_persisted_closed_trades(self, symbol: str = "BTCUSDT") -> dict[str, dict]:
+        """Read the latest terminal trade from the authoritative runtime overlay.
+
+        The chart/catalog endpoints read this overlay directly. Telemetry must do
+        the same so a process-local ``last_closed_trade`` cannot lag behind a
+        persisted close after a worker restart or a separate writer update.
+        """
+        sym = symbol.upper()
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(backend_dir)
+        runtime_path = bootstrap_runtime_catalog(sym, project_root)
+        try:
+            with open(runtime_path, "r") as handle:
+                catalog = json.load(handle)
+        except (OSError, TypeError, ValueError) as exc:
+            logger.warning("Could not read persisted closed trades from %s: %s", runtime_path, exc)
+            return {}
+
+        latest_by_strategy = {}
+        for strategy in catalog if isinstance(catalog, list) else []:
+            strategy_id = strategy.get("id")
+            if not strategy_id:
+                continue
+            for trade in reversed(strategy.get("trades", []) or []):
+                if str(trade.get("status", "")).upper() in {"CLOSED", "EXITED", "FLAT"}:
+                    latest_by_strategy[strategy_id] = dict(trade)
+                    break
+        return latest_by_strategy
+
+    @staticmethod
+    def _select_latest_closed_trade(current: Optional[dict], persisted: Optional[dict]) -> Optional[dict]:
+        """Choose the newer trade record without trusting one state layer."""
+        if not current:
+            return dict(persisted) if persisted else None
+        if not persisted:
+            return dict(current)
+
+        def trade_number(trade):
+            try:
+                return int(trade.get("trade_no"))
+            except (TypeError, ValueError):
+                return None
+
+        current_no = trade_number(current)
+        persisted_no = trade_number(persisted)
+        if current_no is not None and persisted_no is not None and current_no != persisted_no:
+            return dict(persisted if persisted_no > current_no else current)
+
+        current_time = _marker_timestamp_seconds(current.get("exit_time")) or 0
+        persisted_time = _marker_timestamp_seconds(persisted.get("exit_time")) or 0
+        return dict(persisted if persisted_time >= current_time else current)
+
     def get_live_telemetry(self, symbol: str = "BTCUSDT") -> dict:
         """Returns the full autonomous engine status across all strategies for the symbol."""
         sym = symbol.upper()
         models = self.get_models(sym)
+        persisted_closed = self._load_latest_persisted_closed_trades(sym)
         macro = self.get_macro_state(sym)
         last_p = self.get_last_price(sym)
 
         results = []
         for sid, m in models.items():
+            latest_closed = self._select_latest_closed_trade(
+                m.last_closed_trade,
+                persisted_closed.get(sid),
+            )
+            if latest_closed:
+                m.last_closed_trade = dict(latest_closed)
             flt_pnl = 0.0
             if m.position_status == "OPEN" and m.entry_price > 0:
                 if m.direction == "LONG":
@@ -1988,7 +2047,7 @@ class LiveSignalEngine:
                 "distance_to_trigger_pct": m.distance_to_trigger_pct,
                 "regime_aligned": m.regime_ok,
                 "recent_trades_count": len(m.recent_trades),
-                "last_closed_trade": m.last_closed_trade or (
+                "last_closed_trade": latest_closed or (
                     (m.recent_trades or m.synced_recent_trades)[-1]
                     if (m.recent_trades or m.synced_recent_trades)
                     else None

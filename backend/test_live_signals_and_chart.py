@@ -82,7 +82,47 @@ def test_live_signals_telemetry(client):
     assert alpha["be_active"] is True
     assert alpha["stop_loss"] > alpha["entry_price"] # Breakeven locked in profit!
 
-def test_strategy_catalog_enrichment(client):
+def test_live_telemetry_prefers_newer_runtime_closed_trade(client):
+    runtime_path = Path(main.effective_catalog_path("BTCUSDT"))
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    model = live_signal_engine.get_model("pippo-30m-grd", symbol="BTCUSDT")
+    previous_model_close = model.last_closed_trade
+    previous_trades = list(strategy.get("trades", []))
+    strategy["trades"].append({
+        "trade_no": 727,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-26 09:30:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 84100.77,
+        "exit_price": 84140.0,
+        "net_return_pct": -0.13,
+        "exit_reason": "Force_Close_MA",
+        "status": "CLOSED",
+        "is_active": False,
+    })
+    model.last_closed_trade = {
+        "trade_no": 726,
+        "exit_time": "2026-09-25 13:30:00",
+        "exit_price": 83923.71,
+        "status": "CLOSED",
+    }
+    try:
+        runtime_path.write_text(json.dumps(catalog))
+        response = client.get("/api/signals/live?symbol=BTCUSDT")
+        assert response.status_code == 200
+        strategy_telemetry = next(
+            item for item in response.json()["strategies"]
+            if item["strategy_id"] == "pippo-30m-grd"
+        )
+        assert strategy_telemetry["last_closed_trade"]["trade_no"] == 727
+        assert strategy_telemetry["last_closed_trade"]["exit_price"] == 84140.0
+    finally:
+        strategy["trades"] = previous_trades
+        runtime_path.write_text(json.dumps(catalog))
+        model.last_closed_trade = previous_model_close
+
     res = client.get("/api/strategies")
     assert res.status_code == 200
     strategies = res.json()

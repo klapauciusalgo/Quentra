@@ -498,6 +498,14 @@ class LiveSignalEngine:
             # Synchronize active open trades from recent history
             self.sync_active_positions(sym)
 
+            # Rebuild deterministic Pippo 30m closes from the canonical candle
+            # stream and persist any terminal trades missing from the runtime
+            # overlay. This makes a valid close survive a cold backend restart.
+            for replay_id in ("pippo-30m-new-gen", "pippo-30m-grd"):
+                replay_model = self.get_model(replay_id, symbol=sym)
+                if replay_model:
+                    self._sync_pippo_new_gen(replay_model, sym)
+
             # The weekly macro strategy is a regime state machine, not an SMC
             # breakout. Reconstructing it from closed weekly candles prevents a
             # restart from losing the currently active long or short regime.
@@ -941,8 +949,11 @@ class LiveSignalEngine:
                         ep = c
                         entry_time = cur_dt
 
-            model.synced_recent_trades = replayed_closed
-            if replayed_closed:
+            replayed_persisted = self._persist_replayed_closed_trades(model, replayed_closed, sym)
+            model.synced_recent_trades = replayed_persisted or replayed_closed
+            if replayed_persisted:
+                model.last_closed_trade = replayed_persisted[-1]
+            elif replayed_closed:
                 model.last_closed_trade = replayed_closed[-1]
             if in_pos:
                 model.position_status = "OPEN"
@@ -1825,6 +1836,232 @@ class LiveSignalEngine:
                 logger.info("🔄 [AUTO-SYNC] Fast reloaded in-memory catalog for backend API")
         except Exception:
             pass
+
+    @staticmethod
+    def _replayed_trade_identity(trade: dict) -> tuple:
+        def normalized_time(value):
+            return str(value or "").replace(" UTC", "")
+
+        def normalized_price(value):
+            try:
+                return round(float(value), 8)
+            except (TypeError, ValueError):
+                return None
+
+        return (
+            normalized_time(trade.get("entry_time")),
+            normalized_time(trade.get("exit_time")),
+            normalized_price(trade.get("entry_price")),
+            normalized_price(trade.get("exit_price")),
+            str(trade.get("side") or trade.get("type") or "").upper(),
+        )
+
+    def _persist_replayed_closed_trades(
+        self,
+        model: StrategyModel,
+        replayed_trades: list[dict],
+        symbol: Optional[str] = None,
+    ) -> list[dict]:
+        """Persist deterministic historical closes discovered during cold-start replay.
+
+        Live closes normally reach ``_persist_closed_trade`` through the candle event
+        path. A restart, however, can rediscover a valid terminal trade from the
+        canonical candles before that live event exists in the runtime overlay. Keep
+        that recovery idempotent: reuse an existing trade identity and append a new
+        trade number only when the exact terminal record is absent.
+        """
+        if model.strat_id.startswith("test-") or not replayed_trades:
+            return []
+
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(backend_dir)
+        sym = (symbol or getattr(model, "symbol", "BTCUSDT")).upper()
+        runtime_path = bootstrap_runtime_catalog(sym, project_root)
+        changed = False
+
+        def trade_number(value):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return 0
+
+        def build_trade(replayed: dict, trade_no: int) -> dict:
+            side = str(replayed.get("side") or replayed.get("type") or model.direction).upper()
+            entry_price = float(replayed.get("entry_price", 0.0))
+            exit_price = float(replayed.get("exit_price", entry_price))
+            sl_pct = float(model.config.get("sl_pct", 0.0) or 0.0)
+            tp_pct = float(model.config.get("tp_pct", 0.0) or 0.0)
+            exit_reason = replayed.get("exit_reason") or replayed.get("reason") or "Replay_Close"
+            return {
+                "trade_no": trade_no,
+                "side": side,
+                "type": side,
+                "entry_time": replayed.get("entry_time"),
+                "exit_time": replayed.get("exit_time"),
+                "entry_price": entry_price,
+                "exit_price": exit_price,
+                "gross_return_pct": float(replayed.get("gross_return_pct", 0.0)),
+                "net_return_pct": float(replayed.get("net_return_pct", 0.0)),
+                "exit_reason": exit_reason,
+                "reason": exit_reason,
+                "be_activated": bool(replayed.get("be_activated", False)),
+                "status": "CLOSED",
+                "stop_loss": round(entry_price * (1.0 - sl_pct), 2) if side == "LONG" and sl_pct else round(entry_price * (1.0 + sl_pct), 2) if sl_pct else 0.0,
+                "take_profit": round(entry_price * (1.0 + tp_pct), 2) if side == "LONG" and tp_pct else round(entry_price * (1.0 - tp_pct), 2) if tp_pct else 0.0,
+                "is_active": False,
+                "partial_taken": bool(replayed.get("partial_taken", False)),
+                "partial_exit_price": replayed.get("partial_exit_price"),
+                "partial_position_pct": float(replayed.get("partial_position_pct", 0.0) or 0.0),
+            }
+
+        def marker_pair(trade: dict) -> list[dict]:
+            trade_no = trade.get("trade_no")
+            side = str(trade.get("side") or trade.get("type") or model.direction).upper()
+            entry_price = float(trade.get("entry_price", 0.0))
+            exit_price = float(trade.get("exit_price", entry_price))
+            exit_reason = trade.get("exit_reason") or trade.get("reason") or "Replay_Close"
+            entry_marker = {
+                "time": _marker_timestamp_seconds(trade.get("entry_time")),
+                "position": "belowBar" if side == "LONG" else "aboveBar",
+                "color": "#30D158" if side == "LONG" else "#FF453A",
+                "shape": "arrowUp" if side == "LONG" else "arrowDown",
+                "text": f"ENTRY {side} @ ${entry_price:,.2f}",
+                "size": 3,
+                "entryPrice": entry_price,
+                "side": side,
+                "status": "CLOSED",
+                "isActive": False,
+                "eventType": "entry",
+                "tradeNo": trade_no,
+            }
+            exit_marker = {
+                "time": _marker_timestamp_seconds(trade.get("exit_time")),
+                "position": "aboveBar" if side == "LONG" else "belowBar",
+                "color": "#39FF88" if float(trade.get("net_return_pct", 0.0) or 0.0) > 0 else "#EF4444",
+                "shape": "arrowDown" if side == "LONG" else "arrowUp",
+                "text": f"EXIT {exit_reason} #{trade_no}",
+                "exitPrice": exit_price,
+                "pnlPct": float(trade.get("net_return_pct", 0.0) or 0.0),
+                "reason": exit_reason,
+                "eventType": "exit",
+                "tradeNo": trade_no,
+                "isActive": False,
+            }
+            return [entry_marker, exit_marker]
+
+        with locked_json_catalog(runtime_path) as strategies:
+            strategy = next((item for item in strategies if item.get("id") == model.strat_id), None)
+            if not strategy:
+                return []
+
+            trades = list(strategy.get("trades", []) or [])
+            by_identity = {
+                self._replayed_trade_identity(trade): trade
+                for trade in trades
+                if str(trade.get("status", "")).upper() in {"CLOSED", "EXITED", "FLAT"}
+            }
+            next_trade_no = max((trade_number(trade.get("trade_no")) for trade in trades), default=0)
+            latest_existing_exit = max(
+                (
+                    _marker_timestamp_seconds(trade.get("exit_time")) or 0
+                    for trade in trades
+                    if str(trade.get("status", "")).upper() in {"CLOSED", "EXITED", "FLAT"}
+                ),
+                default=0,
+            )
+            markers = list(strategy.get("markers", []) or [])
+            persisted = []
+
+            for replayed in sorted(
+                replayed_trades,
+                key=lambda item: _marker_timestamp_seconds(item.get("exit_time")) or 0,
+            ):
+                identity = self._replayed_trade_identity(replayed)
+                trade = by_identity.get(identity)
+                replay_exit = _marker_timestamp_seconds(replayed.get("exit_time")) or 0
+                # A bounded cold-start replay can contain older valid trades that
+                # are absent from the catalog for historical reasons. Do not assign
+                # those stale records a new number after the current latest trade;
+                # only recover an exact identity or a close newer than the ledger.
+                if trade is None and latest_existing_exit and replay_exit <= latest_existing_exit:
+                    continue
+                if trade is None:
+                    next_trade_no += 1
+                    trade = build_trade(replayed, next_trade_no)
+                    trades.append(trade)
+                    by_identity[identity] = trade
+                    latest_existing_exit = max(latest_existing_exit, replay_exit)
+                    changed = True
+                else:
+                    trade["status"] = "CLOSED"
+                    trade["is_active"] = False
+                    trade.setdefault("exit_reason", replayed.get("exit_reason") or replayed.get("reason"))
+                    trade.setdefault("reason", replayed.get("exit_reason") or replayed.get("reason"))
+
+                trade_no = trade.get("trade_no")
+                existing_trade_markers = [
+                    marker for marker in markers
+                    if marker.get("tradeNo") == trade_no
+                ]
+                existing_types = {_marker_event_type(marker) for marker in existing_trade_markers}
+                for marker in marker_pair(trade):
+                    if marker.get("time") is None or _marker_event_type(marker) in existing_types:
+                        continue
+                    markers.append(marker)
+                    existing_types.add(_marker_event_type(marker))
+                    changed = True
+                persisted.append(dict(trade))
+
+            if changed:
+                strategy["trades"] = sorted(
+                    trades,
+                    key=lambda trade: trade_number(trade.get("trade_no")),
+                )
+                strategy["markers"] = deduplicate_markers(markers)
+
+        if changed:
+            try:
+                from recalculate_btc_metrics import process_strategies
+                with locked_json_catalog(runtime_path) as strategies:
+                    updated = process_strategies(
+                        runtime_path,
+                        strategies=strategies,
+                        clean_pure_macro=(sym == "BTCUSDT"),
+                        apply_btc_metadata=(sym == "BTCUSDT"),
+                    )
+                    strategies[:] = updated
+            except Exception as exc:
+                logger.warning("Could not recalculate %s metrics after replay persistence: %s", sym, exc)
+
+            try:
+                import main as backend_main
+                if hasattr(backend_main, "reload_local_catalog"):
+                    backend_main.reload_local_catalog(sym)
+            except Exception:
+                pass
+
+        latest_catalog = {}
+        try:
+            with open(runtime_path, "r") as handle:
+                catalog = json.load(handle)
+            strategy = next((item for item in catalog if item.get("id") == model.strat_id), None)
+            if strategy:
+                latest_catalog = {
+                    self._replayed_trade_identity(trade): dict(trade)
+                    for trade in strategy.get("trades", [])
+                    if str(trade.get("status", "")).upper() in {"CLOSED", "EXITED", "FLAT"}
+                }
+        except (OSError, TypeError, ValueError):
+            pass
+
+        persisted = [
+            latest_catalog.get(self._replayed_trade_identity(trade), trade)
+            for trade in persisted
+        ]
+        if persisted:
+            model.last_closed_trade = dict(persisted[-1])
+        model.recent_trades = [dict(trade) for trade in persisted]
+        return persisted
 
     def _persist_opened_trade(self, model: StrategyModel, ticket: dict):
         """Persist an open trade into the mutable runtime catalog overlay."""

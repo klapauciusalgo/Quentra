@@ -158,6 +158,66 @@ def test_live_telemetry_prefers_newer_runtime_closed_trade(client):
     assert be_markers[0]["color"] == "#FF9F0A"
     assert "BE LOCKED" in be_markers[0]["text"]
 
+
+def test_replayed_valid_close_is_persisted_idempotently(tmp_path, monkeypatch):
+    import shutil
+    import live_signal_engine as engine_module
+    from catalog_storage import ensure_runtime_catalog, runtime_catalog_path
+
+    backend_data = tmp_path / "backend" / "data"
+    backend_data.mkdir(parents=True)
+    for filename in ("strategies.json", "strategies_eth.json"):
+        shutil.copy(REPO_ROOT / "backend" / "data" / filename, backend_data / filename)
+    ensure_runtime_catalog("BTCUSDT", tmp_path)
+    monkeypatch.setattr(
+        engine_module,
+        "__file__",
+        str(tmp_path / "backend" / "live_signal_engine.py"),
+    )
+
+    engine = LiveSignalEngine()
+    model = engine.get_model("pippo-30m-grd", symbol="BTCUSDT")
+    replayed = {
+        "symbol": "BTC/USDT",
+        "asset": "BTCUSDT",
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 84100.77,
+        "exit_price": 84140.0,
+        "gross_return_pct": 0.05,
+        "net_return_pct": -0.13,
+        "exit_reason": "Force Close MA (-0.5%)",
+        "be_activated": False,
+        "status": "CLOSED",
+    }
+
+    first = engine._persist_replayed_closed_trades(model, [replayed], "BTCUSDT")
+    second = engine._persist_replayed_closed_trades(model, [replayed], "BTCUSDT")
+
+    runtime_path = runtime_catalog_path("BTCUSDT", tmp_path)
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    matches = [
+        trade for trade in strategy["trades"]
+        if trade.get("entry_time") == replayed["entry_time"]
+        and trade.get("exit_time") == replayed["exit_time"]
+    ]
+    trade_no = matches[0]["trade_no"] if matches else None
+    trade_markers = [
+        marker for marker in strategy["markers"]
+        if marker.get("tradeNo") == trade_no
+    ]
+
+    assert len(matches) == 1
+    assert trade_no == 727
+    assert len(trade_markers) == 2
+    assert {marker.get("eventType") for marker in trade_markers} == {"entry", "exit"}
+    assert first[-1]["trade_no"] == 727
+    assert second[-1]["trade_no"] == 727
+
+
 def test_catalog_markers_match_trade_lifecycle_for_all_assets_and_strategies(client):
     """Historical exits must not be rendered as sells for an open trade."""
     for symbol in ["BTCUSDT", "ETHUSDT"]:
@@ -453,20 +513,20 @@ def test_pippo_30m_new_gen_details(client):
     assert data["name"] == "Pippo 30m New Gen"
     assert data["timeframe"] == "30m"
     assert data["type"] == "LONG"
-    assert data["metrics"]["total_trades"] == 444
-    assert data["metrics"]["win_rate_pct"] == 34.91
+    assert data["metrics"]["total_trades"] == 445
+    assert data["metrics"]["win_rate_pct"] == 34.83
     assert data["metrics"]["profit_factor"] == 1.97
     assert len(data["yearly_stats"]) == 7
     # Verify all 7 years are positive
     assert all(y["total_return_pct"] > 0 for y in data["yearly_stats"])
     
-    # Verify closed trade #444 (autonomous confirmation of exit via Force Close MA)
+    # Verify replay-recovered closed trade #445 (autonomous confirmation of exit)
     last_trade = data["trades"][-1]
-    assert last_trade["trade_no"] == 444
+    assert last_trade["trade_no"] == 445
     assert last_trade["status"] == "CLOSED"
-    assert last_trade["exit_price"] == 83923.71
-    assert last_trade["exit_reason"] == "Force_Close_MA"
-    assert last_trade["net_return_pct"] == -1.11
+    assert last_trade["exit_price"] == 84140.0
+    assert last_trade["exit_reason"] == "Force Close MA (-0.5%)"
+    assert last_trade["net_return_pct"] == -0.13
     assert data["has_active_signal"] is False
 
 def test_closed_trade_and_marker_contract_is_canonical(client):
@@ -513,17 +573,17 @@ def test_pippo_30m_grd_details(client):
     assert data["name"] == "Pippo 30m Grd"
     assert data["timeframe"] == "30m"
     assert data["type"] == "LONG"
-    assert data["metrics"]["total_trades"] == 726
-    assert data["metrics"]["win_rate_pct"] == 32.78
+    assert data["metrics"]["total_trades"] == 727
+    assert data["metrics"]["win_rate_pct"] == 32.74
     assert len(data["yearly_stats"]) == 7
     
-    # Verify closed trade #726 (autonomous confirmation of exit via Force Close MA)
+    # Verify replay-recovered closed trade #727 (autonomous confirmation of exit)
     last_trade = data["trades"][-1]
-    assert last_trade["trade_no"] == 726
+    assert last_trade["trade_no"] == 727
     assert last_trade["status"] == "CLOSED"
-    assert last_trade["exit_price"] == 83923.71
-    assert last_trade["exit_reason"] == "Force_Close_MA"
-    assert last_trade["net_return_pct"] == -1.11
+    assert last_trade["exit_price"] == 84140.0
+    assert last_trade["exit_reason"] == "Force Close MA (-0.5%)"
+    assert last_trade["net_return_pct"] == -0.13
     assert data["has_active_signal"] is False
 
 def test_klines_endpoint(client):

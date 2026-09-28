@@ -5,6 +5,7 @@ import {
   normalizeNotification,
   sortNotificationsNewestFirst,
   getClosedTradeEventKey,
+  buildHistoricalTradeNotifications,
   reconcileClosedTrades,
 } from './notificationUtils.js';
 
@@ -57,6 +58,30 @@ test('builds a stable identity for a closed trade reconciliation event', () => {
   });
 
   assert.equal(key, 'SIGNAL_EXIT:BTCUSDT:pippo-30m-grd:727:2026-09-28 00:30:00:84140');
+});
+
+test('rebuilds the latest buy and close notifications from persisted trade telemetry', () => {
+  const events = buildHistoricalTradeNotifications('BTCUSDT', {
+    strategy_id: 'pippo-30m-grd',
+    name: 'Pippo 30m Grd',
+    direction: 'LONG',
+    last_closed_trade: {
+      trade_no: 726,
+      side: 'LONG',
+      entry_time: '2026-09-25 10:30:00',
+      exit_time: '2026-09-25 13:30:00',
+      entry_price: 84713.66,
+      exit_price: 83923.71,
+      net_return_pct: -1.11,
+      exit_reason: 'Force_Close_MA',
+    },
+  });
+
+  assert.equal(events.length, 2);
+  assert.equal(events[0].type, 'NEW_SIGNAL');
+  assert.equal(events[0].title, 'BUY ENTRY: Pippo 30m Grd');
+  assert.equal(events[1].type, 'SIGNAL_EXIT');
+  assert.equal(events[1].event_key, 'SIGNAL_EXIT:BTCUSDT:pippo-30m-grd:726:2026-09-25 13:30:00:83923.71');
 });
 
 test('reconciles a newly closed trade even when no active position remains', () => {

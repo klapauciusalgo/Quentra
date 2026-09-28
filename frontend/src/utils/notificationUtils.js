@@ -31,6 +31,50 @@ export function getClosedTradeEventKey(asset, strategyId, trade) {
   ].join(':');
 }
 
+export function buildHistoricalTradeNotifications(asset, strategy) {
+  const trade = strategy?.last_closed_trade;
+  const strategyId = strategy?.strategy_id;
+  if (!strategyId || !trade) return [];
+
+  const direction = String(trade.side || trade.type || strategy.direction || 'LONG').toUpperCase();
+  const action = direction === 'SHORT' ? 'SELL' : 'BUY';
+  const events = [];
+  if (trade.entry_time && trade.entry_price !== undefined && trade.entry_price !== null) {
+    events.push({
+      type: 'NEW_SIGNAL',
+      title: `${action} ENTRY: ${strategy.name || strategyId}`,
+      strategy: strategy.name || strategyId,
+      strategy_id: strategyId,
+      direction,
+      price: trade.entry_price,
+      entry_time: trade.entry_time,
+      event_time: trade.entry_time,
+      event_key: `NEW_SIGNAL:${asset || 'BTCUSDT'}:${strategyId}:${trade.trade_no ?? trade.entry_time ?? trade.entry_price}`,
+      historical: true,
+      action,
+    });
+  }
+  if (trade.exit_time && trade.exit_price !== undefined && trade.exit_price !== null) {
+    events.push({
+      type: 'SIGNAL_EXIT',
+      title: `POSITION CLOSED: ${strategy.name || strategyId}`,
+      strategy: strategy.name || strategyId,
+      strategy_id: strategyId,
+      reason: trade.reason || trade.exit_reason || 'Market Exit',
+      pnl: trade.net_return_pct !== undefined
+        ? `${trade.net_return_pct > 0 ? '+' : ''}${trade.net_return_pct}%`
+        : '',
+      price: trade.exit_price,
+      exit_time: trade.exit_time,
+      event_time: trade.exit_time,
+      event_key: getClosedTradeEventKey(asset, strategyId, trade),
+      historical: true,
+      trade,
+    });
+  }
+  return events;
+}
+
 export function reconcileClosedTrades(asset, strategies, seenKeys, seenTradeNumbers) {
   const events = [];
   for (const strategy of Array.isArray(strategies) ? strategies : []) {

@@ -12,6 +12,7 @@ import { API_BASE, getWsUrl } from './config';
 import {
   normalizeNotification,
   getClosedTradeEventKey,
+  buildHistoricalTradeNotifications,
   reconcileClosedTrades,
 } from './utils/notificationUtils';
 import { stripLiveState } from './utils/catalogUtils';
@@ -21,6 +22,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import AuthModal from './components/AuthModal';
 
 // Minimal market regime and session state
+const SIGNAL_NOTIFICATIONS_STORAGE_KEY = 'quentra.signal-notifications.v1';
+
 const DEFAULT_FLOOR_STATE = {
   market_regime: {
     status: 'MACRO_DISCOUNT',
@@ -108,11 +111,20 @@ function TradingApp() {
 
   // Active Working Signals (BUY / SELL) & Notification Events
   const [activeSignals, setActiveSignals] = useState([]);
-  const [signalNotifications, setSignalNotifications] = useState([]);
+  const [signalNotifications, setSignalNotifications] = useState(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(SIGNAL_NOTIFICATIONS_STORAGE_KEY) || '[]');
+      return Array.isArray(stored) ? stored.slice(0, 20) : [];
+    } catch {
+      return [];
+    }
+  });
   const activeSignalsRef = useRef([]);
-  const signalNotificationsRef = useRef([]);
+  const signalNotificationsRef = useRef(signalNotifications);
   const closedTradeKeysRef = useRef(new Map());
   const closedTradeNumbersRef = useRef(new Map());
+  const historicalTradeNotificationKeysRef = useRef(new Set());
 
   const replaceActiveSignals = (nextSignals) => {
     activeSignalsRef.current = nextSignals;
@@ -176,6 +188,18 @@ function TradingApp() {
 
   activeSignalsRef.current = activeSignals;
   signalNotificationsRef.current = signalNotifications;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(
+        SIGNAL_NOTIFICATIONS_STORAGE_KEY,
+        JSON.stringify(signalNotifications.slice(0, 20)),
+      );
+    } catch {
+      // Browser storage can be unavailable in private or restricted contexts.
+    }
+  }, [signalNotifications]);
 
   // Theme Management (Light Mode is Default)
   const [theme, setTheme] = useState(() => {
@@ -317,6 +341,24 @@ function TradingApp() {
             timestamp: strategy.entry_time,
             status: 'IN_POSITION',
           }));
+
+        const historicalStrategy = data.strategies.find(
+          (strategy) => strategy.strategy_id === selectedStrategyRef.current,
+        );
+        buildHistoricalTradeNotifications(symbol, historicalStrategy).forEach((event) => {
+          if (historicalTradeNotificationKeysRef.current.has(event.event_key)) return;
+          historicalTradeNotificationKeysRef.current.add(event.event_key);
+          if (event.type === 'SIGNAL_EXIT') {
+            appendClosedTradeNotification(
+              symbol,
+              event.strategy,
+              event.strategy_id,
+              event.trade,
+            );
+          } else {
+            appendSignalNotification(event);
+          }
+        });
 
         const previousByStrategy = new Map(
           activeSignalsRef.current
@@ -1110,6 +1152,11 @@ function TradingApp() {
         onClearNotifications={() => {
           signalNotificationsRef.current = [];
           setSignalNotifications([]);
+          try {
+            window.localStorage.removeItem(SIGNAL_NOTIFICATIONS_STORAGE_KEY);
+          } catch {
+            // Browser storage can be unavailable in private or restricted contexts.
+          }
         }}
         onGoToLanding={handleGoToLanding}
         selectedAsset={selectedAsset}

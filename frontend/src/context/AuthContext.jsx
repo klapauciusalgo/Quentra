@@ -10,6 +10,16 @@ import {
 } from '../services/supabaseClient';
 
 const AuthContext = createContext(null);
+const DEV_AUTH_BYPASS = import.meta.env.DEV && import.meta.env.VITE_DEV_AUTH_BYPASS === 'true';
+
+const createDemoUser = (customName = 'Quant Trader', customEmail = 'trader@quentra.io') => ({
+  id: 'demo-trader-01',
+  email: customEmail,
+  full_name: customName,
+  avatar_url: null,
+  provider: 'demo',
+  createdAt: new Date().toISOString(),
+});
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -40,6 +50,16 @@ export function AuthProvider({ children }) {
     let isMounted = true;
 
     async function initAuth() {
+      // Explicit local-only bypass for development and authenticated UI QA.
+      // import.meta.env.DEV is false in production builds by construction.
+      if (DEV_AUTH_BYPASS) {
+        if (isMounted) {
+          setUser(createDemoUser());
+          setIsLoading(false);
+        }
+        return;
+      }
+
       // 1. Check local demo user first
       if (typeof window !== 'undefined') {
         const localDemo = localStorage.getItem('quentra_demo_user');
@@ -193,14 +213,7 @@ export function AuthProvider({ children }) {
 
   // Demo account sign-in for seamless verification / preview when Supabase is sleeping
   const loginDemoTrader = (customName = 'Quant Trader', customEmail = 'trader@quentra.io') => {
-    const demoUser = {
-      id: 'demo-trader-01',
-      email: customEmail,
-      full_name: customName,
-      avatar_url: null,
-      provider: 'demo',
-      createdAt: new Date().toISOString(),
-    };
+    const demoUser = createDemoUser(customName, customEmail);
     if (typeof window !== 'undefined') {
       localStorage.setItem('quentra_demo_user', JSON.stringify(demoUser));
     }

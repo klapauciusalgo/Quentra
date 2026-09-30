@@ -828,7 +828,7 @@ export default function LandingPage({
                         {strat.name}
                       </h4>
                       <p className="text-[11px] text-apple-muted line-clamp-2 mt-1 leading-relaxed">
-                        {strat.logic_summary}
+                        {strat.public_summary || 'Public performance profile.'}
                       </p>
                     </div>
 

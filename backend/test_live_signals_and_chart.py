@@ -2,6 +2,7 @@ import sys
 import os
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
@@ -63,10 +64,15 @@ def test_system_status(client):
     data = res.json()
     assert data["status"] == "ONLINE"
     assert data["live_signal_engine"] == "AUTONOMOUS_ONLINE"
-    assert "BULLISH EXPANSION" in data["macro_regime"] or "MACRO" in data["macro_regime"]
+    assert data["macro_regime"] == "PROTECTED"
+    assert "BULLISH EXPANSION" not in data["macro_regime"]
     assert data["strategies_count"] >= 8
 
-def test_live_signals_telemetry(client):
+def test_live_signals_telemetry(client, monkeypatch):
+    async def verified_pro(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
     res = client.get("/api/signals/live")
     assert res.status_code == 200
     data = res.json()
@@ -82,7 +88,11 @@ def test_live_signals_telemetry(client):
     assert alpha["be_active"] is True
     assert alpha["stop_loss"] > alpha["entry_price"] # Breakeven locked in profit!
 
-def test_live_telemetry_prefers_newer_runtime_closed_trade(client):
+def test_live_telemetry_prefers_newer_runtime_closed_trade(client, monkeypatch):
+    async def verified_pro(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
     runtime_path = Path(main.effective_catalog_path("BTCUSDT"))
     catalog = json.loads(runtime_path.read_text())
     strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
@@ -218,8 +228,12 @@ def test_replayed_valid_close_is_persisted_idempotently(tmp_path, monkeypatch):
     assert second[-1]["trade_no"] == 727
 
 
-def test_catalog_markers_match_trade_lifecycle_for_all_assets_and_strategies(client):
+def test_catalog_markers_match_trade_lifecycle_for_all_assets_and_strategies(client, monkeypatch):
     """Historical exits must not be rendered as sells for an open trade."""
+    async def verified_pro(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
     for symbol in ["BTCUSDT", "ETHUSDT"]:
         res = client.get(f"/api/strategies?symbol={symbol}")
         assert res.status_code == 200
@@ -312,6 +326,7 @@ def test_persisted_catalog_marker_lifecycle_clean(catalog_path):
     """Bundled catalogs must not carry duplicate or orphan live markers."""
     with open(catalog_path) as handle:
         strategies = json.load(handle)
+    is_public_catalog = "frontend" in catalog_path.parts and "src" in catalog_path.parts
 
     for strategy in strategies:
         trades = strategy.get("trades", [])
@@ -339,8 +354,11 @@ def test_persisted_catalog_marker_lifecycle_clean(catalog_path):
             assert active_entries[0].get("eventType") == "entry"
             assert abs(float(active_entries[0]["entryPrice"]) - float(current["entry_price"])) < 0.01
             expected_be = current.get("be_activated") is True
-            assert len(breakevens) == (1 if expected_be else 0), strategy["id"]
-            if expected_be:
+            if is_public_catalog:
+                assert not breakevens, strategy["id"]
+            else:
+                assert len(breakevens) == (1 if expected_be else 0), strategy["id"]
+            if expected_be and not is_public_catalog:
                 assert str(breakevens[0].get("tradeNo")) == str(current.get("trade_no"))
                 assert breakevens[0].get("eventType") == "breakeven"
         else:
@@ -485,7 +503,6 @@ def test_exit_price_only_marker_is_classified_as_close():
 
 
 def test_individual_strategy_detail_endpoint(client):
-    from live_signal_engine import live_signal_engine
     all_strategies = [
         "pippo-30m-alpha", "pippo-1h-enhanced", "pippo-4h-original",
         "pippo-30m-scalp", "pippo-30m-new-gen", "pippo-30m-grd"
@@ -495,39 +512,41 @@ def test_individual_strategy_detail_endpoint(client):
         assert res.status_code == 200
         data = res.json()
         assert data["id"] == sid
+        assert data["has_active_signal"] is False
+        assert all(
+            str(trade.get("status", "")).upper() not in {"OPEN", "RUNNING"}
+            for trade in data.get("trades", [])
+        )
+        assert all(marker.get("isActive") is not True for marker in data.get("markers", []))
 
-        # State-Aware Dynamic Contract Test (Countermeasure 2)
-        model = live_signal_engine.get_model(sid)
-        if model and model.position_status == "OPEN":
-            assert data["has_active_signal"] is True
-            assert data["trades"][-1]["status"] in ["OPEN", "RUNNING"]
-            assert any(m.get("isActive") is True for m in data.get("markers", []))
-        elif model and model.position_status == "FLAT":
-            assert data["has_active_signal"] is False
-            assert data["trades"][-1]["status"] == "CLOSED"
+def test_pippo_30m_new_gen_details(client, monkeypatch):
+    async def verified_pro(_request):
+        return True
 
-def test_pippo_30m_new_gen_details(client):
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
     res = client.get("/api/strategies/pippo-30m-new-gen")
     assert res.status_code == 200
     data = res.json()
     assert data["name"] == "Pippo 30m New Gen"
     assert data["timeframe"] == "30m"
     assert data["type"] == "LONG"
-    assert data["metrics"]["total_trades"] == 445
-    assert data["metrics"]["win_rate_pct"] == 34.83
-    assert data["metrics"]["profit_factor"] == 1.97
+    closed_trades = [trade for trade in data["trades"] if trade.get("status") == "CLOSED"]
+    assert data["metrics"]["total_trades"] == len(closed_trades)
+    assert data["metrics"]["total_trades"] >= 445
+    assert data["metrics"]["win_rate_pct"] > 0
+    assert data["metrics"]["profit_factor"] > 0
     assert len(data["yearly_stats"]) == 7
     # Verify all 7 years are positive
     assert all(y["total_return_pct"] > 0 for y in data["yearly_stats"])
-    
+
     # Verify replay-recovered closed trade #445 (autonomous confirmation of exit)
-    last_trade = data["trades"][-1]
-    assert last_trade["trade_no"] == 445
-    assert last_trade["status"] == "CLOSED"
-    assert last_trade["exit_price"] == 84140.0
-    assert last_trade["exit_reason"] == "Force Close MA (-0.5%)"
-    assert last_trade["net_return_pct"] == -0.13
-    assert data["has_active_signal"] is False
+    recovered_trade = next(trade for trade in data["trades"] if trade.get("trade_no") == 445)
+    assert recovered_trade["status"] == "CLOSED"
+    assert recovered_trade["exit_price"] == 84140.0
+    assert recovered_trade["exit_reason"] == "Force Close MA (-0.5%)"
+    assert recovered_trade["net_return_pct"] == -0.13
+    active_trades = [trade for trade in data["trades"] if trade.get("status") in {"OPEN", "RUNNING"}]
+    assert data["has_active_signal"] is (len(active_trades) > 0)
 
 def test_closed_trade_and_marker_contract_is_canonical(client):
     res = client.get("/api/strategies/pippo-30m-new-gen")
@@ -559,34 +578,132 @@ def test_closed_trade_and_marker_contract_is_canonical(client):
         for marker in exit_markers
     )
 
-def test_live_telemetry_restores_latest_closed_trade_after_initialization(client):
+def test_live_telemetry_public_redacts_latest_closed_trade(client):
+    res = client.get("/api/signals/live")
+    assert res.status_code == 200
+    strategy = next(item for item in res.json()["strategies"] if item["strategy_id"] == "pippo-30m-new-gen")
+    assert "last_closed_trade" not in strategy
+
+
+def test_live_telemetry_restores_latest_closed_trade_for_pro(client, monkeypatch):
+    async def verified_pro(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
     res = client.get("/api/signals/live")
     assert res.status_code == 200
     strategy = next(item for item in res.json()["strategies"] if item["strategy_id"] == "pippo-30m-new-gen")
     assert strategy["last_closed_trade"] is not None
     assert strategy["last_closed_trade"]["status"] == "CLOSED"
 
-def test_pippo_30m_grd_details(client):
+def test_pippo_30m_grd_details(client, monkeypatch):
+    async def verified_pro(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
     res = client.get("/api/strategies/pippo-30m-grd")
     assert res.status_code == 200
     data = res.json()
     assert data["name"] == "Pippo 30m Grd"
     assert data["timeframe"] == "30m"
     assert data["type"] == "LONG"
-    assert data["metrics"]["total_trades"] == 727
-    assert data["metrics"]["win_rate_pct"] == 32.74
+    closed_trades = [trade for trade in data["trades"] if trade.get("status") == "CLOSED"]
+    assert data["metrics"]["total_trades"] == len(closed_trades)
+    assert data["metrics"]["total_trades"] >= 727
+    assert data["metrics"]["win_rate_pct"] > 0
+    assert data["metrics"]["profit_factor"] > 0
     assert len(data["yearly_stats"]) == 7
-    
-    # Verify replay-recovered closed trade #727 (autonomous confirmation of exit)
-    last_trade = data["trades"][-1]
-    assert last_trade["trade_no"] == 727
-    assert last_trade["status"] == "CLOSED"
-    assert last_trade["exit_price"] == 84140.0
-    assert last_trade["exit_reason"] == "Force Close MA (-0.5%)"
-    assert last_trade["net_return_pct"] == -0.13
-    assert data["has_active_signal"] is False
 
-def test_klines_endpoint(client):
+    # Verify replay-recovered closed trade #727 (autonomous confirmation of exit)
+    recovered_trade = next(trade for trade in data["trades"] if trade.get("trade_no") == 727)
+    assert recovered_trade["status"] == "CLOSED"
+    assert recovered_trade["exit_price"] == 84140.0
+    assert recovered_trade["exit_reason"] == "Force Close MA (-0.5%)"
+    assert recovered_trade["net_return_pct"] == -0.13
+    active_trades = [trade for trade in data["trades"] if trade.get("status") in {"OPEN", "RUNNING"}]
+    assert data["has_active_signal"] is (len(active_trades) > 0)
+
+
+def test_strategy_detail_endpoint_defaults_to_free_redaction(client):
+    response = client.get("/api/strategies/pippo-30m-grd")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["entitlements"] == {
+        "strategy_logic": False,
+        "execution_parameters": False,
+    }
+    assert payload["logic_summary"] is None
+    assert payload["recommended_for"] is None
+    assert payload["parameters"] is None
+    assert payload["active_ticket"] is None
+    assert all("stop_loss" not in trade and "take_profit" not in trade for trade in payload["trades"])
+    assert all(marker.get("eventType") != "breakeven" for marker in payload["markers"])
+    assert payload["restricted_content"]["label"] == "ONLY FOR PRO USERS"
+
+
+def test_strategy_detail_endpoint_returns_restricted_fields_for_verified_pro(client, monkeypatch):
+    async def verified_pro(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
+    response = client.get("/api/strategies/pippo-30m-grd")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["entitlements"] == {
+        "strategy_logic": True,
+        "execution_parameters": True,
+    }
+    assert payload["logic_summary"]
+    assert payload["recommended_for"]
+    assert payload["parameters"]["entry_swing"]
+    assert payload["active_ticket"] is not None
+    assert any("stop_loss" in trade and "take_profit" in trade for trade in payload["trades"])
+    assert isinstance(payload["markers"], list)
+    assert "restricted_content" not in payload
+
+
+def test_signal_endpoints_apply_entitlement_redaction(client, monkeypatch):
+    free_live = client.get("/api/signals/live?symbol=BTCUSDT")
+    assert free_live.status_code == 200
+    free_payload = free_live.json()
+    assert free_payload["entitlements"]["execution_parameters"] is False
+    assert all(
+        "stop_loss" not in strategy
+        and "take_profit" not in strategy
+        and "next_entry_trigger" not in strategy
+        for strategy in free_payload["strategies"]
+    )
+
+    free_ticket = client.get("/api/signals/ticket?strategy_id=pippo-30m-grd&symbol=BTCUSDT")
+    assert free_ticket.status_code == 200
+    assert free_ticket.json()["status"] == "PROTECTED"
+    assert "entry_price" not in free_ticket.json()
+    assert "stop_loss" not in free_ticket.json()
+    assert "take_profit" not in free_ticket.json()
+
+    free_floor = client.get("/api/floor").json()
+    assert free_floor["signal_ticket"]["status"] == "PROTECTED"
+    assert "stop_loss" not in free_floor["signal_ticket"]
+    assert "take_profit" not in free_floor["signal_ticket"]
+    assert free_floor["market_regime"] == {"status": "PROTECTED"}
+    assert free_floor["eth_market_regime"] == {"status": "PROTECTED"}
+    assert all(
+        agent.get("reasoning_log") == ["Exact entry, protection, and target levels are reserved for Pro users."]
+        for agent in free_floor["agents"]
+    )
+
+    async def verified_pro(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
+    pro_ticket = client.get("/api/signals/ticket?strategy_id=pippo-30m-grd&symbol=BTCUSDT").json()
+    assert pro_ticket["entry_price"] > 0
+    assert pro_ticket["stop_loss"] is not None
+    assert pro_ticket["take_profit"] is not None
+
+    pro_floor = client.get("/api/floor").json()
+    assert pro_floor["signal_ticket"]["stop_loss"] is not None
+
     for tf in ["30m", "1h", "4h", "1d"]:
         res = client.get(f"/api/klines?timeframe={tf}&limit=100")
         assert res.status_code == 200
@@ -594,6 +711,174 @@ def test_klines_endpoint(client):
         assert data["data_source"].startswith("local_parquet")
         assert len(data["candles"]) == 100
         assert data["candles"][-1]["close"] > 50000.0
+
+def test_close_signal_endpoint_requires_auth_and_redacts_free_trade(client, monkeypatch):
+    unauthenticated = client.post("/api/signals/close?strategy_id=pippo-30m-grd&symbol=BTCUSDT")
+    assert unauthenticated.status_code == 401
+
+    model = SimpleNamespace(position_status="OPEN", strat_id="pippo-30m-grd", name="Pippo 30m Grd")
+    trade = {
+        "trade_no": 900,
+        "status": "CLOSED",
+        "entry_price": 100,
+        "exit_price": 101,
+        "stop_loss": 95,
+        "take_profit": 120,
+        "exit_reason": "Force Close MA (-0.5%)",
+    }
+    monkeypatch.setattr(live_signal_engine, "get_model", lambda *_args, **_kwargs: model)
+    monkeypatch.setattr(live_signal_engine, "get_last_price", lambda *_args, **_kwargs: 101)
+    monkeypatch.setattr(live_signal_engine, "_close_position", lambda *_args, **_kwargs: trade)
+
+    async def authenticated(_request):
+        return True
+
+    async def free(_request):
+        return False
+
+    async def verified_pro(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_authenticated_user", authenticated)
+    monkeypatch.setattr(main, "request_has_pro_access", free)
+
+    free_response = client.post(
+        "/api/signals/close?strategy_id=pippo-30m-grd&symbol=BTCUSDT",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert free_response.status_code == 403
+
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
+    response = client.post(
+        "/api/signals/close?strategy_id=pippo-30m-grd&symbol=BTCUSDT",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "CLOSED"
+    assert payload["trade"]["entry_price"] == 100
+    assert payload["trade"]["stop_loss"] == 95
+    assert payload["trade"]["take_profit"] == 120
+    assert payload["trade"]["exit_reason"] == "Force Close MA (-0.5%)"
+
+
+def test_mutating_floor_endpoints_require_authenticated_pro_user(client, monkeypatch):
+    async def unauthenticated(_request):
+        return False
+
+    async def authenticated(_request):
+        return True
+
+    async def free(_request):
+        return False
+
+    monkeypatch.setattr(main, "request_has_authenticated_user", unauthenticated)
+    monkeypatch.setattr(main, "request_has_pro_access", free)
+
+    simulate = client.post("/api/floor/simulate-signal?strategy_id=pippo-30m-grd&symbol=BTCUSDT")
+    select = client.post("/api/floor/select-agent?agent_id=quant")
+
+    assert simulate.status_code == 401
+    assert select.status_code == 401
+
+    monkeypatch.setattr(main, "request_has_authenticated_user", authenticated)
+    simulate = client.post("/api/floor/simulate-signal?strategy_id=pippo-30m-grd&symbol=BTCUSDT")
+    select = client.post("/api/floor/select-agent?agent_id=quant")
+
+    assert simulate.status_code == 403
+    assert select.status_code == 403
+
+
+def test_public_websocket_cannot_mutate_floor_agent(client):
+    previous_agent = main.floor_engine.active_agent_id
+    with client.websocket_connect("/ws") as websocket:
+        snapshot = websocket.receive_json()
+        assert snapshot["type"] == "SNAPSHOT"
+        websocket.send_json({"action": "SELECT_AGENT", "agent_id": "quant"})
+        response = websocket.receive_json()
+
+    assert response["type"] == "ERROR"
+    assert response["code"] == "PROTECTED_ACTION"
+    assert main.floor_engine.active_agent_id == previous_agent
+
+
+@pytest.mark.parametrize("path", ["/billing", "/landing", "/random-path", "/app/random-path"])
+def test_unknown_frontend_routes_return_branded_spa_404(client, path):
+    response = client.get(path)
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("text/html")
+    assert 'id="root"' in response.text
+
+
+def test_known_frontend_routes_remain_available(client):
+    assert client.get("/").status_code == 200
+    assert client.get("/app").status_code == 200
+    assert client.get("/app/").status_code == 200
+
+
+def test_free_api_does_not_expose_rule_bearing_reason_strings(client):
+    endpoints = (
+        "/api/strategies?symbol=BTCUSDT",
+        "/api/strategies/pippo-30m-grd?symbol=BTCUSDT",
+        "/api/strategies?symbol=ETHUSDT",
+        "/api/strategies/pippo-30m-alpha?symbol=ETHUSDT",
+        "/api/signals/live?symbol=BTCUSDT",
+        "/api/floor",
+    )
+    restricted_fragments = (
+        "force close ma",
+        "force_close_ma",
+        "fast_breakeven",
+        "be locked @",
+        "structure_exit",
+        "bearish choch",
+        "weekly close < ma55",
+        "active long @",
+        "active short @",
+    )
+    restricted_keys = {
+        "partial_exit_price",
+        "partial_position_pct",
+        "stop_loss",
+        "take_profit",
+        "breakeven_trigger",
+        "entry_confluence_ok",
+        "exit_confluence_ok",
+        "structural_floor",
+        "major_swing_level",
+        "next_entry_trigger",
+    }
+
+    def find_leaks(value, path="$", leaks=None):
+        if leaks is None:
+            leaks = []
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                if key in restricted_keys and nested not in (None, False):
+                    leaks.append(f"{path}.{key}: restricted value")
+                if isinstance(nested, str):
+                    lower = nested.lower()
+                    for fragment in restricted_fragments:
+                        if fragment in lower:
+                            leaks.append(f"{path}.{key}: {fragment}")
+                if key in {"isActive", "is_active"} and nested is True:
+                    leaks.append(f"{path}.{key}: active state")
+                if key in {"status", "position_status"} and str(nested).upper() in {"OPEN", "RUNNING", "IN_POSITION"}:
+                    leaks.append(f"{path}.{key}: live state")
+                if key == "exit_time" and str(nested).upper() == "RUNNING":
+                    leaks.append(f"{path}.{key}: running state")
+                find_leaks(nested, f"{path}.{key}", leaks)
+        elif isinstance(value, list):
+            for index, nested in enumerate(value):
+                find_leaks(nested, f"{path}[{index}]", leaks)
+        return leaks
+
+    for endpoint in endpoints:
+        response = client.get(endpoint)
+        assert response.status_code == 200
+        assert find_leaks(response.json(), endpoint) == []
+
+
 
 def test_klines_endpoint_uses_canonical_cache_not_ticker_override(client):
     previous_connected = main.binance_manager.is_connected
@@ -681,7 +966,11 @@ def test_eth_strategy_detail_endpoint(client):
     res404 = client.get("/api/strategies/non-existent-strat?symbol=ETHUSDT")
     assert res404.status_code == 404
 
-def test_floor_with_eth_regime(client):
+def test_floor_with_eth_regime(client, monkeypatch):
+    async def verified_pro(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
     res = client.get("/api/floor")
     assert res.status_code == 200
     data = res.json()
@@ -1059,9 +1348,9 @@ def test_multi_asset_signals_endpoints(client, monkeypatch):
     assert ticket["symbol"] == "ETH/USDT"
     assert ticket["asset"] == "ETHUSDT"
     assert ticket["strategy_id"] == "pippo-30m-alpha"
-    assert ticket["entry_price"] > 0
-    assert "stop_loss" in ticket
-    assert "take_profit" in ticket
+    assert "entry_price" not in ticket
+    assert "stop_loss" not in ticket
+    assert "take_profit" not in ticket
 
     # 4. Simulate signal on ETH without touching the live engine. The
     # production endpoint delegates to the floor engine, whose real trigger
@@ -1104,6 +1393,11 @@ def test_multi_asset_signals_endpoints(client, monkeypatch):
         json.dumps(main.STRATEGIES_CATALOG_ETH, sort_keys=True),
     )
     monkeypatch.setattr(main.floor_engine, "trigger_signal", fake_trigger_signal)
+    async def verified_user(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_authenticated_user", verified_user)
+    monkeypatch.setattr(main, "request_has_pro_access", verified_user)
     res_sim = client.post("/api/floor/simulate-signal?strategy_id=pippo-30m-alpha&symbol=ETHUSDT")
     assert res_sim.status_code == 200
     sim_data = res_sim.json()

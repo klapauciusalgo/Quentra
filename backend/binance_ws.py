@@ -12,6 +12,7 @@ import time
 from typing import Set
 import websockets
 from fastapi import WebSocket
+from entitlements import redact_broadcast_message
 
 logger = logging.getLogger("binance_ws")
 logger.setLevel(logging.INFO)
@@ -82,10 +83,13 @@ class BinanceManager:
     async def broadcast(self, message: dict):
         if not self.connected_clients:
             return
+        public_message = redact_broadcast_message(message)
+        if public_message is None:
+            return
         dead_clients = set()
         for client in self.connected_clients:
             try:
-                await client.send_json(message)
+                await client.send_json(public_message)
             except Exception:
                 dead_clients.add(client)
         for dead in dead_clients:

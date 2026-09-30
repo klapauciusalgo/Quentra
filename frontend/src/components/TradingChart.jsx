@@ -1534,9 +1534,11 @@ export default function TradingChart({
                   {floor.signal_ticket.status === 'LIVE_SIGNAL' ? 'LIVE POSITION' : 'LIVE ENGINE'}:
                 </span>
                 <span className="text-apple-muted">
-                  {floor.signal_ticket.status === 'LIVE_SIGNAL'
-                    ? `${floor.signal_ticket.direction} @ ${formatPrice(floor.signal_ticket.entry_price)}`
-                    : `Active Watch (${floor.signal_ticket.direction || 'LONG'}) · Next Trigger: ${formatPrice(floor.signal_ticket.entry_price)} (${floor.signal_ticket.trigger_distance_pct >= 0 ? '+' : ''}${floor.signal_ticket.trigger_distance_pct}%)`}
+                  {floor.signal_ticket.status === 'PROTECTED'
+                    ? 'Live execution levels are available to verified Pro users.'
+                    : floor.signal_ticket.status === 'LIVE_SIGNAL'
+                      ? `${floor.signal_ticket.direction} @ ${formatPrice(floor.signal_ticket.entry_price)}`
+                      : `Active Watch (${floor.signal_ticket.direction}) · Next Trigger: ${formatPrice(floor.signal_ticket.entry_price)} (${floor.signal_ticket.trigger_distance_pct >= 0 ? '+' : ''}${floor.signal_ticket.trigger_distance_pct}%)`}
                 </span>
               </div>
             )}

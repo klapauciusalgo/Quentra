@@ -41,6 +41,11 @@ export function AuthProvider({ children }) {
       full_name: meta.full_name || meta.name || sbUser.email?.split('@')[0] || 'Trader',
       avatar_url: meta.avatar_url || meta.picture || null,
       provider: provider,
+      // Only server-managed app_metadata is exposed as a display hint. The
+      // backend remains the authorization source for every restricted API.
+      plan: sbUser.app_metadata?.plan || null,
+      subscription_status: sbUser.app_metadata?.subscription_status || null,
+      pro_expires_at: sbUser.app_metadata?.pro_expires_at || null,
       createdAt: sbUser.created_at,
     };
   };
@@ -60,10 +65,10 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      // 1. Check local demo user first
+      // 1. Restore the local demo identity only for explicit dev/QA bypass.
       if (typeof window !== 'undefined') {
         const localDemo = localStorage.getItem('quentra_demo_user');
-        if (localDemo) {
+        if (DEV_AUTH_BYPASS && localDemo) {
           try {
             const parsed = JSON.parse(localDemo);
             if (isMounted) {
@@ -74,6 +79,8 @@ export function AuthProvider({ children }) {
           } catch (e) {
             localStorage.removeItem('quentra_demo_user');
           }
+        } else if (localDemo) {
+          localStorage.removeItem('quentra_demo_user');
         }
       }
 
@@ -213,6 +220,7 @@ export function AuthProvider({ children }) {
 
   // Demo account sign-in for seamless verification / preview when Supabase is sleeping
   const loginDemoTrader = (customName = 'Quant Trader', customEmail = 'trader@quentra.io') => {
+    if (!DEV_AUTH_BYPASS) return null;
     const demoUser = createDemoUser(customName, customEmail);
     if (typeof window !== 'undefined') {
       localStorage.setItem('quentra_demo_user', JSON.stringify(demoUser));
@@ -239,7 +247,7 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     session,
-    isAuthenticated: Boolean(user),
+    isAuthenticated: DEV_AUTH_BYPASS ? Boolean(user) : Boolean(user && session),
     isLoading,
     isAuthModalOpen,
     authRedirectTarget,

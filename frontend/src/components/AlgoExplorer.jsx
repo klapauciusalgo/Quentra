@@ -41,7 +41,7 @@ export default function AlgoExplorer({
           const matchName = s.name.toLowerCase().includes(q);
           const matchShort = (s.short_name || '').toLowerCase().includes(q);
           const matchArch = (s.archetype || '').toLowerCase().includes(q);
-          const matchDesc = (s.recommended_for || '').toLowerCase().includes(q);
+          const matchDesc = (s.public_audience || '').toLowerCase().includes(q);
           if (!matchName && !matchShort && !matchArch && !matchDesc) return false;
         }
         if (archetypeFilter !== 'ALL') {
@@ -312,7 +312,7 @@ export default function AlgoExplorer({
 
                   {/* Recommended Thesis */}
                   <p className="text-xs text-apple-muted leading-relaxed mb-4 line-clamp-2">
-                    {algo.recommended_for}
+                    {algo.public_audience || 'Public strategy profile.'}
                   </p>
                 </div>
 

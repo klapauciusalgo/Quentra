@@ -18,6 +18,7 @@ import {
 import strategiesData from '../data/strategiesData.json';
 import strategiesDataEth from '../data/strategiesData_eth.json';
 import { stripLiveState } from '../utils/catalogUtils';
+import ProOnlyOverlay from './ProOnlyOverlay';
 
 /**
  * Empirical trade-by-trade compounding simulation under leverage with hard stop loss capping.
@@ -85,9 +86,11 @@ export default function RiskCalculator({
   const fallbackCatalog = stripLiveState(isEth ? strategiesDataEth : strategiesData);
   const stratList = strategies && strategies.length > 0 ? strategies : fallbackCatalog;
   const activeStrat = stratList.find((s) => s.id === selectedStrategyId) || stratList[0] || {};
+  const hasProExecution = activeStrat?.entitlements?.strategy_logic === true
+    && activeStrat?.entitlements?.execution_parameters === true;
   const isLong = activeStrat?.type !== 'SHORT';
-  const trades = activeStrat?.trades || [];
-  const hardStopPct = getHardStopPct(activeStrat);
+  const trades = hasProExecution ? (activeStrat?.trades || []) : [];
+  const hardStopPct = hasProExecution ? getHardStopPct(activeStrat) : 0;
   const benchmarkReturnPct = activeStrat?.metrics?.total_return_pct ?? 0;
   const benchmarkMaxDd = activeStrat?.metrics?.max_drawdown_pct ?? 0;
 
@@ -215,6 +218,39 @@ export default function RiskCalculator({
   
   const safetyMultiplier = currentTier.liquidationDistancePct / (hardStopPct || 1);
   const safetyGap = Math.abs(currentTier.liquidationPrice - stopLossPrice);
+
+  if (!hasProExecution) {
+    return (
+      <div className="apple-glass rounded-3xl p-5 md:p-7 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-apple-blue/15 border border-apple-blue/30 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-apple-cyan" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-apple-text tracking-tight">
+              Leverage & Liquidation Safety Architecture
+            </h3>
+            <p className="text-xs text-apple-muted mt-0.5">
+              Strategy-specific risk simulation is protected until backend Pro entitlement is verified.
+            </p>
+          </div>
+        </div>
+        <ProOnlyOverlay
+          locked
+          description="Unlock strategy-specific leverage, stop, liquidation, and compounding calculations."
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            {['Execution risk model', 'Liquidation buffer', 'Compounding projection'].map((label) => (
+              <div key={label} className="rounded-2xl border border-black/[0.06] dark:border-white/[0.06] p-4">
+                <div className="text-apple-dim uppercase text-[10px] tracking-wider">{label}</div>
+                <div className="mt-2 text-apple-text font-semibold">PROTECTED</div>
+              </div>
+            ))}
+          </div>
+        </ProOnlyOverlay>
+      </div>
+    );
+  }
 
   return (
     <div className="apple-glass rounded-3xl p-5 md:p-7 space-y-6">

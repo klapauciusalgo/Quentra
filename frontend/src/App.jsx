@@ -16,19 +16,26 @@ import {
   reconcileClosedTrades,
 } from './utils/notificationUtils';
 import { stripLiveState } from './utils/catalogUtils';
+import { stripProContent } from './utils/proAccess';
 import strategiesData from './data/strategiesData.json';
 import strategiesDataEth from './data/strategiesData_eth.json';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AuthModal from './components/AuthModal';
+import NotFoundPage from './components/NotFoundPage';
+
+const getRouteMode = (pathname = '/') => {
+  const normalizedPath = pathname.replace(/\/+$/, '') || '/';
+  if (normalizedPath === '/app') return 'dashboard';
+  if (normalizedPath === '/' || normalizedPath === '/index.html') return 'landing';
+  return 'not-found';
+};
 
 // Minimal market regime and session state
 const SIGNAL_NOTIFICATIONS_STORAGE_KEY = 'quentra.signal-notifications.v1';
 
 const DEFAULT_FLOOR_STATE = {
   market_regime: {
-    status: 'MACRO_DISCOUNT',
-    weekly_ma55: 82654,
-    distance_pct: -6.5,
+    status: 'PROTECTED',
   },
   session: {
     name: 'London / New York Overlap',
@@ -38,7 +45,24 @@ const DEFAULT_FLOOR_STATE = {
 };
 
 function TradingApp() {
-  const { isAuthenticated, isLoading, openAuthModal } = useAuth();
+  const { isAuthenticated, isLoading, openAuthModal, session, user } = useAuth();
+  const authTokenRef = useRef(null);
+
+  const authIdentity = session?.user?.id || user?.id || null;
+  const authBoundaryKey = [
+    authIdentity || 'anonymous',
+    session?.access_token || 'no-session',
+    user?.plan || 'free',
+    user?.subscription_status || 'unknown',
+    user?.pro_expires_at || 'no-expiry',
+  ].join(':');
+  const notificationStorageKey = authIdentity
+    ? `${SIGNAL_NOTIFICATIONS_STORAGE_KEY}.${authIdentity}`
+    : null;
+
+  useEffect(() => {
+    authTokenRef.current = session?.access_token || null;
+  }, [session?.access_token]);
 
   const [selectedAsset, setSelectedAsset] = useState('BTCUSDT');
   const selectedAssetRef = useRef('BTCUSDT');
@@ -92,11 +116,10 @@ function TradingApp() {
   });
   const [timeframe, setTimeframe] = useState('1h');
   
-  // Primary View Mode: 'landing' (Product Overview) | 'dashboard' (Execution Platform)
+  // Primary View Mode: landing, dashboard, or not-found.
   const [viewMode, setViewMode] = useState(() => {
     if (typeof window !== 'undefined') {
-      const p = window.location.pathname;
-      if (p.startsWith('/app')) return 'dashboard';
+      return getRouteMode(window.location.pathname);
     }
     return 'landing';
   });
@@ -111,17 +134,10 @@ function TradingApp() {
 
   // Active Working Signals (BUY / SELL) & Notification Events
   const [activeSignals, setActiveSignals] = useState([]);
-  const [signalNotifications, setSignalNotifications] = useState(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const stored = JSON.parse(window.localStorage.getItem(SIGNAL_NOTIFICATIONS_STORAGE_KEY) || '[]');
-      return Array.isArray(stored) ? stored.slice(0, 20) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [signalNotifications, setSignalNotifications] = useState([]);
   const activeSignalsRef = useRef([]);
   const signalNotificationsRef = useRef(signalNotifications);
+  const notificationsOwnerRef = useRef(null);
   const closedTradeKeysRef = useRef(new Map());
   const closedTradeNumbersRef = useRef(new Map());
   const historicalTradeNotificationKeysRef = useRef(new Set());
@@ -190,16 +206,24 @@ function TradingApp() {
   signalNotificationsRef.current = signalNotifications;
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (
+      typeof window === 'undefined'
+      || !notificationStorageKey
+      || notificationsOwnerRef.current !== notificationStorageKey
+    ) return;
     try {
+      if (signalNotifications.length === 0) {
+        window.localStorage.removeItem(notificationStorageKey);
+        return;
+      }
       window.localStorage.setItem(
-        SIGNAL_NOTIFICATIONS_STORAGE_KEY,
+        notificationStorageKey,
         JSON.stringify(signalNotifications.slice(0, 20)),
       );
     } catch {
       // Browser storage can be unavailable in private or restricted contexts.
     }
-  }, [signalNotifications]);
+  }, [signalNotifications, notificationStorageKey]);
 
   // Theme Management (Light Mode is Default)
   const [theme, setTheme] = useState(() => {
@@ -222,12 +246,13 @@ function TradingApp() {
   useEffect(() => {
     const syncRouteFromLocation = () => {
       const p = window.location.pathname;
+      const routeMode = getRouteMode(p);
       const params = new URLSearchParams(window.location.search);
       const urlStrat = params.get('strategy') || params.get('algo');
       if (urlStrat && (strategiesData || []).some((s) => s.id === urlStrat)) {
         setSelectedStrategyId(urlStrat);
       }
-      if (p.startsWith('/app')) {
+      if (routeMode === 'dashboard') {
         if (!isLoading && !isAuthenticated) {
           setViewMode('landing');
           if (window.location.pathname !== '/') {
@@ -238,6 +263,9 @@ function TradingApp() {
         }
         setViewMode('dashboard');
         document.title = 'Quentra Pro · Quantitative Trading Terminal';
+      } else if (routeMode === 'not-found') {
+        setViewMode('not-found');
+        document.title = 'Quentra Pro · Page Not Found';
       } else {
         setViewMode('landing');
         document.title = 'Quentra Pro · Quantitative Algorithmic Platform';
@@ -269,6 +297,7 @@ function TradingApp() {
   const directBinanceWsRef = useRef(null);
   const lastWsTickTimeRef = useRef(0);
   const liveRefreshIdRef = useRef(0);
+  const authBoundaryRef = useRef('anonymous');
   const selectedStrategyRef = useRef(selectedStrategyId);
   useEffect(() => {
     selectedStrategyRef.current = selectedStrategyId;
@@ -278,71 +307,129 @@ function TradingApp() {
   const refreshLiveState = async (asset, replaceCatalog = true) => {
     const symbol = asset || selectedAssetRef.current;
     const refreshId = ++liveRefreshIdRef.current;
-    const [strategiesResult, signalsResult] = await Promise.allSettled([
-      replaceCatalog ? fetch(`${API_BASE}/api/strategies?symbol=${symbol}`) : Promise.resolve(null),
-      fetch(`${API_BASE}/api/signals/live?symbol=${symbol}`),
+    const requestAuthBoundary = authBoundaryRef.current;
+    const authHeaders = authTokenRef.current
+      ? { Authorization: `Bearer ${authTokenRef.current}` }
+      : undefined;
+    const [strategiesResult, signalsResult, floorResult] = await Promise.allSettled([
+      replaceCatalog
+        ? fetch(`${API_BASE}/api/strategies?symbol=${symbol}`, { headers: authHeaders })
+        : Promise.resolve(null),
+      fetch(`${API_BASE}/api/signals/live?symbol=${symbol}`, { headers: authHeaders }),
+      fetch(`${API_BASE}/api/floor`, { headers: authHeaders }),
     ]);
     const isCurrentRefresh = () => (
-      refreshId === liveRefreshIdRef.current && selectedAssetRef.current === symbol
+      refreshId === liveRefreshIdRef.current
+      && authBoundaryRef.current === requestAuthBoundary
+      && selectedAssetRef.current === symbol
     );
 
     let catalogApplied = false;
     let fetchedCatalog = null;
+    const catalogAuthorizationFailed = replaceCatalog
+      && strategiesResult.status === 'fulfilled'
+      && [401, 403].includes(strategiesResult.value?.status);
     if (replaceCatalog && strategiesResult.status === 'fulfilled' && strategiesResult.value?.ok && isCurrentRefresh()) {
       try {
         const contentType = strategiesResult.value.headers.get('content-type') || '';
         const catalog = contentType.includes('application/json') ? await strategiesResult.value.json() : null;
         if (isCurrentRefresh() && Array.isArray(catalog) && catalog.length > 0) {
-          fetchedCatalog = catalog;
-          setStrategies(catalog);
+          const safeCatalog = catalog.map((strategy) => (
+            strategy?.entitlements?.strategy_logic === true
+              && strategy?.entitlements?.execution_parameters === true
+              ? strategy
+              : stripProContent(strategy)
+          ));
+          fetchedCatalog = safeCatalog;
+          setStrategies(safeCatalog);
           catalogSymbolRef.current = symbol;
           catalogApplied = true;
-          const selected = catalog.find((strategy) => strategy.id === selectedStrategyRef.current) || catalog[0];
+          const selected = safeCatalog.find((strategy) => strategy.id === selectedStrategyRef.current) || safeCatalog[0];
           if (selected?.timeframe) setTimeframe(selected.timeframe.toLowerCase());
         }
       } catch (error) {
         catalogApplied = false;
       }
     }
-    if (replaceCatalog && isCurrentRefresh() && !catalogApplied && catalogSymbolRef.current !== symbol) {
-      // Keep the last authoritative catalog on transient API failures. Only
-      // use the matching bundled catalog when this asset has no live catalog.
+    if (replaceCatalog && isCurrentRefresh() && !catalogApplied && (catalogSymbolRef.current !== symbol || catalogAuthorizationFailed)) {
+      // A matching 401/403 must never leave the previous Pro snapshot visible.
       const fallbackCatalog = stripLiveState(symbol === 'ETHUSDT' ? strategiesDataEth : strategiesData);
       setStrategies(fallbackCatalog);
       catalogSymbolRef.current = symbol;
     }
 
     const signalsAvailable = signalsResult.status === 'fulfilled' && Boolean(signalsResult.value?.ok);
+    const signalsAuthorizationFailed = signalsResult.status === 'fulfilled'
+      && [401, 403].includes(signalsResult.value?.status);
     if (isCurrentRefresh()) {
       setStatus((prev) => ({ ...prev, signals_available: signalsAvailable }));
+      if (signalsAuthorizationFailed) replaceActiveSignals([]);
+    }
+
+    if (floorResult.status === 'fulfilled' && floorResult.value?.ok && isCurrentRefresh()) {
+      try {
+        const floorData = await floorResult.value.json();
+        if (isCurrentRefresh() && floorData && typeof floorData === 'object') {
+          setFloor(floorData);
+        }
+      } catch {
+        // Preserve the safe current floor snapshot when the response is malformed.
+      }
+    } else if (
+      isCurrentRefresh()
+      && floorResult.status === 'fulfilled'
+      && [401, 403].includes(floorResult.value?.status)
+    ) {
+      setFloor(DEFAULT_FLOOR_STATE);
     }
 
     if (signalsAvailable && isCurrentRefresh()) {
       const data = await signalsResult.value.json();
       if (isCurrentRefresh() && Array.isArray(data?.strategies)) {
         const price = data.current_price || (symbol === 'ETHUSDT' ? data.current_eth_price : data.current_btc_price);
-        const nextSignals = data.strategies
-          .filter((strategy) => strategy.position_status === 'IN_POSITION' || strategy.position_status === 'OPEN')
-          .map((strategy) => ({
-            id: `${symbol}-${strategy.strategy_id}`,
-            asset: symbol,
-            strategy_id: strategy.strategy_id,
-            strategy_name: strategy.name,
-            timeframe: strategy.timeframe,
-            direction: strategy.direction,
-            action: strategy.direction === 'LONG' ? 'BUY' : 'SELL',
-            entry_price: strategy.entry_price || price,
-            entry_time: strategy.entry_time,
-            current_price: price,
-            floating_pnl_pct: strategy.floating_pnl_pct || 0.0,
-            stop_loss: strategy.stop_loss,
-            be_active: strategy.be_active,
-            partial_taken: strategy.partial_taken,
-            partial_exit_price: strategy.partial_exit_price,
-            take_profit: strategy.take_profit,
-            timestamp: strategy.entry_time,
-            status: 'IN_POSITION',
-          }));
+        const hasProTelemetry = data?.entitlements?.execution_parameters === true;
+        if (!hasProTelemetry) {
+          signalNotificationsRef.current = [];
+          setSignalNotifications([]);
+          closedTradeKeysRef.current.clear();
+          closedTradeNumbersRef.current.clear();
+          historicalTradeNotificationKeysRef.current.clear();
+          if (typeof window !== 'undefined' && notificationStorageKey) {
+            try {
+              window.localStorage.removeItem(notificationStorageKey);
+            } catch {
+              // In-memory state is already cleared if storage is unavailable.
+            }
+          }
+        }
+        const nextSignals = hasProTelemetry
+          ? data.strategies
+            .filter((strategy) => (
+              (strategy.position_status === 'IN_POSITION' || strategy.position_status === 'OPEN')
+              && strategy.entry_price !== undefined
+              && strategy.entry_price !== null
+            ))
+            .map((strategy) => ({
+              id: `${symbol}-${strategy.strategy_id}`,
+              asset: symbol,
+              strategy_id: strategy.strategy_id,
+              strategy_name: strategy.name,
+              timeframe: strategy.timeframe,
+              direction: strategy.direction,
+              action: strategy.direction === 'LONG' ? 'BUY' : 'SELL',
+              entry_price: strategy.entry_price,
+              entry_time: strategy.entry_time,
+              current_price: price,
+              floating_pnl_pct: strategy.floating_pnl_pct ?? null,
+              stop_loss: strategy.stop_loss,
+              be_active: strategy.be_active,
+              partial_taken: strategy.partial_taken,
+              partial_exit_price: strategy.partial_exit_price,
+              take_profit: strategy.take_profit,
+              timestamp: strategy.entry_time,
+              status: 'IN_POSITION',
+            }))
+          : [];
 
         const telemetryStrategy = data.strategies.find(
           (strategy) => strategy.strategy_id === selectedStrategyRef.current,
@@ -361,20 +448,22 @@ function TradingApp() {
               ],
             }
           : null;
-        buildHistoricalTradeNotifications(symbol, historicalStrategy).forEach((event) => {
-          if (historicalTradeNotificationKeysRef.current.has(event.event_key)) return;
-          historicalTradeNotificationKeysRef.current.add(event.event_key);
-          if (event.type === 'SIGNAL_EXIT') {
-            appendClosedTradeNotification(
-              symbol,
-              event.strategy,
-              event.strategy_id,
-              event.trade,
-            );
-          } else {
-            appendSignalNotification(event);
-          }
-        });
+        if (hasProTelemetry) {
+          buildHistoricalTradeNotifications(symbol, historicalStrategy).forEach((event) => {
+            if (historicalTradeNotificationKeysRef.current.has(event.event_key)) return;
+            historicalTradeNotificationKeysRef.current.add(event.event_key);
+            if (event.type === 'SIGNAL_EXIT') {
+              appendClosedTradeNotification(
+                symbol,
+                event.strategy,
+                event.strategy_id,
+                event.trade,
+              );
+            } else {
+              appendSignalNotification(event);
+            }
+          });
+        }
 
         const previousByStrategy = new Map(
           activeSignalsRef.current
@@ -404,12 +493,14 @@ function TradingApp() {
           }
         });
 
-        const newlyClosedTrades = reconcileClosedTrades(
-          symbol,
-          data.strategies,
-          closedTradeKeysRef.current,
-          closedTradeNumbersRef.current,
-        );
+        const newlyClosedTrades = hasProTelemetry
+          ? reconcileClosedTrades(
+            symbol,
+            data.strategies,
+            closedTradeKeysRef.current,
+            closedTradeNumbersRef.current,
+          )
+          : [];
         newlyClosedTrades.forEach((event) => {
           appendClosedTradeNotification(
             symbol,
@@ -426,6 +517,41 @@ function TradingApp() {
       }
     }
   };
+
+  useEffect(() => {
+    authBoundaryRef.current = authBoundaryKey;
+    liveRefreshIdRef.current += 1;
+
+    const symbol = selectedAssetRef.current;
+    setStrategies(stripLiveState(symbol === 'ETHUSDT' ? strategiesDataEth : strategiesData));
+    catalogSymbolRef.current = symbol;
+    setFloor(DEFAULT_FLOOR_STATE);
+    replaceActiveSignals([]);
+    setLiveKline(null);
+    setBannerAlert(null);
+    closedTradeKeysRef.current.clear();
+    closedTradeNumbersRef.current.clear();
+    historicalTradeNotificationKeysRef.current.clear();
+
+    const previousNotificationStorageKey = notificationsOwnerRef.current;
+    notificationsOwnerRef.current = notificationStorageKey;
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.removeItem(SIGNAL_NOTIFICATIONS_STORAGE_KEY);
+        if (previousNotificationStorageKey) {
+          window.localStorage.removeItem(previousNotificationStorageKey);
+        }
+      } catch {
+        // Storage cleanup is best-effort; in-memory state is still cleared below.
+      }
+    }
+    signalNotificationsRef.current = [];
+    setSignalNotifications([]);
+
+    if (isAuthenticated) {
+      refreshLiveState(symbol);
+    }
+  }, [authBoundaryKey, isAuthenticated]);
 
   // 1. Fetch initial platform data with automatic fallbacks
   useEffect(() => {
@@ -487,7 +613,10 @@ function TradingApp() {
       });
 
     // Floor state for market regime and sessions
-    fetch(`${API_BASE}/api/floor`)
+    const authHeaders = authTokenRef.current
+      ? { Authorization: `Bearer ${authTokenRef.current}` }
+      : undefined;
+    fetch(`${API_BASE}/api/floor`, { headers: authHeaders })
       .then((r) => {
         const ct = r.headers.get('content-type') || '';
         if (r.ok && ct.includes('application/json')) return r.json();
@@ -929,7 +1058,12 @@ function TradingApp() {
     if (strat?.timeframe) {
       setTimeframe(strat.timeframe.toLowerCase());
     }
-    fetch(`${API_BASE}/api/signals/ticket?strategy_id=${stratId}&symbol=${selectedAssetRef.current}`)
+    const authHeaders = authTokenRef.current
+      ? { Authorization: `Bearer ${authTokenRef.current}` }
+      : undefined;
+    fetch(`${API_BASE}/api/signals/ticket?strategy_id=${stratId}&symbol=${selectedAssetRef.current}`, {
+      headers: authHeaders,
+    })
       .then((r) => r.json())
       .then((ticket) => {
         if (ticket) {
@@ -947,11 +1081,21 @@ function TradingApp() {
 
   // Dispatch simulated test signal
   const handleSimulateSignal = () => {
-    fetch(`${API_BASE}/api/floor/simulate-signal?strategy_id=${selectedStrategyId}&symbol=${selectedAssetRef.current}`, { method: 'POST' })
-      .then((r) => r.json())
+    const authHeaders = authTokenRef.current
+      ? { Authorization: `Bearer ${authTokenRef.current}` }
+      : undefined;
+    fetch(`${API_BASE}/api/floor/simulate-signal?strategy_id=${selectedStrategyId}&symbol=${selectedAssetRef.current}`, {
+      method: 'POST',
+      headers: authHeaders,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('Simulation request failed');
+        return response.json();
+      })
       .then((data) => {
         const ticket = data.ticket;
         if (ticket) {
+          playRetroSound('signal');
           const direction = ticket.direction || 'LONG';
           const action = direction === 'LONG' ? 'BUY' : 'SELL';
           const newSig = {
@@ -986,43 +1130,9 @@ function TradingApp() {
         }
       })
       .catch(() => {
-        // Local simulation fallback
-        playRetroSound('signal');
-        const strat = strategies.find((s) => s.id === selectedStrategyId) || strategies[0];
-        const isLong = strat.type === 'LONG';
-        const action = isLong ? 'BUY' : 'SELL';
-        const simulatedAt = new Date().toISOString();
-        const newSig = {
-          id: strat.id,
-          strategy_id: strat.id,
-          strategy_name: strat.name,
-          timeframe: strat.timeframe,
-          direction: strat.type,
-          action: action,
-          entry_price: ticker.price,
-          current_price: ticker.price,
-          floating_pnl_pct: 0.0,
-          stop_loss: Math.round(ticker.price * (isLong ? 0.92 : 1.05)),
-          take_profit: Math.round(ticker.price * (isLong ? 1.75 : 0.88)),
-          entry_time: simulatedAt,
-          event_time: simulatedAt,
-          status: 'IN_POSITION',
-        };
-        replaceActiveSignals([newSig, ...activeSignalsRef.current.filter((s) => s.strategy_id !== newSig.strategy_id)]);
-        appendSignalNotification({
-          type: 'NEW_SIGNAL',
-          title: `AUTONOMOUS ${action} SIGNAL`,
-          strategy: strat.name,
-          strategy_id: strat.id,
-          direction: strat.type,
-          price: ticker.price,
-          event_time: simulatedAt,
-          event_key: `NEW_SIGNAL:${selectedAssetRef.current}:${strat.id}:${ticker.price}`,
-        });
         setBannerAlert({
-          title: `AUTONOMOUS ${action} SIGNAL DISPATCHED!`,
-          strategy: `${strat.name} @ $${Number(ticker.price || 0).toLocaleString()}`,
-          price: ticker.price,
+          title: 'SIMULATION UNAVAILABLE',
+          strategy: 'Verified Pro access is required.',
         });
         setTimeout(() => setBannerAlert(null), 6000);
       });
@@ -1032,7 +1142,13 @@ function TradingApp() {
   const handleCloseSignal = async (strategyId) => {
     playRetroSound('alert');
     try {
-      const response = await fetch(`${API_BASE}/api/signals/close?strategy_id=${encodeURIComponent(strategyId)}&symbol=${selectedAssetRef.current}`, { method: 'POST' });
+      const authHeaders = authTokenRef.current
+        ? { Authorization: `Bearer ${authTokenRef.current}` }
+        : undefined;
+      const response = await fetch(`${API_BASE}/api/signals/close?strategy_id=${encodeURIComponent(strategyId)}&symbol=${selectedAssetRef.current}`, {
+        method: 'POST',
+        headers: authHeaders,
+      });
       if (!response.ok) throw new Error('Close request failed');
       await refreshLiveState(selectedAssetRef.current);
     } catch (error) {
@@ -1132,6 +1248,10 @@ function TradingApp() {
     );
   }
 
+  if (viewMode === 'not-found') {
+    return <NotFoundPage onGoHome={handleGoToLanding} />;
+  }
+
   if (viewMode === 'landing') {
     return (
       <>
@@ -1169,7 +1289,9 @@ function TradingApp() {
           signalNotificationsRef.current = [];
           setSignalNotifications([]);
           try {
-            window.localStorage.removeItem(SIGNAL_NOTIFICATIONS_STORAGE_KEY);
+            if (notificationStorageKey) {
+              window.localStorage.removeItem(notificationStorageKey);
+            }
           } catch {
             // Browser storage can be unavailable in private or restricted contexts.
           }

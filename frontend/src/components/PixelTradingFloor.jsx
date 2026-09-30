@@ -7,6 +7,18 @@ export default function PixelTradingFloor({ floor, onSelectAgent, onSelectStrate
   const [hoveredAgent, setHoveredAgent] = useState(null);
   const activeAgentId = floor?.active_agent_id || 'trader';
   const signalTicket = floor?.signal_ticket;
+  const regime = floor?.market_regime;
+  const weeklyMa55 = Number(regime?.weekly_ma55);
+  const hasRegimeTelemetry = regime?.status !== 'PROTECTED'
+    && Number.isFinite(weeklyMa55)
+    && weeklyMa55 > 0;
+  const regimeLabel = hasRegimeTelemetry ? `$${weeklyMa55.toLocaleString()}` : 'PROTECTED';
+  const regimeDistance = hasRegimeTelemetry
+    ? `${regime.distance_pct >= 0 ? '+' : ''}${regime.distance_pct}% to MA55`
+    : 'PROTECTED';
+  const regimeBubble = hasRegimeTelemetry
+    ? `Weekly MA55 at ${regimeLabel}. Macro accumulation floor validated.`
+    : 'Macro regime telemetry is protected for verified users.';
 
   const handleAgentClick = (agentId) => {
     playRetroSound('desk_click');
@@ -63,12 +75,12 @@ export default function PixelTradingFloor({ floor, onSelectAgent, onSelectStrate
       icon: <Radio className="w-5 h-5 text-apple-orange" />,
       accentColor: 'border-apple-orange/30 text-apple-orange',
       tag: 'Regime Monitor',
-      headline: `Weekly MA55 Anchor $${Number(floor?.market_regime?.weekly_ma55 || 82654).toLocaleString()}`,
+      headline: `Weekly MA55 Anchor ${regimeLabel}`,
       metricLabel: 'Macro Discount',
-      metricValue: `${floor?.market_regime?.distance_pct || -6.5}% to MA55`,
+      metricValue: regimeDistance,
       secondaryLabel: 'Market Session',
       secondaryValue: floor?.session?.code || 'LDN / NY',
-      bubble: `Weekly MA55 at $${Number(floor?.market_regime?.weekly_ma55 || 82654).toLocaleString()}. Macro accumulation floor validated.`
+      bubble: regimeBubble
     },
     {
       id: 'risk_officer',
@@ -115,11 +127,11 @@ export default function PixelTradingFloor({ floor, onSelectAgent, onSelectStrate
         <div className="flex flex-wrap items-center gap-2.5 text-xs">
           <div className="flex items-center gap-2 bg-black/40 border border-white/[0.08] rounded-full px-3.5 py-1.5">
             <span className="text-apple-dim">Weekly MA55:</span>
-            <span className={`font-mono font-medium ${floor?.market_regime?.distance_pct >= 0 ? 'text-apple-green' : 'text-apple-orange'}`}>
-              ${Number(floor?.market_regime?.weekly_ma55 || 82654).toLocaleString()}
+            <span className={`font-mono font-medium ${hasRegimeTelemetry && regime.distance_pct >= 0 ? 'text-apple-green' : 'text-apple-orange'}`}>
+              {regimeLabel}
             </span>
             <span className="text-apple-muted tabular-nums">
-              ({floor?.market_regime?.distance_pct >= 0 ? '+' : ''}{floor?.market_regime?.distance_pct || -6.5}%)
+              {regimeDistance}
             </span>
           </div>
 

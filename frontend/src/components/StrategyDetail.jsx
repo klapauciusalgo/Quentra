@@ -3,6 +3,8 @@ import { formatPrice, formatPercent, formatDateTime, playRetroSound } from '../u
 import strategiesData from '../data/strategiesData.json';
 import strategiesDataEth from '../data/strategiesData_eth.json';
 import { stripLiveState } from '../utils/catalogUtils';
+import { useAuth } from '../context/AuthContext';
+import { stripProContent } from '../utils/proAccess';
 import { 
   X, 
   TrendingUp, 
@@ -20,6 +22,7 @@ import {
   LineChart
 } from 'lucide-react';
 import AlgoVsBtcVisualizer from './AlgoVsBtcVisualizer';
+import ProOnlyOverlay from './ProOnlyOverlay';
 
 export default function StrategyDetail({ 
   strategyId, 
@@ -28,6 +31,7 @@ export default function StrategyDetail({
   onSelectStrategy,
   selectedAsset = 'BTCUSDT'
 }) {
+  const { session } = useAuth();
   const [strategy, setStrategy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tradeFilter, setTradeFilter] = useState('ALL'); // ALL, WINS, LOSSES
@@ -35,6 +39,10 @@ export default function StrategyDetail({
   const [sortOrder, setSortOrder] = useState('DESC'); // DESC (Newest First), ASC (Oldest First)
   const [tradeSearch, setTradeSearch] = useState('');
   const [activeTab, setActiveTab] = useState('overview'); // overview, yearly, trades
+  const canRenderRestricted = Boolean(
+    strategy?.entitlements?.strategy_logic === true
+      && strategy?.entitlements?.execution_parameters === true
+  );
 
   // Keyboard accessibility: ESC key closes modal
   useEffect(() => {
@@ -50,28 +58,42 @@ export default function StrategyDetail({
   }, [isOpen, onClose]);
 
   useEffect(() => {
-    if (!strategyId || !isOpen) return;
+    if (!strategyId || !isOpen) return undefined;
+    let cancelled = false;
     setLoading(true);
+    setStrategy(null);
 
-    // Immediate baseline fallback
+    // Immediate fallback is always public-safe. Restricted content must come
+    // from the entitlement-aware backend response below.
     const catalog = stripLiveState(selectedAsset === 'ETHUSDT' ? strategiesDataEth : strategiesData);
     const localStrat = catalog.find((s) => s.id === strategyId);
-    if (localStrat) {
-      setStrategy(localStrat);
-    }
+    if (localStrat) setStrategy(stripProContent(localStrat));
 
-    fetch(`/api/strategies/${strategyId}?symbol=${selectedAsset}`)
-      .then((res) => res.json())
+    const headers = session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : undefined;
+    fetch(`/api/strategies/${strategyId}?symbol=${selectedAsset}`, { headers })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Strategy request failed: ${res.status}`);
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) throw new Error('Strategy response was not JSON');
+        return res.json();
+      })
       .then((data) => {
-        if (data && data.id) {
-          setStrategy(data);
-        }
-        setLoading(false);
+        if (cancelled || !data || !data.id) return;
+        setStrategy(data.entitlements ? data : stripProContent(data));
       })
       .catch(() => {
-        setLoading(false);
+        // Keep the public-safe fallback on transient API failures.
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
-  }, [strategyId, isOpen, selectedAsset]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [strategyId, isOpen, selectedAsset, session?.access_token]);
 
   const isLong = strategy?.type === 'LONG';
   const m = strategy?.metrics || {};
@@ -197,7 +219,7 @@ export default function StrategyDetail({
           {[
             { id: 'overview', label: 'Overview & Logic' },
             { id: 'yearly', label: 'Year-by-Year (YoY)' },
-            { id: 'trades', label: `Trade Logs (${trades.length})` },
+            { id: 'trades', label: canRenderRestricted ? `Trade Logs (${trades.length})` : 'Trade Logs · Pro' },
             { id: 'vs-btc', label: `Algo vs ${selectedAsset === 'ETHUSDT' ? 'Ethereum' : 'Bitcoin'} Price` },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
@@ -271,12 +293,30 @@ export default function StrategyDetail({
                       <FileText className="w-4 h-4" />
                       <span>Strategy Logic & Thesis</span>
                     </div>
-                    <p className="text-xs md:text-sm text-apple-text leading-relaxed">
-                      {strategy.logic_summary}
-                    </p>
-                    <div className="text-xs text-apple-muted leading-relaxed pt-1">
-                      <span className="text-apple-text font-medium">Recommended Profile:</span> {strategy.recommended_for}
-                    </div>
+                    <ProOnlyOverlay
+                      locked={!canRenderRestricted}
+                      description="Unlock the strategy thesis and proprietary multi-timeframe logic."
+                    >
+                      {canRenderRestricted ? (
+                        <>
+                          <p className="text-xs md:text-sm text-apple-text leading-relaxed">
+                            {strategy.logic_summary}
+                          </p>
+                          <div className="text-xs text-apple-muted leading-relaxed pt-1">
+                            <span className="text-apple-text font-medium">Recommended Profile:</span> {strategy.recommended_for}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-xs md:text-sm text-apple-text leading-relaxed">
+                            Proprietary multi-timeframe strategy thesis and market-structure rationale.
+                          </p>
+                          <div className="text-xs text-apple-muted leading-relaxed pt-1">
+                            <span className="text-apple-text font-medium">Recommended Profile:</span> Pro access required.
+                          </div>
+                        </>
+                      )}
+                    </ProOnlyOverlay>
                   </div>
 
                   {/* Exact Parameter Matrix */}
@@ -286,18 +326,28 @@ export default function StrategyDetail({
                       <span>Execution Parameters & Mathematical Rules</span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                      {Object.entries(params).map(([key, val]) => (
-                        <div key={key} className="flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.04] pb-2">
-                          <span className="text-apple-dim uppercase text-[11px]">
-                            {key.replace(/_/g, ' ')}
-                          </span>
-                          <span className="text-apple-text font-semibold font-mono tabular-nums text-right max-w-[260px] truncate">
-                            {String(val)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                    <ProOnlyOverlay
+                      locked={!canRenderRestricted}
+                      description="Exact parameters and mathematical execution rules are reserved for Pro users."
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        {canRenderRestricted ? Object.entries(params).map(([key, val]) => (
+                          <div key={key} className="flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.04] pb-2">
+                            <span className="text-apple-dim uppercase text-[11px]">
+                              {key.replace(/_/g, ' ')}
+                            </span>
+                            <span className="text-apple-text font-semibold font-mono tabular-nums text-right max-w-[260px] truncate">
+                              {String(val)}
+                            </span>
+                          </div>
+                        )) : ['Entry confirmation', 'Regime filter', 'Risk model', 'Exit rules'].map((label) => (
+                          <div key={label} className="flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.04] pb-2">
+                            <span className="text-apple-dim uppercase text-[11px]">{label}</span>
+                            <span className="text-apple-text font-semibold font-mono tabular-nums text-right">PROTECTED</span>
+                          </div>
+                        ))}
+                      </div>
+                    </ProOnlyOverlay>
                   </div>
                 </div>
               )}
@@ -346,8 +396,24 @@ export default function StrategyDetail({
 
               {/* TAB 3: COMPLETE TRADE HISTORY */}
               {activeTab === 'trades' && (
-                <div className="space-y-4">
-                  {/* Trade Search & Filter Bar */}
+                !canRenderRestricted ? (
+                  <div className="space-y-4">
+                    <ProOnlyOverlay
+                      locked
+                      description="Verified closed-trade logs, exact execution prices, and exit classifications are reserved for Pro users."
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                        {['Verified executions', 'Entry / exit levels', 'Exit classification'].map((label) => (
+                          <div key={label} className="rounded-2xl border border-black/[0.06] dark:border-white/[0.06] p-4">
+                            <div className="text-apple-dim uppercase text-[10px] tracking-wider">{label}</div>
+                            <div className="mt-2 text-apple-text font-semibold">PROTECTED</div>
+                          </div>
+                        ))}
+                      </div>
+                    </ProOnlyOverlay>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3 apple-glass-card rounded-2xl p-3.5">
                     
                     {/* W/L Filter */}
@@ -485,6 +551,7 @@ export default function StrategyDetail({
                     </table>
                   </div>
                 </div>
+                )
               )}
 
               {/* TAB 4: ALGO VS BITCOIN/ETHEREUM BENCHMARK VISUALIZER */}

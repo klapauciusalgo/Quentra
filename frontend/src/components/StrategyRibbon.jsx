@@ -12,6 +12,7 @@ import {
   ArrowRight,
   Sliders
 } from 'lucide-react';
+import { getStrategyExecutionRules } from '../utils/strategyRules';
 
 export function StrategySelectorBar({ 
   strategies = [], 
@@ -31,14 +32,16 @@ export function StrategySelectorBar({
   const shortStrategies = strategies.filter((s) => s.type === 'SHORT');
 
   const isEth = selectedAsset === 'ETHUSDT';
-  const defaultMa55 = isEth ? 2648.68 : 82654;
-  const rawMa55 = isEth 
-    ? (floor?.eth_market_regime?.weekly_ma55 || defaultMa55) 
-    : (floor?.market_regime?.weekly_ma55 || defaultMa55);
+  const regimeTelemetry = isEth ? floor?.eth_market_regime : floor?.market_regime;
+  const weeklyMa55 = Number(regimeTelemetry?.weekly_ma55);
+  const hasRegimeTelemetry = regimeTelemetry?.status !== 'PROTECTED'
+    && Number.isFinite(weeklyMa55)
+    && weeklyMa55 > 0;
+  const rawMa55 = hasRegimeTelemetry ? weeklyMa55 : null;
   const activePrice = currentBtcPrice || (isEth ? 2645.20 : 77379.6);
-  const distancePct = rawMa55 > 0 
-    ? Number((((activePrice - rawMa55) / rawMa55) * 100).toFixed(1)) 
-    : 0;
+  const distancePct = hasRegimeTelemetry
+    ? Number((((activePrice - rawMa55) / rawMa55) * 100).toFixed(1))
+    : null;
 
   return (
     <div className="apple-glass rounded-3xl p-4 sm:p-5 space-y-3.5">
@@ -60,11 +63,15 @@ export function StrategySelectorBar({
             <Compass className="w-3.5 h-3.5 text-apple-purple" />
             <span className="text-apple-dim hidden sm:inline">{isEth ? 'ETH' : 'BTC'} Weekly MA55:</span>
             <span className="text-apple-text font-medium tabular-nums">
-              ${Number(rawMa55).toLocaleString(undefined, { minimumFractionDigits: isEth ? 2 : 0, maximumFractionDigits: 2 })}
+              {hasRegimeTelemetry
+                ? `$${Number(rawMa55).toLocaleString(undefined, { minimumFractionDigits: isEth ? 2 : 0, maximumFractionDigits: 2 })}`
+                : 'PROTECTED'}
             </span>
-            <span className={`font-medium tabular-nums ${distancePct >= 0 ? 'text-apple-green' : 'text-apple-orange'}`}>
-              ({distancePct >= 0 ? '+' : ''}{distancePct}%)
-            </span>
+            {hasRegimeTelemetry && (
+              <span className={`font-medium tabular-nums ${distancePct >= 0 ? 'text-apple-green' : 'text-apple-orange'}`}>
+                ({distancePct >= 0 ? '+' : ''}{distancePct}%)
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -167,134 +174,6 @@ export function StrategySelectorBar({
   );
 }
 
-function getStrategyExecutionRules(strat) {
-  const sid = strat?.id;
-  const p = strat?.parameters || {};
-  switch (sid) {
-    case 'pippo-4h-original':
-      return {
-        trigger: '5-Bar Breakout',
-        triggerSub: '4H Candle Close',
-        regime: '> 4H SMA 111',
-        regimeSub: 'Filter: Bearish Standby',
-        isRegimeOk: false,
-        stopLoss: '15.0%',
-        breakeven: 'Structural CHoCH',
-        takeProfit: '75.0%',
-      };
-    case 'pippo-30m-alpha':
-      return {
-        trigger: '36-Bar Breakout',
-        triggerSub: '30M Candle Close',
-        regime: 'SMA111 & EMA50',
-        regimeSub: 'Filter: Bearish Standby',
-        isRegimeOk: false,
-        stopLoss: '5.0%',
-        breakeven: '+3.0% -> BE',
-        takeProfit: '75.0%',
-      };
-    case 'pippo-30m-new-gen':
-      return {
-        trigger: 'MA Squeeze & Dist < 0.8%',
-        triggerSub: '30M Candle Close',
-        regime: '1H MA25/50 + 4H MA111',
-        regimeSub: 'Regime: Bullish Squeeze',
-        isRegimeOk: true,
-        stopLoss: '2.0%',
-        breakeven: 'Force Close -0.5% MAs',
-        takeProfit: '20.0%',
-      };
-    case 'pippo-30m-grd':
-      return {
-        trigger: 'MA Squeeze & Dist < 0.8%',
-        triggerSub: '30M Candle Close',
-        regime: '1H MA25/50 Dist < 1.5%',
-        regimeSub: 'Regime: Bullish Squeeze',
-        isRegimeOk: true,
-        stopLoss: '2.0%',
-        breakeven: 'Force Close -0.5% MAs',
-        takeProfit: '20.0%',
-      };
-    case 'pippo-1h-enhanced':
-      return {
-        trigger: '16-Bar Breakout',
-        triggerSub: '1H Candle Close',
-        regime: '> 4H SMA 111',
-        regimeSub: 'Filter: Bearish Standby',
-        isRegimeOk: false,
-        stopLoss: '8.0%',
-        breakeven: '+5.0% -> BE',
-        takeProfit: '75.0%',
-      };
-    case 'pippo-30m-scalp':
-      return {
-        trigger: '36-Bar Breakout',
-        triggerSub: '30M Candle Close',
-        regime: 'SMA111 & EMA50',
-        regimeSub: 'Filter: Bearish Standby',
-        isRegimeOk: false,
-        stopLoss: '5.0%',
-        breakeven: '+4.0% Partial & BE',
-        takeProfit: '+4% / +75%',
-      };
-    case 'pure-macro-weekly-ma55':
-      return {
-        trigger: 'Weekly Close',
-        triggerSub: 'Sunday Midnight UTC',
-        regime: '>= Weekly MA55',
-        regimeSub: 'CASH (Below MA55)',
-        isRegimeOk: false,
-        stopLoss: '< Weekly MA55',
-        breakeven: 'Macro Wave',
-        takeProfit: 'Macro Trend',
-      };
-    case 'pippo-30m-short-v2-a':
-      return {
-        trigger: '32-Bar Breakdown',
-        triggerSub: '30M Candle Close',
-        regime: '< MA55 & < SMA111',
-        regimeSub: 'Aligned Bearish',
-        isRegimeOk: true,
-        stopLoss: '5.0%',
-        breakeven: '+1.5% drop -> BE',
-        takeProfit: '12.0%',
-      };
-    case 'pippo-30m-short-v2-b':
-      return {
-        trigger: '28-Bar Breakdown',
-        triggerSub: '30M Candle Close',
-        regime: '< Weekly MA55',
-        regimeSub: 'Aligned Bearish',
-        isRegimeOk: true,
-        stopLoss: '5.0%',
-        breakeven: '+2.5% drop -> BE',
-        takeProfit: '20.0%',
-      };
-    case 'pippo-30m-short-v2-c':
-      return {
-        trigger: '32-Bar Breakdown',
-        triggerSub: '30M (16b Rapid Exit)',
-        regime: '< MA55 & < SMA111',
-        regimeSub: 'Aligned Bearish',
-        isRegimeOk: true,
-        stopLoss: '6.0%',
-        breakeven: '+2.5% drop -> BE',
-        takeProfit: '50.0%',
-      };
-    default:
-      return {
-        trigger: p.entry_swing || p.internal_swing || 'Swing Trigger',
-        triggerSub: `${strat?.timeframe?.toUpperCase() || ''} Close`,
-        regime: p.regime_filter || 'Macro Filter',
-        regimeSub: 'Standby',
-        isRegimeOk: false,
-        stopLoss: p.hard_stop_loss || '5.0%',
-        breakeven: p.breakeven_lock || 'Lock at BE',
-        takeProfit: p.take_profit || '75.0%',
-      };
-  }
-}
-
 export function StrategyDetailCard({
   activeStrat,
   currentBtcPrice = 77300,
@@ -304,9 +183,10 @@ export function StrategyDetailCard({
   selectedAsset = 'BTCUSDT'
 }) {
   if (!activeStrat) return null;
+  const isProUser = activeStrat?.entitlements?.strategy_logic === true
+    && activeStrat?.entitlements?.execution_parameters === true;
   const isLong = activeStrat?.type === 'LONG';
   const m = activeStrat?.metrics || {};
-  const params = activeStrat?.parameters || {};
   const totalReturn = m.total_return_pct ?? activeStrat?.total_return_pct ?? 0;
   const winRate = m.win_rate_pct ?? activeStrat?.win_rate_pct ?? 0;
   const profitFactor = m.profit_factor ?? activeStrat?.profit_factor ?? 1.0;
@@ -314,8 +194,8 @@ export function StrategyDetailCard({
   const activeSignal = activeSignals.find(
     (s) => s.strategy_id === activeStrat?.id || s.id === activeStrat?.id
   );
-  const isInPosition = !!activeSignal;
-  const stratRules = getStrategyExecutionRules(activeStrat);
+  const isInPosition = isProUser && !!activeSignal;
+  const stratRules = getStrategyExecutionRules(activeStrat, isProUser);
 
   return (
     <div className="apple-glass rounded-3xl p-5 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -346,7 +226,7 @@ export function StrategyDetailCard({
             {activeStrat.name}
           </h2>
           <p className="text-xs md:text-sm text-apple-muted leading-relaxed mt-1 line-clamp-2">
-            {activeStrat.logic_summary}
+            {activeStrat.public_summary || 'Public performance profile.'}
           </p>
         </div>
 

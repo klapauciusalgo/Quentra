@@ -15,9 +15,9 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -25,6 +25,14 @@ from fastapi.staticfiles import StaticFiles
 from binance_ws import binance_manager
 from pixel_floor import floor_engine
 from catalog_storage import effective_catalog_path
+from entitlements import (
+    has_pro_access,
+    redact_floor_state,
+    redact_live_telemetry,
+    redact_live_ticket,
+    redact_strategy_payload,
+    redact_trade_payload,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("quentra_server")
@@ -411,7 +419,8 @@ async def get_status():
         "strategies_count_eth": len(STRATEGIES_CATALOG_ETH),
         "live_signal_engine": "AUTONOMOUS_ONLINE",
         "signals_available": True,
-        "macro_regime": live_signal_engine.macro_state.get("regime_description", "MACRO_DISCOUNT")
+        # Public status must not expose the live engine's proprietary regime text.
+        "macro_regime": "PROTECTED"
     }
 
 @app.get("/api/ticker")
@@ -734,9 +743,50 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
         s_copy["metrics"]["total_trades"] = s_copy["trades_count"]
     return s_copy
 
+def _request_bearer_token(request: Request) -> str | None:
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    return token.strip() or None
+
+
+async def request_verified_user(request: Request) -> Any | None:
+    """Return the Supabase user for a valid bearer token, or None."""
+    token = _request_bearer_token(request)
+    if not token:
+        return None
+
+    try:
+        from supabase_client import get_supabase
+
+        client = get_supabase()
+        if not client:
+            return None
+        response = client.auth.get_user(token)
+        user = getattr(response, "user", None)
+        if user is None and isinstance(response, dict):
+            user = response.get("user")
+        return user
+    except Exception as exc:
+        logger.debug("Supabase user verification failed closed: %s", exc)
+        return None
+
+
+async def request_has_authenticated_user(request: Request) -> bool:
+    return await request_verified_user(request) is not None
+
+
+async def request_has_pro_access(request: Request) -> bool:
+    """Resolve entitlement from a verified Supabase access token; fail closed."""
+    user = await request_verified_user(request)
+    return has_pro_access(user)
+
+
 @app.get("/api/strategies")
-async def list_strategies(symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")):
+async def list_strategies(request: Request, symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")):
     sym = symbol.upper()
+    is_pro = await request_has_pro_access(request)
     target_catalog = STRATEGIES_CATALOG_ETH if sym == "ETHUSDT" else STRATEGIES_CATALOG
 
     summaries = []
@@ -751,6 +801,8 @@ async def list_strategies(symbol: str = Query(default="BTCUSDT", description="Sy
             "category": enriched.get("category", ""),
             "archetype": enriched.get("archetype", ""),
             "risk_tier": enriched.get("risk_tier", "Moderate"),
+            "public_summary": enriched.get("public_summary", ""),
+            "public_audience": enriched.get("public_audience", ""),
             "recommended_for": enriched.get("recommended_for", ""),
             "badge": enriched.get("badge", ""),
             "metrics": enriched.get("metrics", {}),
@@ -762,40 +814,59 @@ async def list_strategies(symbol: str = Query(default="BTCUSDT", description="Sy
             "has_active_signal": enriched.get("has_active_signal", False),
             "active_ticket": enriched.get("active_ticket", None)
         }
-        summaries.append(summary)
+        summaries.append(redact_strategy_payload(summary, is_pro=is_pro))
     return summaries
 
 @app.get("/api/strategies/{strategy_id}")
-async def get_strategy_detail(strategy_id: str, symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")):
+async def get_strategy_detail(
+    request: Request,
+    strategy_id: str,
+    symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT"),
+):
     sym = symbol.upper()
     target_map = STRATEGIES_MAP_ETH if sym == "ETHUSDT" else STRATEGIES_MAP
     if strategy_id not in target_map:
         raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found for symbol {sym}")
-    return enrich_strategy_with_live(target_map[strategy_id], symbol=sym)
+    strategy = enrich_strategy_with_live(target_map[strategy_id], symbol=sym)
+    is_pro = await request_has_pro_access(request)
+    return redact_strategy_payload(strategy, is_pro=is_pro)
 
 @app.get("/api/floor")
-async def get_floor_state():
+async def get_floor_state(request: Request):
     btc_price = binance_manager.get_ticker("BTCUSDT").get("price", 77300.0)
     eth_price = binance_manager.get_ticker("ETHUSDT").get("price", 2645.20)
-    return floor_engine.get_floor_state(current_btc_price=btc_price, current_eth_price=eth_price)
+    state = floor_engine.get_floor_state(current_btc_price=btc_price, current_eth_price=eth_price)
+    is_pro = await request_has_pro_access(request)
+    return redact_floor_state(state, is_pro=is_pro)
 
 @app.post("/api/floor/select-agent")
-async def select_agent(agent_id: str = Query(...)):
+async def select_agent(request: Request, agent_id: str = Query(...)):
+    if not await request_has_authenticated_user(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not await request_has_pro_access(request):
+        raise HTTPException(status_code=403, detail="Verified Pro entitlement required")
     floor_engine.set_active_agent(agent_id)
     btc_price = binance_manager.get_ticker("BTCUSDT").get("price", 77300.0)
     eth_price = binance_manager.get_ticker("ETHUSDT").get("price", 2645.20)
     state = floor_engine.get_floor_state(current_btc_price=btc_price, current_eth_price=eth_price)
+    public_state = redact_floor_state(state, is_pro=False)
     await binance_manager.broadcast({
         "type": "FLOOR_UPDATE",
-        "floor": state
+        "floor": public_state
     })
-    return {"status": "SUCCESS", "active_agent": agent_id, "floor": state}
+    is_pro = await request_has_pro_access(request)
+    return {"status": "SUCCESS", "active_agent": agent_id, "floor": redact_floor_state(state, is_pro=is_pro)}
 
 @app.post("/api/floor/simulate-signal")
 async def simulate_signal(
+    request: Request,
     strategy_id: Optional[str] = Query(default=None),
     symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")
 ):
+    if not await request_has_authenticated_user(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not await request_has_pro_access(request):
+        raise HTTPException(status_code=403, detail="Verified Pro entitlement required")
     sym = symbol.upper()
     target_catalog = STRATEGIES_CATALOG_ETH if sym == "ETHUSDT" else STRATEGIES_CATALOG
     target_map = STRATEGIES_MAP_ETH if sym == "ETHUSDT" else STRATEGIES_MAP
@@ -814,17 +885,20 @@ async def simulate_signal(
         current_price=price,
         symbol=sym
     )
+    is_pro = await request_has_pro_access(request)
+    public_ticket = redact_live_ticket(ticket, is_pro=False)
     btc_p = binance_manager.get_ticker("BTCUSDT").get("price", 77300.0)
     eth_p = binance_manager.get_ticker("ETHUSDT").get("price", 2645.20)
     floor_state = floor_engine.get_floor_state(current_btc_price=btc_p, current_eth_price=eth_p)
+    public_floor_state = redact_floor_state(floor_state, is_pro=False)
     fmt_sym = "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT"
     
     await binance_manager.broadcast({
         "type": "NEW_SIGNAL",
         "symbol": fmt_sym,
         "asset": sym,
-        "ticket": ticket,
-        "floor": floor_state
+        "ticket": public_ticket,
+        "floor": public_floor_state
     })
     # Record to Supabase audit log if connected
     try:
@@ -840,16 +914,22 @@ async def simulate_signal(
     except Exception as e:
         logger.debug(f"Supabase signal audit skipped: {e}")
 
-    return {"message": "Signal triggered successfully", "ticket": ticket}
+    return {"message": "Signal triggered successfully", "ticket": redact_live_ticket(ticket, is_pro=is_pro)}
 
 
 @app.post("/api/signals/close")
 async def close_live_signal(
+    request: Request,
     strategy_id: str = Query(...),
     symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT"),
 ):
     """Close the real engine position requested from the signal panel."""
     from live_signal_engine import live_signal_engine
+
+    if not await request_has_authenticated_user(request):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not await request_has_pro_access(request):
+        raise HTTPException(status_code=403, detail="Verified Pro entitlement required")
 
     sym = symbol.upper()
     model = live_signal_engine.get_model(strategy_id, symbol=sym)
@@ -870,22 +950,31 @@ async def close_live_signal(
         "trade": trade,
         "autonomous": False,
     })
-    return {"status": "CLOSED", "trade": trade}
+    is_pro = await request_has_pro_access(request)
+    return {"status": "CLOSED", "trade": redact_trade_payload(trade, is_pro=is_pro)}
 
 @app.get("/api/signals/live")
-async def get_live_signals_telemetry(symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")):
-    """Returns autonomous live signal telemetry across all active strategies for the symbol"""
+async def get_live_signals_telemetry(
+    request: Request,
+    symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT"),
+):
+    """Returns entitlement-filtered autonomous live signal telemetry."""
     from live_signal_engine import live_signal_engine
-    return live_signal_engine.get_live_telemetry(symbol=symbol)
+    telemetry = live_signal_engine.get_live_telemetry(symbol=symbol)
+    is_pro = await request_has_pro_access(request)
+    return redact_live_telemetry(telemetry, is_pro=is_pro)
 
 @app.get("/api/signals/ticket")
 async def get_strategy_live_ticket(
+    request: Request,
     strategy_id: Optional[str] = Query(default=None),
     symbol: str = Query(default="BTCUSDT", description="Symbol: BTCUSDT, ETHUSDT")
 ):
-    """Returns real-time watch or execution ticket for a strategy"""
+    """Returns an entitlement-filtered real-time strategy ticket."""
     from live_signal_engine import live_signal_engine
-    return live_signal_engine.get_active_or_latest_ticket(strategy_id, symbol=symbol)
+    ticket = live_signal_engine.get_active_or_latest_ticket(strategy_id, symbol=symbol)
+    is_pro = await request_has_pro_access(request)
+    return redact_live_ticket(ticket, is_pro=is_pro)
 
 @app.get("/api/db-status")
 async def get_db_status():
@@ -912,12 +1001,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 data = json.loads(msg_text)
                 action = data.get("action")
                 if action == "SELECT_AGENT":
-                    agent_id = data.get("agent_id")
-                    floor_engine.set_active_agent(agent_id)
-                    price = binance_manager.ticker_data.get("price", 77300.0)
+                    # The public socket is intentionally read-only.  Agent selection
+                    # mutates shared floor state and must use the authenticated,
+                    # Pro-gated REST endpoint above.
                     await websocket.send_json({
-                        "type": "FLOOR_UPDATE",
-                        "floor": floor_engine.get_floor_state(price)
+                        "type": "ERROR",
+                        "code": "PROTECTED_ACTION",
+                        "message": "Agent selection requires a verified Pro request",
                     })
                 elif action == "PING":
                     await websocket.send_json({"type": "PONG", "time": binance_manager.last_tick_time})
@@ -929,7 +1019,7 @@ async def websocket_endpoint(websocket: WebSocket):
         binance_manager.unregister(websocket)
 
 # -----------------------------------------------------------------------------
-# Frontend SPA Routes (/app, /landing, /, /index.html)
+# Frontend SPA Routes (/app, /, /index.html)
 # -----------------------------------------------------------------------------
 NO_CACHE_HEADERS = {
     "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
@@ -937,35 +1027,54 @@ NO_CACHE_HEADERS = {
     "Expires": "0"
 }
 
+
+def _frontend_index_file() -> str:
+    return os.path.join(FRONTEND_DIST_DIR, "index.html")
+
+
 @app.get("/")
 @app.get("/index.html")
 async def serve_root_spa():
-    index_file = os.path.join(FRONTEND_DIST_DIR, "index.html")
+    index_file = _frontend_index_file()
     if os.path.exists(index_file):
         return FileResponse(index_file, headers=NO_CACHE_HEADERS)
     raise HTTPException(status_code=404, detail="Frontend build not found")
+
 
 @app.get("/app")
-@app.get("/app/{full_path:path}")
-async def serve_app_spa(full_path: str = ""):
-    index_file = os.path.join(FRONTEND_DIST_DIR, "index.html")
+@app.get("/app/")
+async def serve_app_spa():
+    index_file = _frontend_index_file()
     if os.path.exists(index_file):
         return FileResponse(index_file, headers=NO_CACHE_HEADERS)
     raise HTTPException(status_code=404, detail="Frontend build not found")
 
-@app.get("/landing")
-async def serve_landing_spa():
-    index_file = os.path.join(FRONTEND_DIST_DIR, "index.html")
-    if os.path.exists(index_file):
-        return FileResponse(index_file, headers=NO_CACHE_HEADERS)
-    raise HTTPException(status_code=404, detail="Frontend build not found")
 
-# -----------------------------------------------------------------------------
-# Static files mount for React Production Build
-# -----------------------------------------------------------------------------
+# Static assets are mounted explicitly so the browser can load the shell while
+# unknown browser paths fall through to the branded React 404 document below.
 if os.path.exists(FRONTEND_DIST_DIR):
-    logger.info(f"Mounting static frontend build from {FRONTEND_DIST_DIR}")
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST_DIR, html=True), name="static")
+    logger.info(f"Mounting static frontend assets from {FRONTEND_DIST_DIR}")
+    for asset_dir in ("assets", "videos", "snapshots"):
+        asset_path = os.path.join(FRONTEND_DIST_DIR, asset_dir)
+        if os.path.exists(asset_path):
+            app.mount(
+                f"/{asset_dir}",
+                StaticFiles(directory=asset_path),
+                name=f"frontend-{asset_dir}",
+            )
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_frontend_not_found(full_path: str):
+    # Preserve JSON 404s for API and WebSocket-looking paths.
+    if full_path == "api" or full_path.startswith("api/") or full_path == "ws" or full_path.startswith("ws/"):
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    index_file = _frontend_index_file()
+    if os.path.exists(index_file):
+        return FileResponse(index_file, status_code=404, headers=NO_CACHE_HEADERS)
+    raise HTTPException(status_code=404, detail="Frontend build not found")
+
 
 if __name__ == "__main__":
     import uvicorn

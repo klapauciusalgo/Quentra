@@ -22,9 +22,14 @@ def test_free_payload_removes_restricted_fields_and_declares_entitlements():
         },
         "trades": [{
             "trade_no": 1,
+            "side": "LONG",
+            "entry_time": "2026-01-01 00:00:00",
+            "exit_time": "2026-01-01 01:00:00",
             "stop_loss": 95,
             "take_profit": 120,
             "entry_price": 100,
+            "exit_price": 101,
+            "net_return_pct": 1.0,
             "exit_reason": "Force Close MA (-0.5%)",
             "reason": "Force Close MA (-0.5%)",
         }],
@@ -45,8 +50,20 @@ def test_free_payload_removes_restricted_fields_and_declares_entitlements():
 
     result = redact_strategy_payload(source, is_pro=False)
 
-    for restricted_key in ("logic_summary", "recommended_for", "parameters", "active_ticket", "trades", "markers"):
+    for restricted_key in ("logic_summary", "recommended_for", "parameters", "active_ticket", "markers"):
         assert restricted_key not in result
+    assert result["trades"] == [{
+        "trade_no": 1,
+        "side": "LONG",
+        "entry_time": "2026-01-01 00:00:00",
+        "exit_time": "2026-01-01 01:00:00",
+        "net_return_pct": 1.0,
+        "exit_reason": "Regime Exit",
+        "reason": "Regime Exit",
+        "status": "CLOSED",
+    }]
+    assert "entry_price" not in result["trades"][0]
+    assert "exit_price" not in result["trades"][0]
     assert result["entitlements"] == {
         "strategy_logic": False,
         "execution_parameters": False,
@@ -260,6 +277,14 @@ def test_free_strategy_payload_drops_open_trades_and_live_markers():
 
     result = redact_strategy_payload(source, is_pro=False)
 
-    for restricted_key in ("trades", "markers"):
-        assert restricted_key not in result
+    assert "markers" not in result
+    assert result["trades"] == [{
+        "trade_no": 1,
+        "status": "CLOSED",
+        "entry_time": "2026-01-01 00:00:00",
+        "exit_time": "2026-01-01 01:00:00",
+        "exit_reason": "Regime Exit",
+    }]
+    assert "entry_price" not in result["trades"][0]
+    assert "exit_price" not in result["trades"][0]
     assert result["has_active_signal"] is False

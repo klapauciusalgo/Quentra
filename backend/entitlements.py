@@ -38,6 +38,7 @@ PUBLIC_TRADE_KEYS = {
     "reason",
     "status",
 }
+FREE_TRADE_KEYS = PUBLIC_TRADE_KEYS - {"entry_price", "exit_price"}
 RESTRICTED_MARKER_EVENTS = {"breakeven", "stop_loss", "take_profit"}
 PUBLIC_MARKER_KEYS = {
     "time",
@@ -214,12 +215,12 @@ def _is_terminal_trade(trade: Mapping[str, Any]) -> bool:
     )
 
 
-def _redact_trade(trade: Any) -> dict[str, Any] | None:
+def _redact_trade(trade: Any, keys: set[str] = FREE_TRADE_KEYS) -> dict[str, Any] | None:
     if not isinstance(trade, Mapping) or not _is_terminal_trade(trade):
         return None
     result = {
         key: deepcopy(trade[key])
-        for key in PUBLIC_TRADE_KEYS
+        for key in keys
         if key in trade
     }
     result.setdefault("status", "CLOSED")
@@ -428,8 +429,9 @@ def redact_strategy_payload(strategy: Mapping[str, Any], is_pro: bool) -> dict[s
         result.pop("restricted_content", None)
         return result
 
-    for restricted_key in ("logic_summary", "recommended_for", "parameters", "active_ticket", "trades", "markers"):
+    for restricted_key in ("logic_summary", "recommended_for", "parameters", "active_ticket", "markers"):
         result.pop(restricted_key, None)
+    result["trades"] = _redact_trades(result.get("trades"))
     result["has_active_signal"] = False
     result["restricted_content"] = _restricted_content()
     return result

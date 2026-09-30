@@ -145,6 +145,19 @@ export default function StrategyDetail({
     });
   }, [trades, tradeFilter, yearFilter, tradeSearch, sortOrder]);
 
+  const renderExecutionPrice = (value) => {
+    if (canRenderRestricted) return value !== undefined && value !== null ? formatPrice(value) : '-';
+    return (
+      <span
+        className="inline-flex min-w-[4.5rem] justify-center rounded-md bg-black/[0.05] px-2 py-0.5 text-apple-muted blur-[4px] select-none"
+        aria-label="Protected execution price"
+        title="Exact execution price is reserved for Pro users"
+      >
+        ••••••
+      </span>
+    );
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -219,7 +232,7 @@ export default function StrategyDetail({
           {[
             { id: 'overview', label: 'Overview & Logic' },
             { id: 'yearly', label: 'Year-by-Year (YoY)' },
-            { id: 'trades', label: canRenderRestricted ? `Trade Logs (${trades.length})` : 'Trade Logs · Pro' },
+            { id: 'trades', label: `Trade Logs (${trades.length})` },
             { id: 'vs-btc', label: `Algo vs ${selectedAsset === 'ETHUSDT' ? 'Ethereum' : 'Bitcoin'} Price` },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
@@ -396,24 +409,15 @@ export default function StrategyDetail({
 
               {/* TAB 3: COMPLETE TRADE HISTORY */}
               {activeTab === 'trades' && (
-                !canRenderRestricted ? (
-                  <div className="space-y-4">
-                    <ProOnlyOverlay
-                      locked
-                      description="Verified closed-trade logs, exact execution prices, and exit classifications are reserved for Pro users."
-                    >
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                        {['Verified executions', 'Entry / exit levels', 'Exit classification'].map((label) => (
-                          <div key={label} className="rounded-2xl border border-black/[0.06] dark:border-white/[0.06] p-4">
-                            <div className="text-apple-dim uppercase text-[10px] tracking-wider">{label}</div>
-                            <div className="mt-2 text-apple-text font-semibold">PROTECTED</div>
-                          </div>
-                        ))}
-                      </div>
-                    </ProOnlyOverlay>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
+                <div className="space-y-4">
+                  {!canRenderRestricted && (
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-apple-blue/20 bg-apple-blue/[0.06] px-4 py-3 text-xs text-apple-muted">
+                      <span>
+                        Public performance view: trade outcomes remain visible while exact entry and exit prices are blurred.
+                      </span>
+                      <span className="shrink-0 font-semibold text-apple-blue">Pro unlocks exact levels</span>
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-center justify-between gap-3 apple-glass-card rounded-2xl p-3.5">
                     
                     {/* W/L Filter */}
@@ -531,10 +535,10 @@ export default function StrategyDetail({
                                   : <span className="text-apple-cyan font-semibold">Running</span>}
                               </td>
                               <td className="p-3 text-right font-mono tabular-nums text-apple-text">
-                                {formatPrice(t.entry_price)}
+                                {renderExecutionPrice(t.entry_price)}
                               </td>
                               <td className="p-3 text-right font-mono tabular-nums text-apple-text">
-                                {t.exit_price ? formatPrice(t.exit_price) : '-'}
+                                {renderExecutionPrice(t.exit_price)}
                               </td>
                               <td className={`p-3 text-right font-mono font-semibold tabular-nums ${
                                 isWin ? 'text-apple-green' : 'text-apple-red'
@@ -551,7 +555,6 @@ export default function StrategyDetail({
                     </table>
                   </div>
                 </div>
-                )
               )}
 
               {/* TAB 4: ALGO VS BITCOIN/ETHEREUM BENCHMARK VISUALIZER */}

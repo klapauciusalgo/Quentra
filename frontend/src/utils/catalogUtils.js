@@ -6,8 +6,6 @@ const PUBLIC_TRADE_KEYS = new Set([
   'type',
   'entry_time',
   'exit_time',
-  'entry_price',
-  'exit_price',
   'gross_return_pct',
   'net_return_pct',
   'exit_reason',
@@ -136,7 +134,7 @@ export function stripLiveState(catalog) {
     result.has_active_signal = false;
     result.active_ticket = null;
     result.trades = trades;
-    result.markers = markers;
+    result.markers = [];
     if (result.metrics && typeof result.metrics === 'object') {
       result.metrics = { ...result.metrics, total_trades: trades.length };
     }

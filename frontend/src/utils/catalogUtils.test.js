@@ -32,17 +32,9 @@ test('removes live positions and markers from bundled fallback catalogs', () => 
   assert.deepEqual(catalog[0].trades, [{
     trade_no: 1,
     status: 'CLOSED',
-    entry_price: 100,
-    exit_price: 101,
     exit_reason: 'Regime Exit',
   }]);
-  assert.deepEqual(catalog[0].markers, [{
-    tradeNo: 1,
-    eventType: 'exit',
-    text: 'EXIT #1',
-    reason: 'Regime Exit',
-    exitPrice: 101,
-  }]);
+  assert.deepEqual(catalog[0].markers, []);
 });
 
 test('does not mutate the imported fallback catalog', () => {

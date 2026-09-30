@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(here, '..', 'App.jsx'), 'utf8');
 const authSource = fs.readFileSync(path.join(here, '..', 'context', 'AuthContext.jsx'), 'utf8');
+const strategyDetailSource = fs.readFileSync(path.join(here, 'StrategyDetail.jsx'), 'utf8');
+const tradingChartSource = fs.readFileSync(path.join(here, 'TradingChart.jsx'), 'utf8');
+const catalogUtilsSource = fs.readFileSync(path.join(here, '..', 'utils', 'catalogUtils.js'), 'utf8');
 
 test('live refresh callbacks bind requests to the current auth boundary', () => {
   assert.match(source, /const requestAuthBoundary = authBoundaryRef\.current;/);
@@ -46,4 +49,20 @@ test('auth listener is registered before async session restoration', () => {
 test('auth listener is unsubscribed on provider unmount', () => {
   assert.match(authSource, /authSubscription\?\.unsubscribe\(\)/);
   assert.match(authSource, /return \(\) => \{[\s\S]*authSubscription\?\.unsubscribe\(\);/);
+});
+
+test('free trade logs retain safe rows while protecting execution prices', () => {
+  assert.match(strategyDetailSource, /Trade Logs \(\$\{trades\.length\}\)/);
+  assert.match(strategyDetailSource, /Protected execution price/);
+  assert.match(strategyDetailSource, /filteredTrades\.map\(\(t\) =>/);
+});
+
+test('client downgrade redaction never preserves entry or exit prices', () => {
+  assert.doesNotMatch(catalogUtilsSource, /'entry_price',\n\s*'exit_price'/);
+  assert.doesNotMatch(catalogUtilsSource, /PUBLIC_TRADE_KEYS = new Set\(\[([\s\S]*?)entry_price/);
+});
+
+test('free charts do not build a signal inspector from redacted trades', () => {
+  assert.match(tradingChartSource, /activeStrategy\?\.entitlements\?\.execution_parameters === true/);
+  assert.match(tradingChartSource, /const tradesList = canRenderExecutionTelemetry/);
 });

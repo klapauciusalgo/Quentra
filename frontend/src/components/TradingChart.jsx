@@ -326,7 +326,8 @@ export default function TradingChart({
   const visibleMAsRef = useRef(visibleMAs);
   visibleMAsRef.current = visibleMAs;
 
-  const tradesList = activeStrategy?.trades || [];
+  const canRenderExecutionTelemetry = activeStrategy?.entitlements?.execution_parameters === true;
+  const tradesList = canRenderExecutionTelemetry ? (activeStrategy?.trades || []) : [];
   const activeTrade = tradesList[focusedTradeIndex] || tradesList[tradesList.length - 1];
   const isStrategyLong = activeStrategy?.type === 'LONG';
 

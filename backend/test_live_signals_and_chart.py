@@ -636,8 +636,15 @@ def test_strategy_detail_endpoint_defaults_to_free_redaction(client):
         "strategy_logic": False,
         "execution_parameters": False,
     }
-    for restricted_key in ("logic_summary", "recommended_for", "parameters", "active_ticket", "trades", "markers"):
+    for restricted_key in ("logic_summary", "recommended_for", "parameters", "active_ticket", "markers"):
         assert restricted_key not in payload
+    assert payload["trades"]
+    assert all(
+        "entry_price" not in trade
+        and "exit_price" not in trade
+        and trade.get("status") not in {"OPEN", "RUNNING"}
+        for trade in payload["trades"]
+    )
     assert payload["has_active_signal"] is False
     assert payload["restricted_content"]["label"] == "ONLY FOR PRO USERS"
 

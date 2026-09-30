@@ -53,6 +53,22 @@ export function AuthProvider({ children }) {
   // Initial session restoration
   useEffect(() => {
     let isMounted = true;
+    let authSubscription = null;
+    let authEventVersion = 0;
+
+    const applySession = (nextSession, closeModal = false) => {
+      if (!isMounted) return;
+      if (nextSession?.user) {
+        setSession(nextSession);
+        setUser(parseUserData(nextSession.user));
+        setIsLoading(false);
+        if (closeModal) setIsAuthModalOpen(false);
+      } else {
+        setSession(null);
+        setUser(null);
+        setIsLoading(false);
+      }
+    };
 
     async function initAuth() {
       // Explicit local-only bypass for development and authenticated UI QA.
@@ -84,53 +100,66 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // 2. Check Supabase session
-      if (supabase) {
-        try {
-          const { data: { session: currentSession }, error } = await supabase.auth.getSession();
-          if (!error && currentSession && currentSession.user) {
-            if (isMounted) {
-              setSession(currentSession);
-              setUser(parseUserData(currentSession.user));
-            }
-          }
-        } catch (err) {
-          console.warn('Supabase getSession error (possible offline/paused origin):', err);
-        }
+      // 2. Subscribe before restoring the session so sign-in/sign-out events
+      // cannot be lost while the cached session and refreshed JWT are loading.
+      if (!supabase) {
+        if (isMounted) setIsLoading(false);
+        return;
+      }
 
-        // Listen for auth state changes (OAuth redirect callbacks, token refresh, sign-in/out)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-          if (!isMounted) return;
-
-          if (newSession && newSession.user) {
-            setSession(newSession);
-            const parsed = parseUserData(newSession.user);
-            setUser(parsed);
-            setIsLoading(false);
-
-            // If an auth modal was open awaiting authentication, close it
-            setIsAuthModalOpen(false);
-          } else if (event === 'SIGNED_OUT') {
-            setSession(null);
-            setUser(null);
-            setIsLoading(false);
+      let subscription;
+      try {
+        const authState = supabase.auth.onAuthStateChange((event, newSession) => {
+          authEventVersion += 1;
+          if (event === 'SIGNED_OUT') {
+            applySession(null);
+          } else if (newSession?.user) {
+            applySession(newSession, true);
           }
         });
-
+        subscription = authState?.data?.subscription || null;
+      } catch (err) {
+        console.warn('Supabase auth listener setup failed:', err);
         if (isMounted) setIsLoading(false);
-
-        return () => {
-          subscription?.unsubscribe();
-        };
-      } else {
-        if (isMounted) setIsLoading(false);
+        return;
       }
+      authSubscription = subscription;
+      const restoreVersion = authEventVersion;
+
+      try {
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+        if (!error && currentSession?.user) {
+          // A backend/admin entitlement change does not necessarily update the
+          // cached browser JWT or its app_metadata. Refresh once on restore so
+          // newly granted Pro access is reflected before protected API calls.
+          let resolvedSession = currentSession;
+          try {
+            const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+            if (!refreshError && refreshedSession?.user) {
+              resolvedSession = refreshedSession;
+            }
+          } catch (refreshError) {
+            console.warn('Supabase session refresh skipped:', refreshError);
+          }
+
+          // Do not overwrite a newer sign-in/sign-out event that arrived while
+          // the session refresh was in flight.
+          if (authEventVersion === restoreVersion) {
+            applySession(resolvedSession);
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase getSession error (possible offline/paused origin):', err);
+      }
+
+      if (isMounted) setIsLoading(false);
     }
 
     initAuth();
 
     return () => {
       isMounted = false;
+      authSubscription?.unsubscribe();
     };
   }, []);
 

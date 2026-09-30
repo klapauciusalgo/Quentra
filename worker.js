@@ -5,9 +5,6 @@
  * with full multi-asset (BTCUSDT & ETHUSDT) support.
  */
 
-import strategiesData from './frontend/src/data/strategiesData.json';
-import strategiesDataEth from './frontend/src/data/strategiesData_eth.json';
-
 const CORS_HEADERS = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
@@ -91,53 +88,23 @@ export default {
         ticker_status: "EDGE_FALLBACK",
         signals_available: false,
         supported_assets: ["BTCUSDT", "ETHUSDT"],
-        strategies_count: strategiesData.length,
-        strategies_count_eth: strategiesDataEth.length,
+        data_source: env && env.BACKEND_URL ? "backend_proxy" : "unavailable",
       }), { headers: CORS_HEADERS });
     }
 
-    // 3. Edge handler: /api/floor
-    if (url.pathname === '/api/floor') {
+    // Strategy and floor state are authoritative backend data. Never serve
+    // static catalogs or regime telemetry from the edge: that would bypass
+    // entitlement redaction and can expose proprietary content when the
+    // backend is down.
+    if (
+      url.pathname === '/api/floor'
+      || url.pathname === '/api/strategies'
+      || url.pathname.startsWith('/api/strategies/')
+    ) {
       return new Response(JSON.stringify({
-        market_regime: {
-          status: 'MACRO_DISCOUNT',
-          weekly_ma55: 82654,
-          distance_pct: -6.5,
-          summary: 'Weekly Close vs MA55 Macro Horizon',
-        },
-        eth_market_regime: {
-          status: 'BULLISH_RECOVERY',
-          weekly_ma55: 2648.68,
-          distance_pct: -0.1,
-          summary: 'ETH Weekly Close vs MA55 Macro Horizon',
-        },
-        session: {
-          name: 'London / New York Overlap (Peak Volume)',
-          active: true,
-          code: 'LDN_NY',
-        },
-      }), { headers: CORS_HEADERS });
-    }
-
-    // 4. Edge handler: /api/strategies
-    if (url.pathname === '/api/strategies') {
-      const sym = (url.searchParams.get('symbol') || 'BTCUSDT').toUpperCase();
-      const catalog = sym === 'ETHUSDT' ? strategiesDataEth : strategiesData;
-      return new Response(JSON.stringify(catalog), { headers: CORS_HEADERS });
-    }
-
-    if (url.pathname.startsWith('/api/strategies/')) {
-      const stratId = url.pathname.replace('/api/strategies/', '').trim();
-      const sym = (url.searchParams.get('symbol') || 'BTCUSDT').toUpperCase();
-      const catalog = sym === 'ETHUSDT' ? strategiesDataEth : strategiesData;
-      const found = catalog.find((s) => s.id === stratId);
-      if (found) {
-        return new Response(JSON.stringify(found), { headers: CORS_HEADERS });
-      }
-      return new Response(JSON.stringify({ error: `Strategy ${stratId} not found` }), {
-        status: 404,
-        headers: CORS_HEADERS,
-      });
+        error: 'Authoritative backend is unavailable',
+        code: 'BACKEND_UNAVAILABLE',
+      }), { status: 503, headers: CORS_HEADERS });
     }
 
     // 5. Edge handler: /api/ticker (Multi-asset resilient live price aggregator)

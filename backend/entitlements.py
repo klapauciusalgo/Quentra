@@ -428,17 +428,8 @@ def redact_strategy_payload(strategy: Mapping[str, Any], is_pro: bool) -> dict[s
         result.pop("restricted_content", None)
         return result
 
-    result["logic_summary"] = None
-    result["recommended_for"] = None
-    result["parameters"] = None
-    result["active_ticket"] = None
+    for restricted_key in ("logic_summary", "recommended_for", "parameters", "active_ticket", "trades", "markers"):
+        result.pop(restricted_key, None)
     result["has_active_signal"] = False
-    result["trades"] = _redact_trades(result.get("trades"))
-    allowed_trade_numbers = {
-        str(trade.get("trade_no"))
-        for trade in result["trades"]
-        if trade.get("trade_no") is not None
-    }
-    result["markers"] = _redact_markers(result.get("markers"), allowed_trade_numbers)
     result["restricted_content"] = _restricted_content()
     return result

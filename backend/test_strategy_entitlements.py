@@ -45,9 +45,8 @@ def test_free_payload_removes_restricted_fields_and_declares_entitlements():
 
     result = redact_strategy_payload(source, is_pro=False)
 
-    assert result["logic_summary"] is None
-    assert result["recommended_for"] is None
-    assert result["parameters"] is None
+    for restricted_key in ("logic_summary", "recommended_for", "parameters", "active_ticket", "trades", "markers"):
+        assert restricted_key not in result
     assert result["entitlements"] == {
         "strategy_logic": False,
         "execution_parameters": False,
@@ -56,15 +55,7 @@ def test_free_payload_removes_restricted_fields_and_declares_entitlements():
         "reason": "pro_only",
         "label": "ONLY FOR PRO USERS",
     }
-    assert result["active_ticket"] is None
-    assert "stop_loss" not in result["trades"][0]
-    assert "take_profit" not in result["trades"][0]
-    assert result["trades"][0]["exit_reason"] == "Regime Exit"
-    assert result["trades"][0]["reason"] == "Regime Exit"
-    assert result["markers"][0]["text"] == "EXIT #1"
-    assert result["markers"][0]["reason"] == "Regime Exit"
-    assert "Force Close MA" not in result["markers"][0]["text"]
-    assert result["markers"][1:] == []
+    assert result["has_active_signal"] is False
     assert source["parameters"] == {"entry_swing": "36 bars"}
 
 
@@ -269,10 +260,6 @@ def test_free_strategy_payload_drops_open_trades_and_live_markers():
 
     result = redact_strategy_payload(source, is_pro=False)
 
-    assert [trade["trade_no"] for trade in result["trades"]] == [1]
-    assert all(str(trade.get("status", "")).upper() not in {"OPEN", "RUNNING"} for trade in result["trades"])
-    assert [marker.get("tradeNo") for marker in result["markers"]] == [1, 1]
-    assert all(marker.get("isActive") is not True for marker in result["markers"])
-    assert all(str(marker.get("status", "")).upper() != "OPEN" for marker in result["markers"])
-    assert all("ACTIVE LONG" not in str(marker.get("text", "")) for marker in result["markers"])
-    assert all("Structure_Exit" not in str(marker.get("text", "")) for marker in result["markers"])
+    for restricted_key in ("trades", "markers"):
+        assert restricted_key not in result
+    assert result["has_active_signal"] is False

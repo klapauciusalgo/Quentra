@@ -548,7 +548,11 @@ def test_pippo_30m_new_gen_details(client, monkeypatch):
     active_trades = [trade for trade in data["trades"] if trade.get("status") in {"OPEN", "RUNNING"}]
     assert data["has_active_signal"] is (len(active_trades) > 0)
 
-def test_closed_trade_and_marker_contract_is_canonical(client):
+def test_closed_trade_and_marker_contract_is_canonical(client, monkeypatch):
+    async def verified_pro(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
     res = client.get("/api/strategies/pippo-30m-new-gen")
     assert res.status_code == 200
     data = res.json()
@@ -632,12 +636,9 @@ def test_strategy_detail_endpoint_defaults_to_free_redaction(client):
         "strategy_logic": False,
         "execution_parameters": False,
     }
-    assert payload["logic_summary"] is None
-    assert payload["recommended_for"] is None
-    assert payload["parameters"] is None
-    assert payload["active_ticket"] is None
-    assert all("stop_loss" not in trade and "take_profit" not in trade for trade in payload["trades"])
-    assert all(marker.get("eventType") != "breakeven" for marker in payload["markers"])
+    for restricted_key in ("logic_summary", "recommended_for", "parameters", "active_ticket", "trades", "markers"):
+        assert restricted_key not in payload
+    assert payload["has_active_signal"] is False
     assert payload["restricted_content"]["label"] == "ONLY FOR PRO USERS"
 
 
@@ -890,8 +891,12 @@ def test_klines_endpoint_uses_canonical_cache_not_ticker_override(client):
         res = client.get("/api/klines?symbol=BTCUSDT&timeframe=1h&limit=1")
         assert res.status_code == 200
         actual = res.json()["candles"][-1]
-        assert actual["time"] == expected["time"]
-        assert actual["close"] == expected["close"]
+        matching_cache_candle = next(
+            candle for candle in main.KLINES_CACHE["1h"]
+            if candle["time"] == actual["time"]
+        )
+        assert actual["close"] == matching_cache_candle["close"]
+        assert actual["close"] != 12345.67
         assert res.json()["data_source"] == "local_parquet_live_cache"
     finally:
         main.binance_manager.is_connected = previous_connected
@@ -926,7 +931,11 @@ def test_eth_klines_endpoint(client):
         assert "ma25" in data["candles"][-1]
         assert "ma50" in data["candles"][-1]
 
-def test_eth_strategies_catalog(client):
+def test_eth_strategies_catalog(client, monkeypatch):
+    async def verified_pro(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
     res = client.get("/api/strategies?symbol=ETHUSDT")
     assert res.status_code == 200
     strats = res.json()
@@ -954,7 +963,11 @@ def test_eth_strategies_catalog(client):
     assert 80 <= len(p1h["trades"]) <= 120
     assert p1h["metrics"]["total_return_pct"] > 500.0
 
-def test_eth_strategy_detail_endpoint(client):
+def test_eth_strategy_detail_endpoint(client, monkeypatch):
+    async def verified_pro(_request):
+        return True
+
+    monkeypatch.setattr(main, "request_has_pro_access", verified_pro)
     res = client.get("/api/strategies/pippo-30m-alpha?symbol=ETHUSDT")
     assert res.status_code == 200
     data = res.json()

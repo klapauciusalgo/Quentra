@@ -22,6 +22,7 @@ import strategiesDataEth from './data/strategiesData_eth.json';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AuthModal from './components/AuthModal';
 import NotFoundPage from './components/NotFoundPage';
+import Footer from './components/Footer';
 
 const getRouteMode = (pathname = '/') => {
   const normalizedPath = pathname.replace(/\/+$/, '') || '/';
@@ -1462,19 +1463,7 @@ function TradingApp() {
         selectedAsset={selectedAsset}
       />
 
-      {/* Footer */}
-      <footer className="border-t border-apple-border bg-apple-surface/60 backdrop-blur-md py-6 px-4 sm:px-6 text-xs text-apple-muted transition-colors duration-200">
-        <div className="max-w-[1500px] mx-auto flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2 h-2 rounded-full bg-apple-green shadow-[0_0_6px_rgba(48,209,88,0.7)]" />
-            <span className="font-semibold text-apple-text tracking-tight">Quentra Pro</span>
-            <span className="text-apple-dim">/ Quantitative Trading Infrastructure</span>
-          </div>
-          <div className="flex items-center gap-4 text-apple-dim">
-            <span>Developed by i_setyawans - Crypto Algo Enthusiast</span>
-          </div>
-        </div>
-      </footer>
+      <Footer status={status} />
 
       {/* Auth Modal for Re-Authentication or Session Expiration */}
       <AuthModal onSuccess={(target) => handleEnterDashboard(target)} />

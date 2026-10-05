@@ -31,6 +31,7 @@ import {
 import strategiesData from '../data/strategiesData.json';
 import { STRATEGY_BRANDING } from '../utils/strategyBranding.js';
 import { useAuth } from '../context/AuthContext';
+import Footer from './Footer';
 
 export default function LandingPage({ 
   ticker = { price: 77300, change_24h_pct: 0.5 }, 
@@ -965,19 +966,7 @@ export default function LandingPage({
         </div>
       </section>
 
-      {/* 9. Minimal Institutional Footer */}
-      <footer className="border-t border-apple-border bg-apple-surface/40 py-8 px-4 sm:px-6 text-xs text-apple-muted">
-        <div className="max-w-[1500px] mx-auto flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-apple-green" />
-            <span className="font-semibold text-apple-text">Quentra Pro</span>
-            <span className="text-apple-dim">/ Developed by i_setyawans · Crypto Algo Enthusiast</span>
-          </div>
-          <div className="text-apple-dim text-[11px]">
-            Quantitative Algorithmic Platform · All metrics calibrated on historical tick data.
-          </div>
-        </div>
-      </footer>
+      <Footer status={status} onLaunch={handleLaunch} />
 
       {/* Snapshot Preview Modal */}
       {selectedPreviewImage && (

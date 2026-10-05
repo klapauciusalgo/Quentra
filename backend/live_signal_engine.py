@@ -161,6 +161,116 @@ def is_open_trade_record(trade: dict) -> bool:
     exit_time = str(trade.get("exit_time", "")).upper()
     return status == "RUNNING" or status.startswith("OPEN") or "RUNNING" in exit_time
 
+
+def _trade_number(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _normalized_trade_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.replace(" UTC", "").strip()
+    try:
+        return round(float(value), 8)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _trade_ledger_identity(trade: dict) -> tuple:
+    """Return a stable identity for terminal or active ledger rows."""
+    side = str(trade.get("side") or trade.get("type") or "").upper()
+    if is_open_trade_record(trade):
+        return (
+            "OPEN",
+            _normalized_trade_value(trade.get("entry_time")),
+            _normalized_trade_value(trade.get("entry_price")),
+            side,
+        )
+    return (
+        "TERMINAL",
+        _normalized_trade_value(trade.get("entry_time")),
+        _normalized_trade_value(trade.get("exit_time")),
+        _normalized_trade_value(trade.get("entry_price")),
+        _normalized_trade_value(trade.get("exit_price")),
+        side,
+    )
+
+
+def _deduplicate_trade_ledger_details(
+    trades: List[dict],
+    markers: Optional[List[dict]] = None,
+) -> tuple[List[dict], List[dict], set[int]]:
+    """Canonicalize ledger rows and remap their chart markers."""
+    groups: dict[tuple, list[dict]] = {}
+    for trade in trades or []:
+        if isinstance(trade, dict):
+            groups.setdefault(_trade_ledger_identity(trade), []).append(trade)
+
+    canonical: list[dict] = []
+    trade_no_map: dict[int, int] = {}
+    duplicate_trade_numbers: set[int] = set()
+    for group in groups.values():
+        winner = min(
+            group,
+            key=lambda trade: (
+                _trade_number(trade.get("trade_no")) == 0,
+                _trade_number(trade.get("trade_no")) or 10**18,
+            ),
+        )
+        canonical_trade = dict(winner)
+        canonical_no = _trade_number(canonical_trade.get("trade_no"))
+        for trade in group:
+            source_no = _trade_number(trade.get("trade_no"))
+            if source_no:
+                trade_no_map[source_no] = canonical_no or source_no
+                if source_no != canonical_no:
+                    duplicate_trade_numbers.add(source_no)
+            for key, value in trade.items():
+                if canonical_trade.get(key) is None and value is not None:
+                    canonical_trade[key] = value
+        canonical.append(canonical_trade)
+
+    canonical.sort(key=lambda trade: _trade_number(trade.get("trade_no")))
+    valid_trade_numbers = {
+        _trade_number(trade.get("trade_no"))
+        for trade in canonical
+        if _trade_number(trade.get("trade_no"))
+    }
+    remapped_markers: list[dict] = []
+    for marker in markers or []:
+        if not isinstance(marker, dict):
+            continue
+        marker_copy = dict(marker)
+        marker_no = _trade_number(marker_copy.get("tradeNo"))
+        if marker_no:
+            mapped_no = trade_no_map.get(marker_no)
+            if mapped_no:
+                marker_copy["tradeNo"] = mapped_no
+            elif marker_no not in valid_trade_numbers:
+                continue
+        remapped_markers.append(marker_copy)
+
+    return canonical, deduplicate_markers(remapped_markers), duplicate_trade_numbers
+
+
+def deduplicate_trade_ledger(trades: List[dict]) -> tuple[List[dict], set[int]]:
+    """Collapse duplicate lifecycle rows, retaining the lowest trade number."""
+    canonical, _, duplicate_trade_numbers = _deduplicate_trade_ledger_details(trades)
+    return canonical, duplicate_trade_numbers
+
+
+def canonicalize_trade_ledger(
+    trades: List[dict],
+    markers: Optional[List[dict]] = None,
+) -> tuple[List[dict], List[dict], set[int]]:
+    """Canonicalize trades and markers together at a lifecycle boundary."""
+    return _deduplicate_trade_ledger_details(trades, markers)
+
+
 def compute_swings_arr(high_arr: np.ndarray, low_arr: np.ndarray, len_p: int):
     n = len(high_arr)
     top = np.zeros(n)
@@ -472,6 +582,26 @@ class LiveSignalEngine:
     def get_last_price(self, symbol: str = "BTCUSDT") -> float:
         return self.last_price_eth if symbol.upper() == "ETHUSDT" else self.last_price
 
+    def _canonicalize_runtime_ledger(self, symbol: str = "BTCUSDT") -> bool:
+        """Repair duplicate trade rows and remap markers for every strategy."""
+        sym = symbol.upper()
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(backend_dir)
+        runtime_path = bootstrap_runtime_catalog(sym, project_root)
+        changed = False
+        with locked_json_catalog(runtime_path) as strategies:
+            for strategy in strategies:
+                trades = list(strategy.get("trades", []) or [])
+                markers = list(strategy.get("markers", []) or [])
+                canonical_trades, canonical_markers, _ = canonicalize_trade_ledger(trades, markers)
+                if canonical_trades != trades or canonical_markers != markers:
+                    strategy["trades"] = canonical_trades
+                    strategy["markers"] = canonical_markers
+                    changed = True
+        if changed:
+            logger.warning("[LEDGER-REPAIR] Canonicalized duplicate trade rows for %s", sym)
+        return changed
+
     def initialize_with_parquets(self, parquet_dfs: dict, symbol: str = "BTCUSDT"):
         """Warm up engine with historical parquet bars and sync initial state for the given asset."""
         sym = symbol.upper()
@@ -495,6 +625,7 @@ class LiveSignalEngine:
             # Recalculate macro state
             self._update_macro_indicators(sym)
             
+            self._canonicalize_runtime_ledger(sym)
             # Synchronize active open trades from recent history
             self.sync_active_positions(sym)
 
@@ -1727,7 +1858,15 @@ class LiveSignalEngine:
                     strat["has_active_signal"] = False
                     strat["active_ticket"] = None
 
-                    trades = strat.get("trades", [])
+                    trades = list(strat.get("trades", []) or [])
+                    markers = list(strat.get("markers", []) or [])
+                    canonical_trades, canonical_markers, _ = canonicalize_trade_ledger(trades, markers)
+                    if canonical_trades != trades or canonical_markers != markers:
+                        strat["trades"] = canonical_trades
+                        strat["markers"] = canonical_markers
+                        trades = canonical_trades
+                        markers = canonical_markers
+                        updated_any = True
                     matching_trade = None
                     for t in reversed(trades):
                         if is_open_trade_record(t):
@@ -1955,6 +2094,15 @@ class LiveSignalEngine:
                 return []
 
             trades = list(strategy.get("trades", []) or [])
+            markers = list(strategy.get("markers", []) or [])
+            canonical_trades, canonical_markers, _ = canonicalize_trade_ledger(
+                trades,
+                markers,
+            )
+            if len(canonical_trades) != len(trades) or len(canonical_markers) != len(markers):
+                changed = True
+            trades = canonical_trades
+            markers = canonical_markers
             by_identity = {
                 self._replayed_trade_identity(trade): trade
                 for trade in trades
@@ -1969,7 +2117,6 @@ class LiveSignalEngine:
                 ),
                 default=0,
             )
-            markers = list(strategy.get("markers", []) or [])
             persisted = []
 
             for replayed in sorted(
@@ -2082,7 +2229,15 @@ class LiveSignalEngine:
                     if not strat:
                         continue
 
-                    trades = strat.get("trades", [])
+                    trades = list(strat.get("trades", []) or [])
+                    markers = list(strat.get("markers", []) or [])
+                    canonical_trades, canonical_markers, _ = canonicalize_trade_ledger(trades, markers)
+                    if canonical_trades != trades or canonical_markers != markers:
+                        strat["trades"] = canonical_trades
+                        strat["markers"] = canonical_markers
+                        trades = canonical_trades
+                        markers = canonical_markers
+                        updated_any = True
 
                     # Check if a trade with this exact entry_time already exists
                     existing_entry = next((t for t in trades if t.get("entry_time") == model.entry_time), None)
@@ -2124,10 +2279,20 @@ class LiveSignalEngine:
 
                     # A strategy has one authoritative active position. Remove
                     # legacy duplicate OPEN/RUNNING ledger records before writing.
+                    active_trade = next(
+                        (
+                            trade for trade in trades
+                            if is_open_trade_record(trade)
+                            and trade.get("entry_time") == model.entry_time
+                            and abs(float(trade.get("entry_price", 0.0)) - float(model.entry_price)) < 0.01
+                        ),
+                        active_trade,
+                    )
                     trades[:] = [
                         trade for trade in trades
                         if not is_open_trade_record(trade) or trade is active_trade
                     ]
+                    strat["trades"] = trades
                     active_trade["status"] = "OPEN"
                     active_trade["exit_time"] = "RUNNING"
                     active_trade["is_active"] = True

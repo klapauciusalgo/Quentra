@@ -549,7 +549,7 @@ def _is_close_marker(marker: dict) -> bool:
 
 
 def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
-    from live_signal_engine import deduplicate_markers, is_open_trade_record, live_signal_engine
+    from live_signal_engine import canonicalize_trade_ledger, deduplicate_markers, is_open_trade_record, live_signal_engine
     sym = symbol.upper()
     model = live_signal_engine.get_model(s["id"], symbol=sym)
     if not model:
@@ -557,6 +557,8 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
 
     s_copy = dict(s)
     source_trades = [dict(t) for t in s.get("trades", [])]
+    source_markers = [dict(m) for m in s.get("markers", [])]
+    source_trades, source_markers, _ = canonicalize_trade_ledger(source_trades, source_markers)
     known_trade_numbers = {
         str(t.get("trade_no"))
         for t in source_trades
@@ -576,7 +578,7 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
             trade["is_active"] = False
 
     base_markers = []
-    for marker in s.get("markers", []):
+    for marker in source_markers:
         marker_trade_no = marker.get("tradeNo")
         marker_trade_key = str(marker_trade_no) if marker_trade_no is not None else None
         is_live_marker = (

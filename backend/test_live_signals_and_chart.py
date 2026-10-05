@@ -228,6 +228,93 @@ def test_replayed_valid_close_is_persisted_idempotently(tmp_path, monkeypatch):
     assert second[-1]["trade_no"] == 727
 
 
+def test_replayed_close_collapses_duplicate_trade_ledger_entries(tmp_path, monkeypatch):
+    import shutil
+    import live_signal_engine as engine_module
+    from catalog_storage import ensure_runtime_catalog, runtime_catalog_path
+
+    backend_data = tmp_path / "backend" / "data"
+    backend_data.mkdir(parents=True)
+    for filename in ("strategies.json", "strategies_eth.json"):
+        shutil.copy(REPO_ROOT / "backend" / "data" / filename, backend_data / filename)
+    runtime_path = ensure_runtime_catalog("BTCUSDT", tmp_path)
+    monkeypatch.setattr(engine_module, "__file__", str(tmp_path / "backend" / "live_signal_engine.py"))
+
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-new-gen")
+    duplicate = {
+        "trade_no": 448,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-29 23:00:00",
+        "exit_time": "2026-10-02 17:00:00",
+        "entry_price": 83759.03,
+        "exit_price": 84584.74,
+        "gross_return_pct": 0.99,
+        "net_return_pct": 0.81,
+        "exit_reason": "Force_Close_MA",
+        "status": "CLOSED",
+        "is_active": False,
+    }
+    strategy["trades"] = [
+        {
+            **duplicate,
+            "trade_no": 447,
+            "exit_reason": "Force_Close_MA",
+        },
+        duplicate,
+        {**duplicate, "trade_no": 449},
+        {**duplicate, "trade_no": 450},
+    ]
+    strategy["markers"] = [
+        {
+            "time": "2026-10-02 17:00:00",
+            "text": f"EXIT Force_Close_MA #{number}",
+            "exitPrice": 84584.74,
+            "pnlPct": 0.81,
+            "eventType": "exit",
+            "tradeNo": number,
+        }
+        for number in (447, 448, 449, 450)
+    ]
+    runtime_path.write_text(json.dumps(catalog))
+
+    engine = LiveSignalEngine()
+    model = engine.get_model("pippo-30m-new-gen", symbol="BTCUSDT")
+    replayed = {
+        **duplicate,
+        "trade_no": None,
+        "reason": "Force_Close_MA",
+    }
+    persisted = engine._persist_replayed_closed_trades(model, [replayed], "BTCUSDT")
+
+    result = json.loads(runtime_path.read_text())
+    strategy = next(item for item in result if item["id"] == "pippo-30m-new-gen")
+    matches = [
+        trade for trade in strategy["trades"]
+        if trade.get("entry_time") == duplicate["entry_time"]
+        and trade.get("exit_time") == duplicate["exit_time"]
+        and trade.get("entry_price") == duplicate["entry_price"]
+        and trade.get("exit_price") == duplicate["exit_price"]
+    ]
+    assert [trade["trade_no"] for trade in matches] == [447]
+    assert len(strategy["markers"]) == 2
+    assert {marker.get("tradeNo") for marker in strategy["markers"]} == {447}
+    assert {marker.get("eventType") for marker in strategy["markers"]} == {"entry", "exit"}
+    assert persisted[-1]["trade_no"] == 447
+
+
+def test_runtime_catalogs_have_unique_trade_identities_for_all_assets():
+    from catalog_storage import runtime_catalog_path
+    from live_signal_engine import _trade_ledger_identity
+
+    for symbol in ("BTCUSDT", "ETHUSDT"):
+        catalog = json.loads(runtime_catalog_path(symbol, REPO_ROOT).read_text())
+        for strategy in catalog:
+            identities = [_trade_ledger_identity(trade) for trade in strategy.get("trades", [])]
+            assert len(identities) == len(set(identities)), strategy["id"]
+
+
 def test_catalog_markers_match_trade_lifecycle_for_all_assets_and_strategies(client, monkeypatch):
     """Historical exits must not be rendered as sells for an open trade."""
     async def verified_pro(_request):

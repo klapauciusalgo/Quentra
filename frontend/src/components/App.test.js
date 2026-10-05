@@ -11,6 +11,11 @@ const strategyDetailSource = fs.readFileSync(path.join(here, 'StrategyDetail.jsx
 const tradingChartSource = fs.readFileSync(path.join(here, 'TradingChart.jsx'), 'utf8');
 const catalogUtilsSource = fs.readFileSync(path.join(here, '..', 'utils', 'catalogUtils.js'), 'utf8');
 
+test('terminal defaults to Novera on the chart when no strategy is in the URL', () => {
+  assert.match(source, /return 'pippo-30m-new-gen';/);
+  assert.match(source, /const \[timeframe, setTimeframe\] = useState\('30m'\);/);
+});
+
 test('live refresh callbacks bind requests to the current auth boundary', () => {
   assert.match(source, /const requestAuthBoundary = authBoundaryRef\.current;/);
   assert.doesNotMatch(source, /const requestAuthBoundary = authBoundaryKey;/);

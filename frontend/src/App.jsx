@@ -112,9 +112,9 @@ function TradingApp() {
         return urlStrat;
       }
     }
-    return 'pippo-1h-enhanced';
+    return 'pippo-30m-new-gen';
   });
-  const [timeframe, setTimeframe] = useState('1h');
+  const [timeframe, setTimeframe] = useState('30m');
   
   // Primary View Mode: landing, dashboard, or not-found.
   const [viewMode, setViewMode] = useState(() => {

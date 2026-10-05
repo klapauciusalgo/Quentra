@@ -1,3 +1,5 @@
+import { applyStrategyBranding } from './strategyBranding.js';
+
 const LIVE_STATUSES = new Set(['OPEN', 'RUNNING', 'ACTIVE', 'IN_POSITION']);
 const RESTRICTED_MARKER_EVENTS = new Set(['breakeven', 'stop_loss', 'take_profit']);
 const PUBLIC_TRADE_KEYS = new Set([
@@ -139,6 +141,6 @@ export function stripLiveState(catalog) {
       result.metrics = { ...result.metrics, total_trades: trades.length };
     }
     if ('trades_count' in result) result.trades_count = trades.length;
-    return result;
+    return applyStrategyBranding(result);
   });
 }

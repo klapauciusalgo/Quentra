@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from binance_ws import binance_manager
 from pixel_floor import floor_engine
 from catalog_storage import effective_catalog_path
+from strategy_branding import apply_catalog_branding, apply_strategy_branding
 from entitlements import (
     has_pro_access,
     redact_floor_state,
@@ -137,7 +138,7 @@ def load_data_into_memory():
     local_catalog = []
     if os.path.exists(strat_path):
         with open(strat_path, "r") as f:
-            local_catalog = json.load(f)
+            local_catalog = apply_catalog_branding(json.load(f))
 
     try:
         from supabase_client import fetch_strategies_from_db
@@ -148,7 +149,7 @@ def load_data_into_memory():
             for sb_s in sb_strategies:
                 sid = sb_s["id"]
                 base_s = local_map.get(sid, {})
-                combined = {**base_s, **sb_s}
+                combined = apply_strategy_branding({**base_s, **sb_s})
                 
                 # Ensure rich metadata is preserved from base
                 for field in ["markers", "logic_summary", "badge", "archetype", "recommended_for", "yearly_stats", "parameters"]:
@@ -195,7 +196,7 @@ def load_data_into_memory():
             seen_ids = {s["id"] for s in merged}
             for loc_s in local_catalog:
                 if loc_s["id"] not in seen_ids:
-                    merged.append(loc_s)
+                    merged.append(apply_strategy_branding(loc_s))
 
             STRATEGIES_CATALOG = merged
             STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
@@ -275,7 +276,7 @@ def load_data_into_memory():
     strat_eth_path = str(effective_catalog_path("ETHUSDT"))
     if os.path.exists(strat_eth_path):
         with open(strat_eth_path, "r") as f:
-            STRATEGIES_CATALOG_ETH = json.load(f)
+            STRATEGIES_CATALOG_ETH = apply_catalog_branding(json.load(f))
         STRATEGIES_MAP_ETH = {s["id"]: s for s in STRATEGIES_CATALOG_ETH}
         logger.info(f"Loaded {len(STRATEGIES_CATALOG_ETH)} ETH strategies from local storage!")
 
@@ -314,13 +315,13 @@ def reload_local_catalog(symbol: str = "BTCUSDT"):
         strat_path = str(effective_catalog_path("ETHUSDT"))
         if os.path.exists(strat_path):
             with open(strat_path, "r") as f:
-                STRATEGIES_CATALOG_ETH = json.load(f)
+                STRATEGIES_CATALOG_ETH = apply_catalog_branding(json.load(f))
                 STRATEGIES_MAP_ETH = {s["id"]: s for s in STRATEGIES_CATALOG_ETH}
     else:
         strat_path = str(effective_catalog_path("BTCUSDT"))
         if os.path.exists(strat_path):
             with open(strat_path, "r") as f:
-                STRATEGIES_CATALOG = json.load(f)
+                STRATEGIES_CATALOG = apply_catalog_branding(json.load(f))
                 STRATEGIES_MAP = {s["id"]: s for s in STRATEGIES_CATALOG}
 
 
@@ -555,9 +556,9 @@ def enrich_strategy_with_live(s: dict, symbol: str = "BTCUSDT") -> dict:
     if not model:
         return s
 
-    s_copy = dict(s)
-    source_trades = [dict(t) for t in s.get("trades", [])]
-    source_markers = [dict(m) for m in s.get("markers", [])]
+    s_copy = apply_strategy_branding(s)
+    source_trades = [dict(t) for t in s_copy.get("trades", [])]
+    source_markers = [dict(m) for m in s_copy.get("markers", [])]
     source_trades, source_markers, _ = canonicalize_trade_ledger(source_trades, source_markers)
     known_trade_numbers = {
         str(t.get("trade_no"))
@@ -802,6 +803,8 @@ async def list_strategies(request: Request, symbol: str = Query(default="BTCUSDT
             "timeframe": enriched["timeframe"],
             "category": enriched.get("category", ""),
             "archetype": enriched.get("archetype", ""),
+            "subtitle": enriched.get("subtitle", ""),
+            "philosophy": enriched.get("philosophy", ""),
             "risk_tier": enriched.get("risk_tier", "Moderate"),
             "public_summary": enriched.get("public_summary", ""),
             "public_audience": enriched.get("public_audience", ""),

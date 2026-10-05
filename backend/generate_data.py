@@ -185,7 +185,7 @@ for idx, r in df_alpha.iterrows():
         "status": "CLOSED"
     })
 
-# 2. Pippo 1h Enhanced
+# 2. Elaris
 df_1h_enh = pd.read_parquet(os.path.join(BTC_DATA_DIR, "pippo_1h_enhanced_trades_2020.parquet"))
 trades_1h_enh = []
 for idx, r in df_1h_enh.iterrows():
@@ -279,7 +279,7 @@ for idx, r in enumerate(weekly_trades_raw):
     except Exception:
         pass
 
-# 5. Pippo 4h Original
+# 5. Orvane
 df_4h_orig = pd.read_parquet(os.path.join(BTC_DATA_DIR, "pippo_v1_trades_2020.parquet"))
 trades_4h_orig = []
 for idx, r in df_4h_orig.iterrows():
@@ -357,8 +357,8 @@ strategies = [
     # --- LONG STRATEGIES ---
     {
         "id": "pippo-30m-alpha",
-        "name": "Pippo 30M Alpha (Pure Runner)",
-        "short_name": "30M Alpha Runner",
+        "name": "Aurelis",
+        "short_name": "Aurelis",
         "type": "LONG",
         "timeframe": "30m",
         "category": "Momentum Breakout & Runner",
@@ -399,8 +399,8 @@ strategies = [
     },
     {
         "id": "pippo-1h-enhanced",
-        "name": "Pippo 1h Enhanced",
-        "short_name": "1H Enhanced SMC",
+        "name": "Elaris",
+        "short_name": "Elaris",
         "type": "LONG",
         "timeframe": "1h",
         "category": "Smart Money Concepts",
@@ -441,8 +441,8 @@ strategies = [
     },
     {
         "id": "pippo-30m-scalp",
-        "name": "Pippo 30m Scalp-Runner",
-        "short_name": "30M Scalp-Runner",
+        "name": "Tessara",
+        "short_name": "Tessara",
         "type": "LONG",
         "timeframe": "30m",
         "category": "Hybrid Scalp & Trend",
@@ -483,8 +483,8 @@ strategies = [
     },
     {
         "id": "pure-macro-weekly-ma55",
-        "name": "Pure Macro Weekly MA55",
-        "short_name": "Weekly MA55 Macro",
+        "name": "Mavora",
+        "short_name": "Mavora",
         "type": "LONG",
         "timeframe": "1W",
         "category": "Macro Regime Trend-Following",
@@ -534,8 +534,8 @@ strategies = [
     },
     {
         "id": "pippo-4h-original",
-        "name": "Pippo 4h Original",
-        "short_name": "4H Original SMC",
+        "name": "Orvane",
+        "short_name": "Orvane",
         "type": "LONG",
         "timeframe": "4h",
         "category": "Smart Money Concepts",
@@ -577,8 +577,8 @@ strategies = [
     # --- SHORT STRATEGIES ---
     {
         "id": "pippo-30m-short-v2-a",
-        "name": "Pippo 30M Short V2 Type A (Active TP)",
-        "short_name": "Short V2 Type A (Active TP)",
+        "name": "Noxara",
+        "short_name": "Noxara",
         "type": "SHORT",
         "timeframe": "30m",
         "category": "Bearish Breakdown & Active TP",
@@ -624,8 +624,8 @@ strategies = [
     },
     {
         "id": "pippo-30m-short-v2-b",
-        "name": "Pippo 30M Short V2 Type B (Max Frequency)",
-        "short_name": "Short V2 Type B (Max Freq)",
+        "name": "Velora",
+        "short_name": "Velora",
         "type": "SHORT",
         "timeframe": "30m",
         "category": "Bearish Momentum Exploiter",
@@ -671,8 +671,8 @@ strategies = [
     },
     {
         "id": "pippo-30m-short-v2-c",
-        "name": "Pippo 30M Short V2 Type C (Defensive Fortress)",
-        "short_name": "Short V2 Type C (Defensive)",
+        "name": "Sorevia",
+        "short_name": "Sorevia",
         "type": "SHORT",
         "timeframe": "30m",
         "category": "Capital Preservation Short",

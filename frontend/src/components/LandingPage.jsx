@@ -29,6 +29,7 @@ import {
   X
 } from 'lucide-react';
 import strategiesData from '../data/strategiesData.json';
+import { STRATEGY_BRANDING } from '../utils/strategyBranding.js';
 import { useAuth } from '../context/AuthContext';
 
 export default function LandingPage({ 
@@ -352,7 +353,7 @@ export default function LandingPage({
                         </div>
                         <div className="min-w-0">
                           <div className="text-xs font-semibold truncate">
-                            Pippo 30M Short V2 Type A
+                            {STRATEGY_BRANDING['pippo-30m-short-v2-a'].name}
                           </div>
                           <div className="text-[10px] text-white/60 flex items-center gap-2">
                             <span>Target: $76,240</span>

@@ -198,8 +198,13 @@ export default function StrategyDetail({
                 </span>
               </div>
               <p className="text-xs text-apple-blue font-medium mt-0.5">
-                {strategy?.category} / {strategy?.archetype}
+                {strategy?.subtitle || strategy?.category || strategy?.archetype}
               </p>
+              {strategy?.philosophy && (
+                <p className="text-[11px] text-apple-muted italic mt-0.5">
+                  {strategy.philosophy}
+                </p>
+              )}
             </div>
           </div>
 

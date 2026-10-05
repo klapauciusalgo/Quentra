@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Add 'Pippo 30m Grd' strategy to backend/data/strategies.json and frontend/src/data/strategiesData.json.
+Add 'Kairon' strategy to backend/data/strategies.json and frontend/src/data/strategiesData.json.
 Uses verified backtest results for Variant B (GRID 1x) from /home/ubuntu/new-btc-analysis/data/v9_trades_all4_full.csv.
 """
 
@@ -169,7 +169,7 @@ def build_pippo_grd():
     active_ticket = {
         "symbol": "BTC/USDT",
         "direction": "LONG",
-        "strategy_name": "Pippo 30m Grd",
+        "strategy_name": "Kairon",
         "strategy_id": "pippo-30m-grd",
         "confidence_pct": 95,
         "confidence_blocks": 9,
@@ -190,8 +190,8 @@ def build_pippo_grd():
     
     strategy_obj = {
         "id": "pippo-30m-grd",
-        "name": "Pippo 30m Grd",
-        "short_name": "30M Grd",
+        "name": "Kairon",
+        "short_name": "Kairon",
         "type": "LONG",
         "timeframe": "30m",
         "category": "MA Squeeze & Volatility Grid",

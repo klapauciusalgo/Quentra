@@ -35,7 +35,7 @@ class PixelFloorEngine:
         self.signal_ticket = {
             "symbol": "BTC/USDT",
             "direction": "LONG",
-            "strategy_name": "Pippo 1h Enhanced",
+            "strategy_name": "Elaris",
             "strategy_id": "pippo-1h-enhanced",
             "confidence_pct": 88,
             "confidence_blocks": 8,

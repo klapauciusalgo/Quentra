@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Add 'Pippo 30m New Gen' strategy to backend/data/strategies.json and frontend/src/data/strategiesData.json.
+Add 'Novera' strategy to backend/data/strategies.json and frontend/src/data/strategiesData.json.
 Uses verified backtest results from /home/ubuntu/new-btc-analysis/data/v7_trades_full.csv.
 """
 
@@ -169,7 +169,7 @@ def build_pippo_new_gen():
     active_ticket = {
         "symbol": "BTC/USDT",
         "direction": "LONG",
-        "strategy_name": "Pippo 30m New Gen",
+        "strategy_name": "Novera",
         "strategy_id": "pippo-30m-new-gen",
         "confidence_pct": 94,
         "confidence_blocks": 9,
@@ -190,8 +190,8 @@ def build_pippo_new_gen():
     
     strategy_obj = {
         "id": "pippo-30m-new-gen",
-        "name": "Pippo 30m New Gen",
-        "short_name": "30M New Gen",
+        "name": "Novera",
+        "short_name": "Novera",
         "type": "LONG",
         "timeframe": "30m",
         "category": "MA Squeeze & Multi-TF Trend",

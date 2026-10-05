@@ -22,6 +22,7 @@ from catalog_storage import (
     bootstrap_runtime_catalog,
     locked_json_catalog,
 )
+from strategy_branding import get_strategy_branding
 
 logger = logging.getLogger("live_signal_engine")
 logger.setLevel(logging.INFO)
@@ -353,10 +354,10 @@ class StrategyModel:
 
 def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]:
     sym = symbol.upper()
-    return {
+    catalog = {
         "pippo-1h-enhanced": StrategyModel(
             strat_id="pippo-1h-enhanced",
-            name="Pippo 1h Enhanced",
+            name="Elaris",
             tf="1h",
             direction="LONG",
             config={
@@ -372,7 +373,7 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
         ),
         "pippo-30m-alpha": StrategyModel(
             strat_id="pippo-30m-alpha",
-            name="Pippo 30M Alpha (Pure Runner)",
+            name="Aurelis",
             tf="30m",
             direction="LONG",
             config={
@@ -388,7 +389,7 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
         ),
         "pippo-30m-new-gen": StrategyModel(
             strat_id="pippo-30m-new-gen",
-            name="Pippo 30m New Gen",
+            name="Novera",
             tf="30m",
             direction="LONG",
             config={
@@ -405,7 +406,7 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
         ),
         "pippo-30m-grd": StrategyModel(
             strat_id="pippo-30m-grd",
-            name="Pippo 30m Grd",
+            name="Kairon",
             tf="30m",
             direction="LONG",
             config={
@@ -422,7 +423,7 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
         ),
         "pippo-30m-short-v2-a": StrategyModel(
             strat_id="pippo-30m-short-v2-a",
-            name="Pippo 30M Short V2 Type A (Active TP)",
+            name="Noxara",
             tf="30m",
             direction="SHORT",
             config={
@@ -438,7 +439,7 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
         ),
         "pippo-30m-short-v2-b": StrategyModel(
             strat_id="pippo-30m-short-v2-b",
-            name="Pippo 30M Short V2 Type B (Max Freq)",
+            name="Velora",
             tf="30m",
             direction="SHORT",
             config={
@@ -454,7 +455,7 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
         ),
         "pippo-4h-original": StrategyModel(
             strat_id="pippo-4h-original",
-            name="Pippo 4h Original",
+            name="Orvane",
             tf="4h",
             direction="LONG",
             config={
@@ -472,7 +473,7 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
         ),
         "pippo-30m-scalp": StrategyModel(
             strat_id="pippo-30m-scalp",
-            name="Pippo 30m Scalp-Runner",
+            name="Tessara",
             tf="30m",
             direction="LONG",
             config={
@@ -490,7 +491,7 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
         ),
         "pippo-30m-short-v2-c": StrategyModel(
             strat_id="pippo-30m-short-v2-c",
-            name="Pippo 30M Short V2 Type C (Defensive Fortress)",
+            name="Sorevia",
             tf="30m",
             direction="SHORT",
             config={
@@ -506,7 +507,7 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
         ),
         "pure-macro-weekly-ma55": StrategyModel(
             strat_id="pure-macro-weekly-ma55",
-            name="Pure Macro Weekly MA55",
+            name="Mavora",
             tf="1w",
             direction="LONG",
             config={
@@ -520,6 +521,11 @@ def create_strategy_catalog(symbol: str = "BTCUSDT") -> Dict[str, StrategyModel]
             symbol=sym
         )
     }
+    for strategy_id, model in catalog.items():
+        branding = get_strategy_branding(strategy_id)
+        if branding:
+            model.name = branding["name"]
+    return catalog
 
 class LiveSignalEngine:
     def __init__(self):
@@ -977,7 +983,7 @@ class LiveSignalEngine:
         self._open_position(model, float(entry_row["close"]), entry_time)
 
     def _sync_pippo_new_gen(self, model: StrategyModel, symbol: str = "BTCUSDT"):
-        """Replays Pippo 30m New Gen MA squeeze & multi-timeframe rules across recent bars."""
+        """Replays Novera MA squeeze & multi-timeframe rules across recent bars."""
         sym = symbol.upper()
         buffers = self.get_candle_buffers(sym)
         try:

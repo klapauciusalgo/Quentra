@@ -614,7 +614,7 @@ def test_pippo_30m_new_gen_details(client, monkeypatch):
     res = client.get("/api/strategies/pippo-30m-new-gen")
     assert res.status_code == 200
     data = res.json()
-    assert data["name"] == "Pippo 30m New Gen"
+    assert data["name"] == "Novera"
     assert data["timeframe"] == "30m"
     assert data["type"] == "LONG"
     closed_trades = [trade for trade in data["trades"] if trade.get("status") == "CLOSED"]
@@ -695,7 +695,7 @@ def test_pippo_30m_grd_details(client, monkeypatch):
     res = client.get("/api/strategies/pippo-30m-grd")
     assert res.status_code == 200
     data = res.json()
-    assert data["name"] == "Pippo 30m Grd"
+    assert data["name"] == "Kairon"
     assert data["timeframe"] == "30m"
     assert data["type"] == "LONG"
     closed_trades = [trade for trade in data["trades"] if trade.get("status") == "CLOSED"]

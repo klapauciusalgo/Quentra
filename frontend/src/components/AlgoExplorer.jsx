@@ -273,7 +273,7 @@ export default function AlgoExplorer({
                   </h3>
 
                   <div className="text-xs text-apple-blue font-medium mb-3">
-                    {algo.category || algo.archetype}
+                    {algo.subtitle || algo.category || algo.archetype}
                   </div>
 
                   {/* 4 Core Metrics Grid */}
@@ -312,7 +312,7 @@ export default function AlgoExplorer({
 
                   {/* Recommended Thesis */}
                   <p className="text-xs text-apple-muted leading-relaxed mb-4 line-clamp-2">
-                    {algo.public_audience || 'Public strategy profile.'}
+                    {algo.philosophy || algo.public_audience || 'Public strategy profile.'}
                   </p>
                 </div>
 

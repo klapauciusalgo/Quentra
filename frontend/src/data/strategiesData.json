@@ -1,8 +1,8 @@
 [
   {
     "id": "pippo-30m-alpha",
-    "name": "Pippo 30M Alpha (Pure Runner)",
-    "short_name": "30M Alpha Runner",
+    "name": "Aurelis",
+    "short_name": "Aurelis",
     "type": "LONG",
     "timeframe": "30m",
     "category": "Momentum Breakout & Runner",
@@ -2875,12 +2875,14 @@
     "max_drawdown_pct": -22.73,
     "trades_count": 75,
     "public_summary": "Momentum Breakout & Runner strategy for 30m market monitoring.",
-    "public_audience": "Designed for traders seeking moderate-aggressive exposure with a 30m decision cadence."
+    "public_audience": "Designed for traders seeking moderate-aggressive exposure with a 30m decision cadence.",
+    "subtitle": "30M Adaptive Alpha",
+    "philosophy": "Find clarity inside market noise."
   },
   {
     "id": "pippo-30m-new-gen",
-    "name": "Pippo 30m New Gen",
-    "short_name": "30M New Gen",
+    "name": "Novera",
+    "short_name": "Novera",
     "type": "LONG",
     "timeframe": "30m",
     "category": "MA Squeeze & Multi-TF Trend",
@@ -19406,12 +19408,14 @@
     "max_drawdown_pct": -11.2,
     "trades_count": 444,
     "public_summary": "MA Squeeze & Multi-TF Trend strategy for 30m market monitoring.",
-    "public_audience": "Designed for traders seeking conservative-moderate exposure with a 30m decision cadence."
+    "public_audience": "Designed for traders seeking conservative-moderate exposure with a 30m decision cadence.",
+    "subtitle": "30M New Cycle Momentum",
+    "philosophy": "A new cycle for fresh momentum."
   },
   {
     "id": "pippo-30m-grd",
-    "name": "Pippo 30m Grd",
-    "short_name": "30M Grd",
+    "name": "Kairon",
+    "short_name": "Kairon",
     "type": "LONG",
     "timeframe": "30m",
     "category": "MA Squeeze & Volatility Grid",
@@ -46371,12 +46375,14 @@
     "max_drawdown_pct": -19.93,
     "trades_count": 726,
     "public_summary": "MA Squeeze & Volatility Grid strategy for 30m market monitoring.",
-    "public_audience": "Designed for traders seeking moderate exposure with a 30m decision cadence."
+    "public_audience": "Designed for traders seeking moderate exposure with a 30m decision cadence.",
+    "subtitle": "30M Precision Timing",
+    "philosophy": "Enter the trend at the right moment."
   },
   {
     "id": "pippo-1h-enhanced",
-    "name": "Pippo 1h Enhanced",
-    "short_name": "1H Enhanced SMC",
+    "name": "Elaris",
+    "short_name": "Elaris",
     "type": "LONG",
     "timeframe": "1h",
     "category": "Smart Money Concepts",
@@ -48879,12 +48885,14 @@
     "max_drawdown_pct": -31.16,
     "trades_count": 65,
     "public_summary": "Smart Money Concepts strategy for 1h market monitoring.",
-    "public_audience": "Designed for traders seeking balanced exposure with a 1h decision cadence."
+    "public_audience": "Designed for traders seeking balanced exposure with a 1h decision cadence.",
+    "subtitle": "1H Adaptive Structure",
+    "philosophy": "Read market structure from a higher frame."
   },
   {
     "id": "pippo-30m-scalp",
-    "name": "Pippo 30m Scalp-Runner",
-    "short_name": "30M Scalp-Runner",
+    "name": "Tessara",
+    "short_name": "Tessara",
     "type": "LONG",
     "timeframe": "30m",
     "category": "Hybrid Scalp & Trend",
@@ -51757,12 +51765,14 @@
     "max_drawdown_pct": -20.96,
     "trades_count": 75,
     "public_summary": "Hybrid Scalp & Trend strategy for 30m market monitoring.",
-    "public_audience": "Designed for traders seeking low-moderate exposure with a 30m decision cadence."
+    "public_audience": "Designed for traders seeking low-moderate exposure with a 30m decision cadence.",
+    "subtitle": "30M Precision Scalp",
+    "philosophy": "Small edges become meaningful when repeated."
   },
   {
     "id": "pure-macro-weekly-ma55",
-    "name": "Pure Macro Weekly MA55",
-    "short_name": "Weekly MA55 Macro",
+    "name": "Mavora",
+    "short_name": "Mavora",
     "type": "LONG",
     "timeframe": "1W",
     "category": "Macro Regime Trend-Following",
@@ -51999,12 +52009,14 @@
     "max_drawdown_pct": -12.37,
     "trades_count": 5,
     "public_summary": "Macro Regime Trend-Following strategy for 1W market monitoring.",
-    "public_audience": "Designed for traders seeking low (zero screen time) exposure with a 1W decision cadence."
+    "public_audience": "Designed for traders seeking low (zero screen time) exposure with a 1W decision cadence.",
+    "subtitle": "Weekly Macro Flow",
+    "philosophy": "Follow the market's long current."
   },
   {
     "id": "pippo-4h-original",
-    "name": "Pippo 4h Original",
-    "short_name": "4H Original SMC",
+    "name": "Orvane",
+    "short_name": "Orvane",
     "type": "LONG",
     "timeframe": "4h",
     "category": "Smart Money Concepts",
@@ -57541,12 +57553,14 @@
     "max_drawdown_pct": -28.54,
     "trades_count": 147,
     "public_summary": "Smart Money Concepts strategy for 4h market monitoring.",
-    "public_audience": "Designed for traders seeking moderate exposure with a 4h decision cadence."
+    "public_audience": "Designed for traders seeking moderate exposure with a 4h decision cadence.",
+    "subtitle": "4H Structural Trend",
+    "philosophy": "Let the larger orbit shape the trade."
   },
   {
     "id": "pippo-30m-short-v2-a",
-    "name": "Pippo 30M Short V2 Type A (Active TP)",
-    "short_name": "Short V2 Type A (Active TP)",
+    "name": "Noxara",
+    "short_name": "Noxara",
     "type": "SHORT",
     "timeframe": "30m",
     "category": "Bearish Breakdown & Active TP",
@@ -60438,12 +60452,14 @@
     "max_drawdown_pct": -22.47,
     "trades_count": 76,
     "public_summary": "Bearish Breakdown & Active TP strategy for 30m market monitoring.",
-    "public_audience": "Designed for traders seeking low-moderate exposure with a 30m decision cadence."
+    "public_audience": "Designed for traders seeking low-moderate exposure with a 30m decision cadence.",
+    "subtitle": "30M Downside Signal",
+    "philosophy": "Find weakness before it becomes visible."
   },
   {
     "id": "pippo-30m-short-v2-b",
-    "name": "Pippo 30M Short V2 Type B (Max Frequency)",
-    "short_name": "Short V2 Type B (Max Freq)",
+    "name": "Velora",
+    "short_name": "Velora",
     "type": "SHORT",
     "timeframe": "30m",
     "category": "Bearish Momentum Exploiter",
@@ -64371,12 +64387,14 @@
     "max_drawdown_pct": -26.03,
     "trades_count": 104,
     "public_summary": "Bearish Momentum Exploiter strategy for 30m market monitoring.",
-    "public_audience": "Designed for traders seeking moderate exposure with a 30m decision cadence."
+    "public_audience": "Designed for traders seeking moderate exposure with a 30m decision cadence.",
+    "subtitle": "30M Fast Downside",
+    "philosophy": "Turn movement speed into downside edge."
   },
   {
     "id": "pippo-30m-short-v2-c",
-    "name": "Pippo 30M Short V2 Type C (Defensive Fortress)",
-    "short_name": "Short V2 Type C (Defensive)",
+    "name": "Sorevia",
+    "short_name": "Sorevia",
     "type": "SHORT",
     "timeframe": "30m",
     "category": "Capital Preservation Short",
@@ -67675,6 +67693,8 @@
     "max_drawdown_pct": -21.32,
     "trades_count": 87,
     "public_summary": "Capital Preservation Short strategy for 30m market monitoring.",
-    "public_audience": "Designed for traders seeking very low (ultra safe) exposure with a 30m decision cadence."
+    "public_audience": "Designed for traders seeking very low (ultra safe) exposure with a 30m decision cadence.",
+    "subtitle": "30M Defensive Short",
+    "philosophy": "Protect capital while conditions shift."
   }
 ]

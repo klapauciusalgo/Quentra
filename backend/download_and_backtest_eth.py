@@ -969,16 +969,16 @@ def run_eth_pipeline():
     print("===================================================================")
     strategies_eth = []
 
-    # 1. Pippo 30M Alpha
+    # 1. Pippo Aurelis
     t_alpha = sim_30m_smc_breakout(d30, bull_signals_30, bear_signals_30, sl_pct=0.05, be_pct=0.03, tp_pct=0.75)
     m_alpha = calculate_overall_metrics(t_alpha)
     y_alpha = compute_yearly_metrics(t_alpha)
     mk_alpha = build_markers(t_alpha)
-    tk_alpha = create_ticket("pippo-30m-alpha", "Pippo 30M Alpha (Pure Runner)", "LONG", t_alpha)
+    tk_alpha = create_ticket("pippo-30m-alpha", "Aurelis", "LONG", t_alpha)
     strategies_eth.append({
         "id": "pippo-30m-alpha",
-        "name": "Pippo 30M Alpha (Pure Runner)",
-        "short_name": "30M Alpha",
+        "name": "Aurelis",
+        "short_name": "Aurelis",
         "type": "LONG",
         "timeframe": "30m",
         "category": "Momentum Breakout & Runner",
@@ -1004,18 +1004,18 @@ def run_eth_pipeline():
         "has_active_signal": tk_alpha is not None,
         "active_ticket": tk_alpha
     })
-    print(f"  ✓ 1. Pippo 30M Alpha: {len(t_alpha)} trades | Total Return: {m_alpha['total_return_pct']:+,.1f}% | Win Rate: {m_alpha['win_rate_pct']}% | PF: {m_alpha['profit_factor']}")
+    print(f"  ✓ 1. Pippo Aurelis: {len(t_alpha)} trades | Total Return: {m_alpha['total_return_pct']:+,.1f}% | Win Rate: {m_alpha['win_rate_pct']}% | PF: {m_alpha['profit_factor']}")
 
-    # 2. Pippo 30m New Gen
+    # 2. Novera
     t_new_gen = sim_ma_squeeze(df_grd, use_4h=True)
     m_new_gen = calculate_overall_metrics(t_new_gen)
     y_new_gen = compute_yearly_metrics(t_new_gen)
     mk_new_gen = build_markers(t_new_gen)
-    tk_new_gen = create_ticket("pippo-30m-new-gen", "Pippo 30m New Gen", "LONG", t_new_gen)
+    tk_new_gen = create_ticket("pippo-30m-new-gen", "Novera", "LONG", t_new_gen)
     strategies_eth.append({
         "id": "pippo-30m-new-gen",
-        "name": "Pippo 30m New Gen",
-        "short_name": "30M New Gen",
+        "name": "Novera",
+        "short_name": "Novera",
         "type": "LONG",
         "timeframe": "30m",
         "category": "MA Squeeze & Multi-TF Trend",
@@ -1042,18 +1042,18 @@ def run_eth_pipeline():
         "has_active_signal": tk_new_gen is not None,
         "active_ticket": tk_new_gen
     })
-    print(f"  ✓ 2. Pippo 30m New Gen: {len(t_new_gen)} trades | Total Return: {m_new_gen['total_return_pct']:+,.1f}% | Win Rate: {m_new_gen['win_rate_pct']}% | PF: {m_new_gen['profit_factor']}")
+    print(f"  ✓ 2. Novera: {len(t_new_gen)} trades | Total Return: {m_new_gen['total_return_pct']:+,.1f}% | Win Rate: {m_new_gen['win_rate_pct']}% | PF: {m_new_gen['profit_factor']}")
 
-    # 3. Pippo 30m Grd
+    # 3. Kairon
     t_grd = sim_ma_squeeze(df_grd, use_4h=False)
     m_grd = calculate_overall_metrics(t_grd)
     y_grd = compute_yearly_metrics(t_grd)
     mk_grd = build_markers(t_grd)
-    tk_grd = create_ticket("pippo-30m-grd", "Pippo 30m Grd", "LONG", t_grd)
+    tk_grd = create_ticket("pippo-30m-grd", "Kairon", "LONG", t_grd)
     strategies_eth.append({
         "id": "pippo-30m-grd",
-        "name": "Pippo 30m Grd",
-        "short_name": "30M Grd",
+        "name": "Kairon",
+        "short_name": "Kairon",
         "type": "LONG",
         "timeframe": "30m",
         "category": "MA Squeeze & Volatility Grid",
@@ -1080,18 +1080,18 @@ def run_eth_pipeline():
         "has_active_signal": tk_grd is not None,
         "active_ticket": tk_grd
     })
-    print(f"  ✓ 3. Pippo 30m Grd: {len(t_grd)} trades | Total Return: {m_grd['total_return_pct']:+,.1f}% | Win Rate: {m_grd['win_rate_pct']}% | PF: {m_grd['profit_factor']}")
+    print(f"  ✓ 3. Kairon: {len(t_grd)} trades | Total Return: {m_grd['total_return_pct']:+,.1f}% | Win Rate: {m_grd['win_rate_pct']}% | PF: {m_grd['profit_factor']}")
 
-    # 4. Pippo 1h Enhanced
+    # 4. Elaris
     t_1h = sim_1h_smc_enhanced(d1, bull_sigs_1h, bear_sigs_1h, sl_pct=0.08, be_pct=0.05, tp_pct=0.75)
     m_1h = calculate_overall_metrics(t_1h)
     y_1h = compute_yearly_metrics(t_1h)
     mk_1h = build_markers(t_1h)
-    tk_1h = create_ticket("pippo-1h-enhanced", "Pippo 1h Enhanced", "LONG", t_1h)
+    tk_1h = create_ticket("pippo-1h-enhanced", "Elaris", "LONG", t_1h)
     strategies_eth.append({
         "id": "pippo-1h-enhanced",
-        "name": "Pippo 1h Enhanced",
-        "short_name": "1H Enhanced",
+        "name": "Elaris",
+        "short_name": "Elaris",
         "type": "LONG",
         "timeframe": "1h",
         "category": "Momentum Breakout & Runner",
@@ -1117,18 +1117,18 @@ def run_eth_pipeline():
         "has_active_signal": tk_1h is not None,
         "active_ticket": tk_1h
     })
-    print(f"  ✓ 4. Pippo 1h Enhanced: {len(t_1h)} trades | Total Return: {m_1h['total_return_pct']:+,.1f}% | Win Rate: {m_1h['win_rate_pct']}% | PF: {m_1h['profit_factor']}")
+    print(f"  ✓ 4. Elaris: {len(t_1h)} trades | Total Return: {m_1h['total_return_pct']:+,.1f}% | Win Rate: {m_1h['win_rate_pct']}% | PF: {m_1h['profit_factor']}")
 
-    # 5. Pippo 30m Scalp-Runner
+    # 5. Tessara
     t_scalp = sim_30m_smc_breakout(d30, bull_signals_30, bear_signals_30, sl_pct=0.05, be_pct=0.04, tp_pct=0.75, partial_tp_pct=0.04, partial_weight=0.30)
     m_scalp = calculate_overall_metrics(t_scalp)
     y_scalp = compute_yearly_metrics(t_scalp)
     mk_scalp = build_markers(t_scalp)
-    tk_scalp = create_ticket("pippo-30m-scalp", "Pippo 30m Scalp-Runner", "LONG", t_scalp)
+    tk_scalp = create_ticket("pippo-30m-scalp", "Tessara", "LONG", t_scalp)
     strategies_eth.append({
         "id": "pippo-30m-scalp",
-        "name": "Pippo 30m Scalp-Runner",
-        "short_name": "30M Scalp",
+        "name": "Tessara",
+        "short_name": "Tessara",
         "type": "LONG",
         "timeframe": "30m",
         "category": "Hybrid Scalp & Runner",
@@ -1156,16 +1156,16 @@ def run_eth_pipeline():
     })
     print(f"  ✓ 5. Pippo 30m Scalp: {len(t_scalp)} trades | Total Return: {m_scalp['total_return_pct']:+,.1f}% | Win Rate: {m_scalp['win_rate_pct']}% | PF: {m_scalp['profit_factor']}")
 
-    # 6. Pure Macro Weekly MA55 (Historical primed from 2017)
+    # 6. Mavora (Historical primed from 2017)
     t_macro = sim_pure_weekly_ma55(df_1w)
     m_macro = calculate_overall_metrics(t_macro)
     y_macro = compute_yearly_metrics(t_macro)
     mk_macro = build_markers(t_macro)
-    tk_macro = create_ticket("pure-macro-weekly-ma55", "Pure Macro Weekly MA55", "LONG", t_macro)
+    tk_macro = create_ticket("pure-macro-weekly-ma55", "Mavora", "LONG", t_macro)
     strategies_eth.append({
         "id": "pure-macro-weekly-ma55",
-        "name": "Pure Macro Weekly MA55",
-        "short_name": "Weekly MA55",
+        "name": "Mavora",
+        "short_name": "Mavora",
         "type": "LONG",
         "timeframe": "1w",
         "category": "Macro Cycle Filter",
@@ -1176,31 +1176,31 @@ def run_eth_pipeline():
         "metrics": m_macro,
         "parameters": {
             "timeframe": "1w",
-            "regime": "Weekly MA55 Close",
+            "regime": "Mavora Close",
             "entry": "Weekly Close >= MA55",
             "exit": "Weekly Close < MA55",
             "commission": "0.09%"
         },
-        "logic_summary": "Secular Ethereum multi-year cycle filter. Long exclusively above Weekly MA55 with full 2017-2026 data depth.",
+        "logic_summary": "Secular Ethereum multi-year cycle filter. Long exclusively above Mavora with full 2017-2026 data depth.",
         "yearly_stats": y_macro,
         "markers": mk_macro,
         "trades": t_macro,
         "has_active_signal": tk_macro is not None,
         "active_ticket": tk_macro
     })
-    print(f"  ✓ 6. Pure Macro Weekly MA55: {len(t_macro)} trades | Total Return: {m_macro['total_return_pct']:+,.1f}% | Win Rate: {m_macro['win_rate_pct']}% | PF: {m_macro['profit_factor']}")
+    print(f"  ✓ 6. Mavora: {len(t_macro)} trades | Total Return: {m_macro['total_return_pct']:+,.1f}% | Win Rate: {m_macro['win_rate_pct']}% | PF: {m_macro['profit_factor']}")
 
-    # 7. Pippo 4h Original (Exact Pine Script SMC Engine)
+    # 7. Orvane (Exact Pine Script SMC Engine)
     df_4h_2020 = df_4h[df_4h["datetime"] >= "2020-01-01"].copy().reset_index(drop=True)
     t_4h = sim_4h_pippo_original(df_4h_2020)
     m_4h = calculate_overall_metrics(t_4h)
     y_4h = compute_yearly_metrics(t_4h)
     mk_4h = build_markers(t_4h)
-    tk_4h = create_ticket("pippo-4h-original", "Pippo 4h Original", "LONG", t_4h)
+    tk_4h = create_ticket("pippo-4h-original", "Orvane", "LONG", t_4h)
     strategies_eth.append({
         "id": "pippo-4h-original",
-        "name": "Pippo 4h Original",
-        "short_name": "4H Original",
+        "name": "Orvane",
+        "short_name": "Orvane",
         "type": "LONG",
         "timeframe": "4h",
         "category": "Macro Breakout",
@@ -1226,18 +1226,18 @@ def run_eth_pipeline():
         "has_active_signal": tk_4h is not None,
         "active_ticket": tk_4h
     })
-    print(f"  ✓ 7. Pippo 4h Original: {len(t_4h)} trades | Total Return: {m_4h['total_return_pct']:+,.1f}% | Win Rate: {m_4h['win_rate_pct']}% | PF: {m_4h['profit_factor']}")
+    print(f"  ✓ 7. Orvane: {len(t_4h)} trades | Total Return: {m_4h['total_return_pct']:+,.1f}% | Win Rate: {m_4h['win_rate_pct']}% | PF: {m_4h['profit_factor']}")
 
-    # 8. Pippo 30M Short V2 Type A (Active TP)
+    # 8. Noxara
     t_short_a = sim_short_smc_v2(d30, swings_s, 64, 32, 48, r_no1h_short, sl_pct=0.05, be_pct=0.015, tp_pct=0.12)
     m_short_a = calculate_overall_metrics(t_short_a)
     y_short_a = compute_yearly_metrics(t_short_a)
     mk_short_a = build_markers(t_short_a)
-    tk_short_a = create_ticket("pippo-30m-short-v2-a", "Pippo 30M Short V2 Type A (Active TP)", "SHORT", t_short_a)
+    tk_short_a = create_ticket("pippo-30m-short-v2-a", "Noxara", "SHORT", t_short_a)
     strategies_eth.append({
         "id": "pippo-30m-short-v2-a",
-        "name": "Pippo 30M Short V2 Type A (Active TP)",
-        "short_name": "Short V2 Type A",
+        "name": "Noxara",
+        "short_name": "Noxara",
         "type": "SHORT",
         "timeframe": "30m",
         "category": "Bearish Breakdown & Short",
@@ -1248,7 +1248,7 @@ def run_eth_pipeline():
         "metrics": m_short_a,
         "parameters": {
             "timeframe": "30m",
-            "macro_filters": "Weekly MA55 & 4H SMA111 Bearish",
+            "macro_filters": "Mavora & 4H SMA111 Bearish",
             "entry_breakout": "32-bar Low Breakdown",
             "exit_ceiling": "48-bar High Structural Exit",
             "stop_loss": "5.0%",
@@ -1263,18 +1263,18 @@ def run_eth_pipeline():
         "has_active_signal": tk_short_a is not None,
         "active_ticket": tk_short_a
     })
-    print(f"  ✓ 8. Short V2 Type A: {len(t_short_a)} trades | Total Return: {m_short_a['total_return_pct']:+,.1f}% | Win Rate: {m_short_a['win_rate_pct']}% | PF: {m_short_a['profit_factor']}")
+    print(f"  ✓ 8. Noxara: {len(t_short_a)} trades | Total Return: {m_short_a['total_return_pct']:+,.1f}% | Win Rate: {m_short_a['win_rate_pct']}% | PF: {m_short_a['profit_factor']}")
 
-    # 9. Pippo 30M Short V2 Type B (Max Frequency)
+    # 9. Velora
     t_short_b = sim_short_smc_v2(d30, swings_s, 64, 28, 48, r_wbear_short, sl_pct=0.05, be_pct=0.025, tp_pct=0.20)
     m_short_b = calculate_overall_metrics(t_short_b)
     y_short_b = compute_yearly_metrics(t_short_b)
     mk_short_b = build_markers(t_short_b)
-    tk_short_b = create_ticket("pippo-30m-short-v2-b", "Pippo 30M Short V2 Type B (Max Frequency)", "SHORT", t_short_b)
+    tk_short_b = create_ticket("pippo-30m-short-v2-b", "Velora", "SHORT", t_short_b)
     strategies_eth.append({
         "id": "pippo-30m-short-v2-b",
-        "name": "Pippo 30M Short V2 Type B (Max Frequency)",
-        "short_name": "Short V2 Type B",
+        "name": "Velora",
+        "short_name": "Velora",
         "type": "SHORT",
         "timeframe": "30m",
         "category": "Bearish Breakdown & Short",
@@ -1285,7 +1285,7 @@ def run_eth_pipeline():
         "metrics": m_short_b,
         "parameters": {
             "timeframe": "30m",
-            "macro_filters": "Weekly MA55 Bearish Regime",
+            "macro_filters": "Mavora Bearish Regime",
             "entry_breakout": "28-bar Low Breakdown",
             "exit_ceiling": "48-bar High Structural Exit",
             "stop_loss": "5.0%",
@@ -1300,18 +1300,18 @@ def run_eth_pipeline():
         "has_active_signal": tk_short_b is not None,
         "active_ticket": tk_short_b
     })
-    print(f"  ✓ 9. Short V2 Type B: {len(t_short_b)} trades | Total Return: {m_short_b['total_return_pct']:+,.1f}% | Win Rate: {m_short_b['win_rate_pct']}% | PF: {m_short_b['profit_factor']}")
+    print(f"  ✓ 9. Velora: {len(t_short_b)} trades | Total Return: {m_short_b['total_return_pct']:+,.1f}% | Win Rate: {m_short_b['win_rate_pct']}% | PF: {m_short_b['profit_factor']}")
 
-    # 10. Pippo 30M Short V2 Type C (Defensive Fortress)
+    # 10. Sorevia
     t_short_c = sim_short_smc_v2(d30, swings_s, 64, 32, 16, r_no1h_short, sl_pct=0.06, be_pct=0.025, tp_pct=0.50)
     m_short_c = calculate_overall_metrics(t_short_c)
     y_short_c = compute_yearly_metrics(t_short_c)
     mk_short_c = build_markers(t_short_c)
-    tk_short_c = create_ticket("pippo-30m-short-v2-c", "Pippo 30M Short V2 Type C (Defensive Fortress)", "SHORT", t_short_c)
+    tk_short_c = create_ticket("pippo-30m-short-v2-c", "Sorevia", "SHORT", t_short_c)
     strategies_eth.append({
         "id": "pippo-30m-short-v2-c",
-        "name": "Pippo 30M Short V2 Type C (Defensive Fortress)",
-        "short_name": "Short V2 Type C",
+        "name": "Sorevia",
+        "short_name": "Sorevia",
         "type": "SHORT",
         "timeframe": "30m",
         "category": "Bearish Breakdown & Short",
@@ -1322,7 +1322,7 @@ def run_eth_pipeline():
         "metrics": m_short_c,
         "parameters": {
             "timeframe": "30m",
-            "macro_filters": "Weekly MA55 & 4H SMA111 Bearish",
+            "macro_filters": "Mavora & 4H SMA111 Bearish",
             "entry_breakout": "32-bar Low Breakdown",
             "exit_ceiling": "16-bar High Structural Exit",
             "stop_loss": "6.0%",
@@ -1337,7 +1337,7 @@ def run_eth_pipeline():
         "has_active_signal": tk_short_c is not None,
         "active_ticket": tk_short_c
     })
-    print(f"  ✓ 10. Short V2 Type C: {len(t_short_c)} trades | Total Return: {m_short_c['total_return_pct']:+,.1f}% | Win Rate: {m_short_c['win_rate_pct']}% | PF: {m_short_c['profit_factor']}")
+    print(f"  ✓ 10. Sorevia: {len(t_short_c)} trades | Total Return: {m_short_c['total_return_pct']:+,.1f}% | Win Rate: {m_short_c['win_rate_pct']}% | PF: {m_short_c['profit_factor']}")
 
     print("\n===================================================================")
     print("STEP 4: Saving Strategies Catalog for ETHUSDT")

@@ -973,8 +973,37 @@ class LiveSignalEngine:
             and model.direction == desired_side
             and abs(model.entry_price - float(entry_row["close"])) < 0.01
         )
-        if is_same_position and model.active_ticket:
+        active_ticket = model.active_ticket if isinstance(model.active_ticket, dict) else {}
+        try:
+            ticket_entry_price = float(active_ticket.get("entry_price", 0.0))
+        except (TypeError, ValueError):
+            ticket_entry_price = 0.0
+        expected_action = "BUY" if desired_side == "LONG" else "SELL"
+        ticket_matches_position = (
+            str(active_ticket.get("direction", "")).upper() == desired_side
+            and str(active_ticket.get("action", "")).upper() == expected_action
+            and abs(ticket_entry_price - float(entry_row["close"])) < 0.01
+        )
+        if is_same_position and ticket_matches_position:
             return
+
+        # A restart can discover that the persisted open trade belongs to the
+        # previous weekly regime. Close that authoritative record before
+        # opening the current regime; otherwise _persist_opened_trade reuses
+        # the old OPEN row and leaves the ledger side/entry out of sync with
+        # the new active ticket.
+        if model.position_status == "OPEN":
+            recovery_reason = (
+                "Weekly_MA55_Regime_Flip"
+                if model.direction != desired_side
+                else "Weekly_MA55_Regime_Reconcile"
+            )
+            self._close_position(
+                model,
+                float(entry_row["close"]),
+                recovery_reason,
+                exit_time=entry_time,
+            )
 
         model.direction = desired_side
         model.current_sl = 0.0
@@ -1278,10 +1307,20 @@ class LiveSignalEngine:
 
         return events
 
-    def _evaluate_closed_position(self, model: StrategyModel, close_price: float, candle_time: str) -> list[dict]:
-        """Apply BE, SL, and TP rules using a completed candle close only."""
+    def _evaluate_closed_position(
+        self,
+        model: StrategyModel,
+        close_price: float,
+        candle_time: str,
+        high_price: Optional[float] = None,
+        low_price: Optional[float] = None,
+    ) -> list[dict]:
+        """Apply protection rules from candle extremes and structure from close."""
         if model.position_status != "OPEN":
             return []
+
+        high_price = close_price if high_price is None else float(high_price)
+        low_price = close_price if low_price is None else float(low_price)
 
         sym = getattr(model, "symbol", "BTCUSDT").upper()
         fmt_sym = "ETH/USDT" if sym == "ETHUSDT" else "BTC/USDT"
@@ -1295,6 +1334,21 @@ class LiveSignalEngine:
         be_pct = cfg.get("be_pct", 0.0)
         partial_tp = float(cfg.get("partial_tp", 0.0) or 0.0)
         partial_weight = float(cfg.get("partial_weight", 0.0) or 0.0)
+        # Snapshot protection state before any BE/partial update made by this
+        # candle. Newly locked stops become effective on the next candle.
+        initial_sl = model.current_sl
+        be_active_before = model.be_active
+        tp_pct = cfg.get("tp_pct", 0.0)
+        hit_sl = (
+            initial_sl > 0
+            and ((model.direction == "LONG" and low_price <= initial_sl)
+                 or (model.direction == "SHORT" and high_price >= initial_sl))
+        )
+        hit_tp = (
+            tp_pct > 0
+            and ((model.direction == "LONG" and high_price >= model.target_tp)
+                 or (model.direction == "SHORT" and low_price <= model.target_tp))
+        )
 
         def upsert_breakeven_marker():
             try:
@@ -1325,8 +1379,8 @@ class LiveSignalEngine:
             partial_tp > 0
             and partial_weight > 0
             and not model.partial_taken
-            and ((model.direction == "LONG" and close_price >= model.entry_price * (1.0 + partial_tp))
-                 or (model.direction == "SHORT" and close_price <= model.entry_price * (1.0 - partial_tp)))
+            and ((model.direction == "LONG" and high_price >= model.entry_price * (1.0 + partial_tp))
+                 or (model.direction == "SHORT" and low_price <= model.entry_price * (1.0 - partial_tp)))
         )
         if partial_hit:
             model.partial_taken = True
@@ -1360,7 +1414,11 @@ class LiveSignalEngine:
             except Exception as exc:
                 logger.error(f"Error persisting partial take-profit state for {model.strat_id}: {exc}")
 
-        if be_pct > 0 and not model.be_active and flt_pnl >= (be_pct * 100.0):
+        be_hit = (
+            (model.direction == "LONG" and high_price >= model.entry_price * (1.0 + be_pct))
+            or (model.direction == "SHORT" and low_price <= model.entry_price * (1.0 - be_pct))
+        )
+        if be_pct > 0 and not model.be_active and be_hit:
             model.be_active = True
             model.current_sl = round(
                 model.entry_price * (1.002 if model.direction == "LONG" else 0.998),
@@ -1389,20 +1447,16 @@ class LiveSignalEngine:
             except Exception as exc:
                 logger.error(f"Error persisting breakeven state for {model.strat_id}: {exc}")
 
-        hit_sl = (
-            model.current_sl > 0
-            and ((model.direction == "LONG" and close_price <= model.current_sl)
-                 or (model.direction == "SHORT" and close_price >= model.current_sl))
-        )
-        tp_pct = cfg.get("tp_pct", 0.0)
-        hit_tp = (
-            tp_pct > 0
-            and ((model.direction == "LONG" and close_price >= model.target_tp)
-                 or (model.direction == "SHORT" and close_price <= model.target_tp))
-        )
         if hit_sl or hit_tp:
-            exit_reason = "Take_Profit" if hit_tp else ("Fast_Breakeven" if model.be_active else "Stop_Loss")
-            exit_trade = self._close_position(model, close_price, exit_reason, exit_time=candle_time)
+            # Conservative intrabar convention: if SL and TP are both touched,
+            # assume the protective stop was hit first.
+            exit_reason = (
+                "Fast_Breakeven" if hit_sl and be_active_before
+                else "Stop_Loss" if hit_sl
+                else "Take_Profit"
+            )
+            exit_price = initial_sl if hit_sl else model.target_tp
+            exit_trade = self._close_position(model, exit_price, exit_reason, exit_time=candle_time)
             events.append({
                 "type": "POSITION_CLOSED",
                 "symbol": fmt_sym,
@@ -1480,7 +1534,13 @@ class LiveSignalEngine:
                 continue
 
             self._evaluate_strategy_levels(model, sym)
-            close_events = self._evaluate_closed_position(model, curr_price, new_bar["datetime"])
+            close_events = self._evaluate_closed_position(
+                model,
+                curr_price,
+                new_bar["datetime"],
+                high_price=new_bar["high"],
+                low_price=new_bar["low"],
+            )
             for event in close_events:
                 await binance_manager.broadcast(event)
             # A protection exit is terminal for this candle.  Do not close and

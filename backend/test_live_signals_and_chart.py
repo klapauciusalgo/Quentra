@@ -58,6 +58,172 @@ def test_reload_local_catalog_uses_effective_runtime_path(tmp_path, monkeypatch)
         main.STRATEGIES_MAP = previous_map
 
 
+def test_weekly_macro_restore_rebuilds_stale_active_ticket():
+    """A persisted short regime must not keep a stale long ticket after restore."""
+    import pandas as pd
+
+    engine = LiveSignalEngine()
+    model = StrategyModel(
+        "test-mavora",
+        "Mavora",
+        "1w",
+        "LONG",
+        {
+            "execution": "weekly_ma55_regime",
+            "mode": "long_short",
+            "sl_pct": 0.0,
+            "be_pct": 0.0,
+            "tp_pct": 0.0,
+        },
+    )
+    engine.strategies["pure-macro-weekly-ma55"] = model
+
+    closes = [100.0] * 54 + [90.0]
+    candles = pd.DataFrame(
+        {
+            "time": range(len(closes)),
+            "timestamp": [i * 604800 for i in range(len(closes))],
+            "datetime": [f"2026-01-{i + 1:02d} 00:00:00" for i in range(len(closes))],
+            "open": closes,
+            "high": closes,
+            "low": closes,
+            "close": closes,
+            "volume": [1.0] * len(closes),
+        }
+    )
+    candles["MA55"] = candles["close"].rolling(55).mean()
+    engine.candle_buffers["1w"] = candles
+
+    model.position_status = "OPEN"
+    model.direction = "SHORT"
+    model.entry_price = 90.0
+    model.entry_time = "2026-01-28 00:00:00"
+    model.active_ticket = {
+        "direction": "LONG",
+        "action": "BUY",
+        "entry_price": 90.0,
+    }
+
+    engine._restore_weekly_macro_position("BTCUSDT")
+
+    assert model.direction == "SHORT"
+    assert model.active_ticket["direction"] == "SHORT"
+    assert model.active_ticket["action"] == "SELL"
+
+
+def test_weekly_macro_restore_reconciles_previous_regime_ledger(tmp_path, monkeypatch):
+    """Cold-start recovery closes the prior regime before opening the current one."""
+    import pandas as pd
+    import live_signal_engine as engine_module
+    from catalog_storage import ensure_runtime_catalog, runtime_catalog_path
+
+    backend_data = tmp_path / "backend" / "data"
+    backend_data.mkdir(parents=True)
+    (backend_data / "strategies.json").write_text(
+        json.dumps(
+            [
+                {
+                    "id": "pure-macro-weekly-ma55",
+                    "name": "Mavora",
+                    "trades": [
+                        {
+                            "trade_no": 1,
+                            "side": "SHORT",
+                            "type": "SHORT",
+                            "entry_time": "2026-01-01 00:00:00",
+                            "exit_time": "RUNNING",
+                            "entry_price": 90.0,
+                            "exit_price": 90.0,
+                            "status": "OPEN",
+                            "is_active": True,
+                        }
+                    ],
+                    "markers": [],
+                    "has_active_signal": True,
+                    "active_ticket": {
+                        "direction": "SHORT",
+                        "action": "SELL",
+                        "entry_price": 90.0,
+                    },
+                }
+            ]
+        )
+    )
+    ensure_runtime_catalog("BTCUSDT", tmp_path)
+    monkeypatch.setattr(
+        engine_module,
+        "__file__",
+        str(tmp_path / "backend" / "live_signal_engine.py"),
+    )
+
+    engine = LiveSignalEngine()
+    candles = pd.DataFrame(
+        {
+            "time": range(56),
+            "timestamp": [i * 604800 for i in range(56)],
+            "datetime": pd.date_range("2026-01-01", periods=56, freq="W-MON").strftime("%Y-%m-%d %H:%M:%S"),
+            "open": [100.0] * 54 + [90.0, 110.0],
+            "high": [100.0] * 54 + [90.0, 110.0],
+            "low": [100.0] * 54 + [90.0, 110.0],
+            "close": [100.0] * 54 + [90.0, 110.0],
+            "volume": [1.0] * 56,
+        }
+    )
+    candles["MA55"] = candles["close"].rolling(55).mean()
+    engine.candle_buffers["1w"] = candles
+    engine.sync_active_positions("BTCUSDT")
+    engine._restore_weekly_macro_position("BTCUSDT")
+
+    catalog = json.loads(runtime_catalog_path("BTCUSDT", tmp_path).read_text())
+    strategy = next(item for item in catalog if item["id"] == "pure-macro-weekly-ma55")
+    trades = strategy["trades"]
+
+    assert [trade["status"] for trade in trades] == ["CLOSED", "OPEN"]
+    assert [trade["side"] for trade in trades] == ["SHORT", "LONG"]
+    assert trades[-1]["entry_price"] == 110.0
+    assert strategy["active_ticket"]["direction"] == "LONG"
+    assert strategy["active_ticket"]["action"] == "BUY"
+
+
+def test_protection_rules_use_intrabar_extremes_and_sl_precedence():
+    engine = LiveSignalEngine()
+    config = {"sl_pct": 0.05, "be_pct": 0.0, "tp_pct": 0.20, "partial_tp": 0.0}
+
+    long_model = StrategyModel("test-intrabar-long", "Test Intrabar Long", "30m", "LONG", config, "BTCUSDT")
+    long_model.position_status = "OPEN"
+    long_model.entry_price = 100.0
+
+    long_model.current_sl = 95.0
+    long_model.target_tp = 120.0
+    long_events = engine._evaluate_closed_position(
+        long_model,
+        100.0,
+        "2026-09-26 01:00:00",
+        high_price=125.0,
+        low_price=94.0,
+    )
+    assert long_model.position_status == "FLAT"
+    assert long_events[0]["trade"]["reason"] == "Stop_Loss"
+    assert long_events[0]["trade"]["exit_price"] == 95.0
+
+    short_model = StrategyModel("test-intrabar-short", "Test Intrabar Short", "30m", "SHORT", config, "ETHUSDT")
+    short_model.position_status = "OPEN"
+    short_model.entry_price = 100.0
+
+    short_model.current_sl = 105.0
+    short_model.target_tp = 80.0
+    short_events = engine._evaluate_closed_position(
+        short_model,
+        90.0,
+        "2026-09-26 01:00:00",
+        high_price=103.0,
+        low_price=79.0,
+    )
+    assert short_model.position_status == "FLAT"
+    assert short_events[0]["trade"]["reason"] == "Take_Profit"
+    assert short_events[0]["trade"]["exit_price"] == 80.0
+
+
 def test_system_status(client):
     res = client.get("/api/status")
     assert res.status_code == 200
@@ -751,8 +917,12 @@ def test_strategy_detail_endpoint_returns_restricted_fields_for_verified_pro(cli
     assert payload["logic_summary"]
     assert payload["recommended_for"]
     assert payload["parameters"]["entry_swing"]
-    assert payload["active_ticket"] is not None
-    assert any("stop_loss" in trade and "take_profit" in trade for trade in payload["trades"])
+    if payload["has_active_signal"]:
+        assert payload["active_ticket"] is not None
+        assert any("stop_loss" in trade and "take_profit" in trade for trade in payload["trades"])
+    else:
+        # A strategy can be legitimately flat when its entry regime is not active.
+        assert payload["active_ticket"] is None
     assert isinstance(payload["markers"], list)
     assert "restricted_content" not in payload
 
@@ -1308,7 +1478,7 @@ def test_scalp_partial_take_profit_locks_breakeven_and_blends_exit():
         "timestamp": 1774301800000,
         "open": 104.0,
         "high": 104.0,
-        "low": 102.0,
+        "low": 100.0,
         "close": 100.1,
         "volume": 1.0,
     }, collector, symbol="BTCUSDT"))

@@ -27,6 +27,25 @@ function calculateMAs(candles, period) {
   return result;
 }
 
+function requiresAuthoritativeBackend(pathname) {
+  return pathname === '/api/status'
+    || pathname === '/api/floor'
+    || pathname === '/api/strategies'
+    || pathname.startsWith('/api/strategies/')
+    || pathname.startsWith('/api/signals/')
+    || pathname === '/api/klines'
+    || pathname.startsWith('/ws');
+}
+
+function backendUnavailableResponse() {
+  return new Response(JSON.stringify({
+    status: 'OFFLINE',
+    error: 'Authoritative backend is unavailable',
+    code: 'BACKEND_UNAVAILABLE',
+    signals_available: false,
+  }), { status: 503, headers: CORS_HEADERS });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -47,15 +66,8 @@ export default {
         return await fetch(new Request(target.toString(), request));
       } catch (err) {
         console.error('Proxy to backend failed:', err);
-        if (
-          url.pathname.startsWith('/api/signals/') ||
-          url.pathname === '/api/klines' ||
-          url.pathname.startsWith('/ws')
-        ) {
-          return new Response(JSON.stringify({
-            error: 'Local data backend is unavailable',
-            code: 'BACKEND_UNAVAILABLE',
-          }), { status: 503, headers: CORS_HEADERS });
+        if (requiresAuthoritativeBackend(url.pathname)) {
+          return backendUnavailableResponse();
         }
       }
     }
@@ -81,15 +93,7 @@ export default {
 
     // 2. Edge handler: /api/status
     if (url.pathname === '/api/status') {
-      return new Response(JSON.stringify({
-        status: "EDGE_ONLY",
-        service: "Quentra Platform (Edge Cache)",
-        binance_ws_connected: false,
-        ticker_status: "EDGE_FALLBACK",
-        signals_available: false,
-        supported_assets: ["BTCUSDT", "ETHUSDT"],
-        data_source: env && env.BACKEND_URL ? "backend_proxy" : "unavailable",
-      }), { headers: CORS_HEADERS });
+      return backendUnavailableResponse();
     }
 
     // Strategy and floor state are authoritative backend data. Never serve

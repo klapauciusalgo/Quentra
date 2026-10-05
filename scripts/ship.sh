@@ -28,7 +28,7 @@ else
     echo "ℹ️ quentra.service not active or sudo not required, continuing."
 fi
 
-echo "▶️ Step 5/5: Synchronizing Git repository & triggering Cloudflare Edge..."
+echo "▶️ Step 5/6: Synchronizing Git repository..."
 git add backend/ frontend/ worker.js package.json scripts/
 if git diff --staged --quiet; then
     echo "ℹ️ No unstaged/staged code changes to commit."
@@ -36,8 +36,12 @@ else
     COMMIT_MSG="chore(release): automated sync & build $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
     git commit -m "$COMMIT_MSG"
     git push origin main
-    echo "✅ Git push origin main complete! Cloudflare Edge Workers updated."
+    echo "✅ Git push origin main complete!"
 fi
+
+echo "▶️ Step 6/6: Deploying Cloudflare Worker and verifying production runtime..."
+npx wrangler deploy
+npm run verify:production
 
 echo "=========================================================="
 echo "🎉 [QUENTRA SHIP] All systems synchronized and deployed!"

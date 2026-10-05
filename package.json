@@ -6,6 +6,7 @@
     "build": "cd frontend && npm install && npm run build",
     "deploy": "npx wrangler deploy",
     "test:worker-security": "node scripts/check-worker-security.mjs",
+    "verify:production": "node scripts/verify-production-runtime.mjs",
     "ship": "bash scripts/ship.sh"
   }
 }

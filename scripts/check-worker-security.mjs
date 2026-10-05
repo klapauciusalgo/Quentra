@@ -19,9 +19,9 @@ for (const forbidden of [
 
 assert.match(source, /Authoritative backend is unavailable/);
 assert.match(source, /code: 'BACKEND_UNAVAILABLE'/);
-assert.match(source, /url\.pathname === '\/api\/floor'/);
-assert.match(source, /url\.pathname === '\/api\/strategies'/);
-assert.match(source, /url\.pathname\.startsWith\('\/api\/strategies\/'\)/);
-assert.match(source, /data_source: env && env\.BACKEND_URL \? "backend_proxy" : "unavailable"/);
+assert.match(source, /function requiresAuthoritativeBackend\(pathname\)/);
+assert.match(source, /function backendUnavailableResponse\(\)/);
+assert.match(source, /status: 'OFFLINE'/);
+assert.match(source, /signals_available: false/);
 
 console.log('Worker security checks passed: no static proprietary floor/catalog fallback.');

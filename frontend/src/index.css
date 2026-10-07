@@ -251,3 +251,296 @@
     animation: none !important;
   }
 }
+
+/* Not-found route map */
+.not-found-sweep {
+  background: linear-gradient(110deg, transparent 0 38%, rgba(255, 255, 255, 0.28) 48%, transparent 60%);
+  opacity: 0.42;
+  transform: translateX(-20%);
+  animation: not-found-soft-sweep 13s ease-in-out infinite;
+}
+
+.not-found-brand-mark {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--apple-blue) 45%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--apple-surface) 46%, transparent);
+  color: var(--apple-blue);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.not-found-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--apple-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--apple-surface) 45%, transparent);
+  backdrop-filter: blur(14px);
+  color: var(--apple-muted);
+  font-size: 11px;
+}
+
+.not-found-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--apple-green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--apple-green) 12%, transparent);
+  animation: not-found-status-pulse 2.4s ease-in-out infinite;
+}
+
+.not-found-primary-button,
+.not-found-secondary-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  padding: 13px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
+}
+
+.not-found-primary-button {
+  border: 1px solid var(--apple-blue);
+  background: var(--apple-blue);
+  color: #fff;
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--apple-blue) 19%, transparent);
+}
+
+.not-found-primary-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--apple-blue) 26%, transparent);
+}
+
+.not-found-secondary-button {
+  border: 1px solid var(--apple-border);
+  background: color-mix(in srgb, var(--apple-surface) 52%, transparent);
+  color: var(--apple-text);
+}
+
+.not-found-secondary-button:hover {
+  transform: translateY(-2px);
+  background: var(--apple-surface);
+}
+
+.not-found-safe-check {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--apple-green) 35%, transparent);
+  border-radius: 999px;
+  color: var(--apple-green);
+}
+
+.not-found-map-aura {
+  position: absolute;
+  width: 460px;
+  height: 460px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--apple-blue) 9%, transparent);
+  filter: blur(28px);
+  opacity: 0.72;
+}
+
+.not-found-map-card {
+  border: 1px solid var(--apple-glass-border);
+  background: var(--apple-glass-card-bg);
+  backdrop-filter: blur(22px);
+  box-shadow: var(--apple-glass-inner-bevel), 0 28px 70px rgba(48, 55, 66, 0.11);
+}
+
+.not-found-axis {
+  fill: none;
+  stroke: var(--apple-border);
+  stroke-width: 1;
+}
+
+.not-found-orbit {
+  fill: none;
+  stroke: var(--apple-border);
+  stroke-width: 1;
+}
+
+.not-found-orbit--dashed {
+  stroke-dasharray: 3 10;
+  opacity: 0.8;
+}
+
+.not-found-route {
+  fill: none;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-dasharray: 2 10;
+  animation: not-found-route-flow 10s linear infinite;
+}
+
+.not-found-route--primary {
+  stroke: var(--apple-blue);
+  opacity: 0.46;
+}
+
+.not-found-route--secondary {
+  stroke: var(--apple-purple);
+  opacity: 0.36;
+  animation-duration: 15s;
+  animation-delay: -4s;
+}
+
+.not-found-missing {
+  fill: var(--apple-glass-card-bg);
+  stroke: var(--apple-red);
+  stroke-width: 1.2;
+  stroke-dasharray: 2 8;
+  animation: not-found-orbit-spin 18s linear infinite;
+  transform-origin: 315px 236px;
+}
+
+.not-found-missing-inner {
+  fill: none;
+  stroke: var(--apple-red);
+  stroke-width: 1;
+  opacity: 0.62;
+}
+
+.not-found-missing-cross {
+  stroke: var(--apple-red);
+  stroke-width: 1;
+  opacity: 0.56;
+}
+
+.not-found-missing-label {
+  fill: var(--apple-red);
+  font-family: "SF Mono", "JetBrains Mono", "Geist Mono", monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+.not-found-node {
+  fill: color-mix(in srgb, var(--apple-surface) 82%, transparent);
+  stroke-width: 1.2;
+}
+
+.not-found-node--blue { stroke: var(--apple-blue); }
+.not-found-node--green { stroke: var(--apple-green); }
+.not-found-node--purple { stroke: var(--apple-purple); }
+
+.not-found-node-dot {
+  fill: var(--apple-blue);
+  animation: not-found-node-pulse 2.8s ease-in-out infinite;
+}
+
+.not-found-node-dot--green {
+  fill: var(--apple-green);
+  animation-delay: -0.8s;
+}
+
+.not-found-node-dot--purple {
+  fill: var(--apple-purple);
+  animation-delay: -1.5s;
+}
+
+.not-found-node-label {
+  fill: var(--apple-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.not-found-node-meta {
+  fill: var(--apple-muted);
+  font-family: "SF Mono", "JetBrains Mono", "Geist Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+.not-found-traveller {
+  fill: var(--apple-blue);
+  filter: drop-shadow(0 2px 5px color-mix(in srgb, var(--apple-blue) 28%, transparent));
+  animation: not-found-travel 7s linear infinite;
+  offset-distance: 0%;
+}
+
+.not-found-traveller--primary {
+  offset-path: path("M80 344 C186 276 210 126 315 236 S476 147 558 185");
+}
+
+.not-found-traveller--secondary {
+  fill: var(--apple-green);
+  offset-path: path("M106 120 C220 146 218 342 315 236 S472 336 540 364");
+  animation-delay: -3.2s;
+  animation-duration: 9s;
+}
+
+@keyframes not-found-route-flow {
+  to { stroke-dashoffset: -180; }
+}
+
+@keyframes not-found-orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes not-found-node-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.75); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+@keyframes not-found-travel {
+  from { offset-distance: 0%; }
+  to { offset-distance: 100%; }
+}
+
+@keyframes not-found-status-pulse {
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+@keyframes not-found-soft-sweep {
+  0%, 100% { opacity: 0; transform: translateX(-20%); }
+  45%, 60% { opacity: 0.42; }
+  50% { transform: translateX(20%); }
+}
+
+@media (max-width: 639px) {
+  .not-found-map-aura {
+    width: 340px;
+    height: 340px;
+  }
+
+  .not-found-primary-button,
+  .not-found-secondary-button {
+    min-height: 42px;
+    padding: 12px 14px;
+    font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .not-found-sweep,
+  .not-found-status-dot,
+  .not-found-route,
+  .not-found-missing,
+  .not-found-node-dot,
+  .not-found-traveller,
+  .not-found-primary-button,
+  .not-found-secondary-button {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .not-found-traveller {
+    display: none;
+  }
+}

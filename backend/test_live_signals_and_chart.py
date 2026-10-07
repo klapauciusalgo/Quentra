@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import main
-from live_signal_engine import LiveSignalEngine, StrategyModel, live_signal_engine
+from live_signal_engine import LiveSignalEngine, StrategyModel, live_signal_engine, _closed_trade_entry_marker
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -429,8 +429,254 @@ def test_live_close_is_persisted_idempotently(tmp_path, monkeypatch):
     assert len(strategy["trades"]) == 1
     assert strategy["trades"][0]["trade_no"] == 1
     exit_markers = [marker for marker in strategy["markers"] if marker.get("eventType") == "exit"]
+    entry_markers = [marker for marker in strategy["markers"] if marker.get("eventType") == "entry"]
     assert len(exit_markers) == 1
+    assert len(entry_markers) == 1
+    assert entry_markers[0]["tradeNo"] == 1
+    assert entry_markers[0]["entryPrice"] == record["entry_price"]
     assert exit_markers[0]["tradeNo"] == 1
+
+
+def test_live_close_replaces_legacy_open_entry_with_one_canonical_closed_marker(tmp_path, monkeypatch):
+    open_trade = {
+        "trade_no": 1,
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "RUNNING",
+        "entry_price": 84100.77,
+        "exit_price": 84100.77,
+        "status": "OPEN",
+        "is_active": True,
+    }
+    engine, model, runtime_path = _runtime_engine_with_strategy(
+        tmp_path,
+        monkeypatch,
+        "pippo-30m-grd",
+        [open_trade],
+    )
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    strategy["markers"] = [{
+        "time": "2026-09-26 08:00:00",
+        "position": "belowBar",
+        "shape": "arrowUp",
+        "text": "ACTIVE LONG @ $84,100.77",
+        "entryPrice": 84100.77,
+        "side": "LONG",
+        "tradeNo": 1,
+        "status": "OPEN",
+        "isActive": True,
+        "eventType": "entry",
+    }]
+    runtime_path.write_text(json.dumps(catalog))
+
+    engine._persist_closed_trade(model, {
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 84100.77,
+        "exit_price": 84140.0,
+        "gross_return_pct": 0.05,
+        "net_return_pct": -0.13,
+        "reason": "Force Close MA (-0.5%)",
+        "status": "CLOSED",
+    })
+
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    entries = [marker for marker in strategy["markers"] if marker.get("tradeNo") == 1 and marker.get("eventType") == "entry"]
+    assert len(entries) == 1
+    assert entries[0]["text"] == "ENTRY LONG @ $84,100.77"
+    assert entries[0]["status"] == "CLOSED"
+    assert entries[0]["isActive"] is False
+    assert entries[0]["entryPrice"] == 84100.77
+    assert isinstance(entries[0]["time"], int)
+
+
+def test_live_close_terminal_duplicate_deduplicates_legacy_entry_timestamp(tmp_path, monkeypatch):
+    closed_trade = {
+        "trade_no": 1,
+        "side": "SHORT",
+        "type": "SHORT",
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 84100.77,
+        "exit_price": 84140.0,
+        "gross_return_pct": 0.05,
+        "net_return_pct": -0.13,
+        "status": "CLOSED",
+        "is_active": False,
+    }
+    engine, model, runtime_path = _runtime_engine_with_strategy(
+        tmp_path,
+        monkeypatch,
+        "pippo-30m-grd",
+        [closed_trade],
+    )
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    strategy["markers"] = [{
+        "time": "2026-09-26 08:00:00",
+        "position": "aboveBar",
+        "shape": "arrowDown",
+        "text": "ENTRY SHORT @ $84,100.77",
+        "entryPrice": 84100.77,
+        "side": "SHORT",
+        "tradeNo": 1,
+        "status": "CLOSED",
+        "isActive": False,
+        "eventType": "entry",
+    }]
+    runtime_path.write_text(json.dumps(catalog))
+
+    engine._persist_closed_trade(model, {
+        "side": "SHORT",
+        "type": "SHORT",
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 84100.77,
+        "exit_price": 84140.0,
+        "gross_return_pct": 0.05,
+        "net_return_pct": -0.13,
+        "reason": "Force Close MA (-0.5%)",
+        "status": "CLOSED",
+    })
+
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    entries = [marker for marker in strategy["markers"] if marker.get("tradeNo") == 1 and marker.get("eventType") == "entry"]
+    assert len(entries) == 1
+    assert entries[0]["text"] == "ENTRY SHORT @ $84,100.77"
+    assert entries[0]["side"] == "SHORT"
+
+
+def test_live_close_terminal_duplicate_preserves_one_canonical_legacy_exit_marker(tmp_path, monkeypatch):
+    closed_trade = {
+        "trade_no": 1,
+        "side": "SHORT",
+        "type": "SHORT",
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 84100.77,
+        "exit_price": 84140.0,
+        "gross_return_pct": 0.05,
+        "net_return_pct": -0.13,
+        "status": "CLOSED",
+        "is_active": False,
+    }
+    engine, model, runtime_path = _runtime_engine_with_strategy(
+        tmp_path,
+        monkeypatch,
+        "pippo-30m-grd",
+        [closed_trade],
+    )
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    strategy["markers"] = [{
+        "time": "2026-09-28 00:30:00",
+        "shape": "circle",
+        "position": "aboveBar",
+        "exitPrice": 84140.0,
+        "tradeNo": 1,
+        "status": "CLOSED",
+        "isActive": False,
+        "eventType": "exit",
+    }]
+    runtime_path.write_text(json.dumps(catalog))
+
+    engine._persist_closed_trade(model, {
+        "side": "SHORT",
+        "type": "SHORT",
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 84100.77,
+        "exit_price": 84140.0,
+        "gross_return_pct": 0.05,
+        "net_return_pct": -0.13,
+        "reason": "Force Close MA (-0.5%)",
+        "status": "CLOSED",
+    })
+
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    exits = [marker for marker in strategy["markers"] if marker.get("tradeNo") == 1 and marker.get("eventType") == "exit"]
+    assert len(exits) == 1
+    assert exits[0]["shape"] == "arrowUp"
+    assert exits[0]["position"] == "belowBar"
+    assert exits[0]["side"] == "SHORT"
+
+
+def test_live_close_terminal_duplicate_replaces_active_legacy_entry_without_trade_number(tmp_path, monkeypatch):
+    closed_trade = {
+        "trade_no": 1,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 84100.77,
+        "exit_price": 84140.0,
+        "gross_return_pct": 0.05,
+        "net_return_pct": -0.13,
+        "status": "CLOSED",
+        "is_active": False,
+    }
+    engine, model, runtime_path = _runtime_engine_with_strategy(
+        tmp_path,
+        monkeypatch,
+        "pippo-30m-grd",
+        [closed_trade],
+    )
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    strategy["markers"] = [{
+        "time": "2026-09-26 08:00:00",
+        "position": "belowBar",
+        "shape": "arrowUp",
+        "entryPrice": 84100.77,
+        "side": "LONG",
+        "status": "OPEN",
+        "isActive": True,
+        "eventType": "entry",
+    }]
+    runtime_path.write_text(json.dumps(catalog))
+
+    engine._persist_closed_trade(model, {
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 84100.77,
+        "exit_price": 84140.0,
+        "gross_return_pct": 0.05,
+        "net_return_pct": -0.13,
+        "reason": "Force Close MA (-0.5%)",
+        "status": "CLOSED",
+    })
+
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    entries = [marker for marker in strategy["markers"] if marker.get("eventType") == "entry"]
+    assert len(entries) == 1
+    assert entries[0]["tradeNo"] == 1
+    assert entries[0]["status"] == "CLOSED"
+    assert entries[0]["isActive"] is False
+
+
+@pytest.mark.parametrize("entry_time,entry_price", [
+    (None, 100.0),
+    ("not-a-time", 100.0),
+    ("2026-09-26 08:00:00", None),
+    ("2026-09-26 08:00:00", "not-a-price"),
+    ("2026-09-26 08:00:00", float("nan")),
+    ("2026-09-26 08:00:00", float("inf")),
+])
+def test_closed_trade_entry_marker_rejects_invalid_lifecycle_fields(entry_time, entry_price):
+    assert _closed_trade_entry_marker({
+        "trade_no": 1,
+        "side": "LONG",
+        "entry_time": entry_time,
+        "entry_price": entry_price,
+    }) is None
 
 
 def test_close_does_not_use_single_open_row_when_lifecycle_identity_disagrees(tmp_path, monkeypatch):

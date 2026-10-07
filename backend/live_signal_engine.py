@@ -50,7 +50,9 @@ def _marker_identity(marker: dict) -> tuple:
     except (TypeError, ValueError):
         price = ""
     fallback_trade_no = "" if price else marker.get("tradeNo", "")
-    return (str(marker.get("time", "")), event_type, side, price, fallback_trade_no)
+    marker_time = _marker_timestamp_seconds(marker.get("time"))
+    time_key = str(marker_time) if marker_time is not None else str(marker.get("time", ""))
+    return (time_key, event_type, side, price, fallback_trade_no)
 
 
 def _marker_priority(marker: dict) -> int:
@@ -135,6 +137,173 @@ def _canonical_active_markers(model: "StrategyModel", trade_no: Any = None) -> L
             trade_no,
         ))
     return markers
+
+
+def _closed_trade_entry_marker(trade: dict, fallback_side: Any = None) -> Optional[dict]:
+    """Build the canonical historical entry marker for a closed trade."""
+    entry_time = _marker_timestamp_seconds(trade.get("entry_time"))
+    if entry_time is None:
+        return None
+    try:
+        entry_price = float(trade.get("entry_price"))
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(entry_price):
+        return None
+    side = str(
+        trade.get("side")
+        or trade.get("type")
+        or fallback_side
+        or "LONG"
+    ).upper()
+    trade_no = trade.get("trade_no")
+    return {
+        "time": entry_time,
+        "position": "belowBar" if side == "LONG" else "aboveBar",
+        "color": "#30D158" if side == "LONG" else "#FF453A",
+        "shape": "arrowUp" if side == "LONG" else "arrowDown",
+        "text": f"ENTRY {side} @ ${entry_price:,.2f}",
+        "size": 2,
+        "entryPrice": entry_price,
+        "side": side,
+        "status": "CLOSED",
+        "isActive": False,
+        "eventType": "entry",
+        "tradeNo": trade_no,
+    }
+
+
+def _upsert_closed_trade_entry_marker(
+    markers: List[dict],
+    trade: dict,
+    fallback_side: Any = None,
+) -> List[dict]:
+    """Replace every legacy entry marker for a trade with one canonical marker."""
+    entry_marker = _closed_trade_entry_marker(trade, fallback_side=fallback_side)
+    if entry_marker is None:
+        return markers
+
+    trade_no = _trade_number(entry_marker.get("tradeNo"))
+    entry_time = _marker_timestamp_seconds(entry_marker.get("time"))
+    entry_price_value: Any = entry_marker.get("entryPrice")
+    try:
+        entry_price = float(entry_price_value)
+    except (TypeError, ValueError):
+        entry_price = None
+    entry_side = str(entry_marker.get("side") or "").upper()
+    normalized = []
+    inserted = False
+    for marker in markers:
+        marker_trade_no = _trade_number(marker.get("tradeNo"))
+        marker_side = str(
+            marker.get("side")
+            or ("LONG" if marker.get("shape") == "arrowUp" else "SHORT" if marker.get("shape") == "arrowDown" else "")
+        ).upper()
+        same_trade_entry = (
+            _marker_event_type(marker) == "entry"
+            and (
+                (
+                    trade_no > 0
+                    and marker.get("tradeNo") not in (None, "")
+                    and marker_trade_no == trade_no
+                )
+                or (
+                    marker.get("tradeNo") in (None, "")
+                    and entry_time is not None
+                    and _marker_timestamp_seconds(marker.get("time")) == entry_time
+                    and entry_price is not None
+                    and _marker_price_matches(marker, "entryPrice", entry_price)
+                    and (not marker_side or not entry_side or marker_side == entry_side)
+                )
+            )
+        )
+        if same_trade_entry:
+            if not inserted:
+                normalized.append(entry_marker)
+                inserted = True
+            continue
+        normalized.append(marker)
+
+    if not inserted:
+        normalized.append(entry_marker)
+    return normalized
+
+
+def _closed_trade_exit_marker(
+    trade: dict,
+    exit_time: Any,
+    exit_price: Any,
+    pnl_pct: Any,
+    reason: Any,
+    fallback_side: Any = None,
+) -> dict:
+    """Build the canonical historical exit marker for a closed trade."""
+    side = str(
+        trade.get("side")
+        or trade.get("type")
+        or fallback_side
+        or "LONG"
+    ).upper()
+    return {
+        "time": exit_time,
+        "position": "aboveBar" if side == "LONG" else "belowBar",
+        "color": "#EF4444" if side == "LONG" else "#10B981",
+        "shape": "arrowDown" if side == "LONG" else "arrowUp",
+        "text": f"EXIT {reason or 'Exit'} #{trade.get('trade_no')}",
+        "exitPrice": exit_price,
+        "pnlPct": pnl_pct,
+        "reason": reason or "Exit",
+        "side": side,
+        "eventType": "exit",
+        "tradeNo": trade.get("trade_no"),
+        "isActive": False,
+    }
+
+
+def _upsert_closed_trade_exit_marker(
+    markers: List[dict],
+    exit_marker: dict,
+) -> List[dict]:
+    """Replace every legacy exit marker for a trade with one canonical marker."""
+    trade_no = _trade_number(exit_marker.get("tradeNo"))
+    marker_time = _marker_timestamp_seconds(exit_marker.get("time"))
+    exit_price_value: Any = exit_marker.get("exitPrice")
+    try:
+        exit_price = float(exit_price_value)
+    except (TypeError, ValueError):
+        exit_price = None
+
+    normalized = []
+    inserted = False
+    for marker in markers:
+        marker_trade_no = _trade_number(marker.get("tradeNo"))
+        same_trade_exit = (
+            _marker_event_type(marker) == "exit"
+            and (
+                (
+                    trade_no > 0
+                    and marker.get("tradeNo") not in (None, "")
+                    and marker_trade_no == trade_no
+                )
+                or (
+                    marker.get("tradeNo") in (None, "")
+                    and marker_time is not None
+                    and _marker_timestamp_seconds(marker.get("time")) == marker_time
+                    and exit_price is not None
+                    and _marker_price_matches(marker, "exitPrice", exit_price)
+                )
+            )
+        )
+        if same_trade_exit:
+            if not inserted:
+                normalized.append(exit_marker)
+                inserted = True
+            continue
+        normalized.append(marker)
+
+    if not inserted:
+        normalized.append(exit_marker)
+    return normalized
 
 
 def deduplicate_markers(markers: List[dict]) -> List[dict]:
@@ -2092,6 +2261,7 @@ class LiveSignalEngine:
                     ) or _next_trade_number(trades, markers, high_water_mark)
 
                     if matching_trade:
+                        persisted_trade = matching_trade
                         matching_trade["trade_no"] = trade_no
                         matching_trade["status"] = "CLOSED"
                         matching_trade["is_active"] = False
@@ -2106,8 +2276,8 @@ class LiveSignalEngine:
                     else:
                         new_trade = {
                             "trade_no": trade_no,
-                            "side": model.direction,
-                            "type": model.direction,
+                            "side": trade_record.get("side") or trade_record.get("type") or model.direction,
+                            "type": trade_record.get("type") or trade_record.get("side") or model.direction,
                             "entry_time": trade_record.get("entry_time") or exit_time_str,
                             "exit_time": exit_time_str,
                             "entry_price": trade_record.get("entry_price") or trade_record["exit_price"],
@@ -2122,6 +2292,7 @@ class LiveSignalEngine:
                             "partial_position_pct": trade_record.get("partial_position_pct", 0.0),
                         }
                         trades.append(new_trade)
+                        persisted_trade = new_trade
 
                     high_water_mark = max(high_water_mark, trade_no)
                     strat["trade_no_high_water_mark"] = high_water_mark
@@ -2144,20 +2315,20 @@ class LiveSignalEngine:
                             if marker.get("status") == "OPEN":
                                 marker["status"] = "CLOSED"
 
-                    exit_marker = {
-                        "time": exit_time_str,
-                        "position": "aboveBar" if model.direction == "LONG" else "belowBar",
-                        "color": "#EF4444" if model.direction == "LONG" else "#10B981",
-                        "shape": "arrowDown" if model.direction == "LONG" else "arrowUp",
-                        "text": f"EXIT {trade_record.get('reason', 'Exit')} #{trade_no}",
-                        "exitPrice": trade_record["exit_price"],
-                        "pnlPct": trade_record["net_return_pct"],
-                        "reason": trade_record.get("reason", "Exit"),
-                        "eventType": "exit",
-                        "tradeNo": trade_no,
-                        "isActive": False
-                    }
-                    markers.append(exit_marker)
+                    markers = _upsert_closed_trade_entry_marker(
+                        markers,
+                        persisted_trade,
+                        fallback_side=trade_record.get("side") or trade_record.get("type") or getattr(model, "direction", None),
+                    )
+                    exit_marker = _closed_trade_exit_marker(
+                        persisted_trade,
+                        exit_time=exit_time_str,
+                        exit_price=trade_record["exit_price"],
+                        pnl_pct=trade_record["net_return_pct"],
+                        reason=trade_record.get("reason", "Exit"),
+                        fallback_side=trade_record.get("side") or trade_record.get("type") or getattr(model, "direction", None),
+                    )
+                    markers = _upsert_closed_trade_exit_marker(markers, exit_marker)
                     strat["markers"] = deduplicate_markers(markers)
 
                     updated_any = True

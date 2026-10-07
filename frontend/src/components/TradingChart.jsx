@@ -12,6 +12,7 @@ import {
 import { formatPrice, formatPercent, playRetroSound } from '../utils/formatters';
 import { formatUtcPlus7Tick, formatUtcPlus7Time } from '../utils/chartTime';
 import { getProcessedMarkers } from '../utils/chartMarkers';
+import { sortTradesByLifecycle, tradeLifecycleTimestamp } from '../utils/tradeTimeline';
 import { API_BASE } from '../config';
 import { 
   TrendingUp, 
@@ -328,15 +329,25 @@ export default function TradingChart({
 
   const canRenderExecutionTelemetry = activeStrategy?.entitlements?.execution_parameters === true;
   const tradesList = canRenderExecutionTelemetry ? (activeStrategy?.trades || []) : [];
-  const activeTrade = tradesList[focusedTradeIndex] || tradesList[tradesList.length - 1];
+  const timelineTrades = useMemo(() => {
+    if (!canRenderExecutionTelemetry) return [];
+    // Keep one canonical UI order: newest lifecycle event first. Trade numbers
+    // are stable identifiers, not chronological positions.
+    return sortTradesByLifecycle(tradesList, 'DESC');
+  }, [tradesList, canRenderExecutionTelemetry]);
+  const newestTrade = timelineTrades.reduce((latest, trade) => {
+    if (!latest || tradeLifecycleTimestamp(trade) > tradeLifecycleTimestamp(latest)) return trade;
+    return latest;
+  }, null);
+  const activeTrade = timelineTrades[focusedTradeIndex] || newestTrade;
   const isStrategyLong = activeStrategy?.type === 'LONG';
 
   // Map trades by timestamp for fast crosshair lookup & click-to-select
   const tradesByTime = useMemo(() => {
     const map = new Map();
-    if (!tradesList.length) return map;
+    if (!timelineTrades.length) return map;
 
-    tradesList.forEach((tr, idx) => {
+    timelineTrades.forEach((tr, idx) => {
       try {
         const cleanEntry = String(tr.entry_time).replace(' UTC', '').trim();
         const entryIso = cleanEntry.includes('T') ? cleanEntry : cleanEntry.replace(' ', 'T') + (cleanEntry.endsWith('Z') ? '' : 'Z');
@@ -357,21 +368,18 @@ export default function TradingChart({
     });
 
     return map;
-  }, [tradesList]);
+  }, [timelineTrades]);
 
   // Filtered trades for navigation strip (Sorted DESC by default to match trade logs)
   const filteredTrades = useMemo(() => {
-    let list = tradesList;
+    let list = timelineTrades;
     if (tradeFilter === 'WINS') {
-      list = tradesList.filter((t) => (t.net_return_pct || 0) > 0);
+      list = timelineTrades.filter((t) => (t.net_return_pct || 0) > 0);
     } else if (tradeFilter === 'LOSSES') {
-      list = tradesList.filter((t) => (t.net_return_pct || 0) <= 0);
+      list = timelineTrades.filter((t) => (t.net_return_pct || 0) <= 0);
     }
-    return [...list].sort((a, b) => {
-      const diff = (a.trade_no || 0) - (b.trade_no || 0);
-      return signalSortOrder === 'DESC' ? -diff : diff;
-    });
-  }, [tradesList, tradeFilter, signalSortOrder]);
+    return sortTradesByLifecycle(list, signalSortOrder);
+  }, [timelineTrades, tradeFilter, signalSortOrder]);
 
   // Fetch Klines whenever timeframe changes with multi-tier edge fallback
   useEffect(() => {
@@ -1041,12 +1049,12 @@ export default function TradingChart({
     }
   }, [candles, isDark]);
 
-  // Reset focused trade index when active strategy changes
+  // Reset focused trade to the newest lifecycle event when strategy changes.
   useEffect(() => {
-    if (tradesList.length > 0) {
-      setFocusedTradeIndex(tradesList.length - 1);
+    if (timelineTrades.length > 0) {
+      setFocusedTradeIndex(0);
     }
-  }, [activeStrategy?.id, tradesList.length]);
+  }, [activeStrategy?.id, timelineTrades.length]);
 
   // Update Markers dynamically when activeStrategy, showMarkers, or markerLabelMode changes
   useEffect(() => {
@@ -1668,7 +1676,7 @@ export default function TradingChart({
                     onClick={() => {
                       playRetroSound('select');
                       const nextIdx = Math.max(0, focusedTradeIndex - 1);
-                      handleJumpToTrade(tradesList[nextIdx], nextIdx);
+                      handleJumpToTrade(timelineTrades[nextIdx], nextIdx);
                     }}
                     disabled={focusedTradeIndex === 0}
                     className="p-1 hover:bg-black/[0.05] dark:hover:bg-white/[0.08] disabled:opacity-25 text-apple-muted hover:text-apple-text rounded-lg border border-black/[0.06] dark:border-white/[0.06] transition-colors"
@@ -1679,17 +1687,17 @@ export default function TradingChart({
 
                   {/* Stepper Count */}
                   <span className="text-[11px] text-apple-dim px-1 font-mono tabular-nums">
-                    {focusedTradeIndex + 1}/{tradesList.length}
+                    {focusedTradeIndex + 1}/{timelineTrades.length}
                   </span>
 
                   {/* Stepper: Next */}
                   <button
                     onClick={() => {
                       playRetroSound('select');
-                      const nextIdx = Math.min(tradesList.length - 1, focusedTradeIndex + 1);
-                      handleJumpToTrade(tradesList[nextIdx], nextIdx);
+                      const nextIdx = Math.min(timelineTrades.length - 1, focusedTradeIndex + 1);
+                      handleJumpToTrade(timelineTrades[nextIdx], nextIdx);
                     }}
-                    disabled={focusedTradeIndex === tradesList.length - 1}
+                    disabled={focusedTradeIndex === timelineTrades.length - 1}
                     className="p-1 hover:bg-black/[0.05] dark:hover:bg-white/[0.08] disabled:opacity-25 text-apple-muted hover:text-apple-text rounded-lg border border-black/[0.06] dark:border-white/[0.06] transition-colors"
                     title="Next Signal"
                   >
@@ -1799,9 +1807,9 @@ export default function TradingChart({
                     </button>
                     <button
                       onClick={() => {
-                        const latestIdx = tradesList.length - 1;
+                        const latestIdx = 0;
                         if (latestIdx >= 0) {
-                          handleJumpToTrade(tradesList[latestIdx], latestIdx);
+                          handleJumpToTrade(timelineTrades[latestIdx], latestIdx);
                         }
                         handleScrollToLastBar();
                       }}
@@ -1842,7 +1850,7 @@ export default function TradingChart({
       </div>
 
       {/* 4. Interactive Signal Timeline Carousel & Filter Bar (Below Chart) */}
-      {activeStrategy && tradesList.length > 0 && (
+      {activeStrategy && timelineTrades.length > 0 && (
         <div className="apple-glass-card rounded-2xl p-3 sm:p-4 space-y-3 text-xs">
           
           {/* Timeline Bar Header */}
@@ -1852,14 +1860,14 @@ export default function TradingChart({
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-apple-dim flex items-center gap-1.5 font-medium">
                 <Sliders className="w-3.5 h-3.5 text-apple-cyan" />
-                Signals ({tradesList.length}):
+                Signals ({timelineTrades.length}):
               </span>
               
               <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] p-0.5 rounded-xl">
                 {[
-                  { id: 'ALL', label: `All (${tradesList.length})` },
-                  { id: 'WINS', label: `Wins (${tradesList.filter((t) => (t.net_return_pct || 0) > 0).length})` },
-                  { id: 'LOSSES', label: `Losses (${tradesList.filter((t) => (t.net_return_pct || 0) <= 0).length})` },
+                  { id: 'ALL', label: `All (${timelineTrades.length})` },
+                  { id: 'WINS', label: `Wins (${timelineTrades.filter((t) => (t.net_return_pct || 0) > 0).length})` },
+                  { id: 'LOSSES', label: `Losses (${timelineTrades.filter((t) => (t.net_return_pct || 0) <= 0).length})` },
                 ].map((f) => (
                   <button
                     key={f.id}
@@ -1898,7 +1906,7 @@ export default function TradingChart({
                 onClick={() => {
                   playRetroSound('select');
                   const nextIdx = Math.max(0, focusedTradeIndex - 1);
-                  handleJumpToTrade(tradesList[nextIdx], nextIdx);
+                  handleJumpToTrade(timelineTrades[nextIdx], nextIdx);
                 }}
                 disabled={focusedTradeIndex === 0}
                 className="px-2.5 py-1 bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] disabled:opacity-30 border border-black/[0.08] dark:border-white/[0.08] rounded-xl text-apple-muted hover:text-apple-text flex items-center gap-1 cursor-pointer transition-all"
@@ -1908,16 +1916,16 @@ export default function TradingChart({
               </button>
 
               <span className="text-apple-dim font-mono tabular-nums">
-                Signal #{tradesList[focusedTradeIndex]?.trade_no || 1}
+                Signal #{timelineTrades[focusedTradeIndex]?.trade_no || 1}
               </span>
 
               <button
                 onClick={() => {
                   playRetroSound('select');
-                  const nextIdx = Math.min(tradesList.length - 1, focusedTradeIndex + 1);
-                  handleJumpToTrade(tradesList[nextIdx], nextIdx);
+                  const nextIdx = Math.min(timelineTrades.length - 1, focusedTradeIndex + 1);
+                  handleJumpToTrade(timelineTrades[nextIdx], nextIdx);
                 }}
-                disabled={focusedTradeIndex === tradesList.length - 1}
+                disabled={focusedTradeIndex === timelineTrades.length - 1}
                 className="px-2.5 py-1 bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] disabled:opacity-30 border border-black/[0.08] dark:border-white/[0.08] rounded-xl text-apple-muted hover:text-apple-text flex items-center gap-1 cursor-pointer transition-all"
               >
                 <span>Next</span>
@@ -1930,7 +1938,7 @@ export default function TradingChart({
           {/* Scrollable Trade Chips Strip */}
           <div className="flex items-center gap-2 overflow-x-auto py-1">
             {filteredTrades.map((tr) => {
-              const actualIdx = tradesList.findIndex((t) => t.trade_no === tr.trade_no);
+              const actualIdx = timelineTrades.findIndex((t) => t.trade_no === tr.trade_no);
               const isWin = (tr.net_return_pct || 0) > 0;
               const isCurrent = focusedTradeIndex === actualIdx;
               const isRunning = isTradeRunning(tr);

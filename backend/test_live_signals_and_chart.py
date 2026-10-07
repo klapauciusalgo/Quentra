@@ -224,6 +224,37 @@ def test_protection_rules_use_intrabar_extremes_and_sl_precedence():
     assert short_events[0]["trade"]["exit_price"] == 80.0
 
 
+def test_next_trade_number_uses_highest_persisted_id_when_ledger_has_gaps():
+    from live_signal_engine import _next_trade_number
+
+    trades = [
+        {"trade_no": 447},
+        {"trade_no": 449},
+        {"trade_no": 451},
+    ]
+
+    assert _next_trade_number(trades) == 452
+
+
+def test_latest_closed_trade_prefers_event_time_over_trade_number():
+    current = {
+        "trade_no": 451,
+        "entry_time": "2026-10-04 08:00:00",
+        "exit_time": "2026-10-05 15:30:00",
+        "status": "CLOSED",
+    }
+    persisted = {
+        "trade_no": 449,
+        "entry_time": "2026-10-06 09:00:00",
+        "exit_time": "2026-10-07 01:00:00",
+        "status": "CLOSED",
+    }
+
+    selected = LiveSignalEngine._select_latest_closed_trade(current, persisted)
+
+    assert selected["trade_no"] == 449
+
+
 def test_system_status(client):
     res = client.get("/api/status")
     assert res.status_code == 200
@@ -266,11 +297,11 @@ def test_live_telemetry_prefers_newer_runtime_closed_trade(client, monkeypatch):
     previous_model_close = model.last_closed_trade
     previous_trades = list(strategy.get("trades", []))
     strategy["trades"].append({
-        "trade_no": 727,
+        "trade_no": 734,
         "side": "LONG",
         "type": "LONG",
-        "entry_time": "2026-09-26 09:30:00",
-        "exit_time": "2026-09-28 00:30:00",
+        "entry_time": "2026-10-07 02:00:00",
+        "exit_time": "2026-10-07 02:30:00",
         "entry_price": 84100.77,
         "exit_price": 84140.0,
         "net_return_pct": -0.13,
@@ -292,7 +323,7 @@ def test_live_telemetry_prefers_newer_runtime_closed_trade(client, monkeypatch):
             item for item in response.json()["strategies"]
             if item["strategy_id"] == "pippo-30m-grd"
         )
-        assert strategy_telemetry["last_closed_trade"]["trade_no"] == 727
+        assert strategy_telemetry["last_closed_trade"]["trade_no"] == 734
         assert strategy_telemetry["last_closed_trade"]["exit_price"] == 84140.0
     finally:
         strategy["trades"] = previous_trades
@@ -333,6 +364,238 @@ def test_live_telemetry_prefers_newer_runtime_closed_trade(client, monkeypatch):
     assert be_markers[0]["shape"] == "circle"
     assert be_markers[0]["color"] == "#FF9F0A"
     assert "BE LOCKED" in be_markers[0]["text"]
+
+
+def _runtime_engine_with_strategy(tmp_path, monkeypatch, strategy_id, trades):
+    import shutil
+    import live_signal_engine as engine_module
+    from catalog_storage import ensure_runtime_catalog, runtime_catalog_path
+
+    backend_data = tmp_path / "backend" / "data"
+    backend_data.mkdir(parents=True)
+    for filename in ("strategies.json", "strategies_eth.json"):
+        shutil.copy(REPO_ROOT / "backend" / "data" / filename, backend_data / filename)
+    runtime_path = ensure_runtime_catalog("BTCUSDT", tmp_path)
+    monkeypatch.setattr(
+        engine_module,
+        "__file__",
+        str(tmp_path / "backend" / "live_signal_engine.py"),
+    )
+
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == strategy_id)
+    strategy["trades"] = trades
+    strategy["markers"] = []
+    strategy.pop("trade_no_high_water_mark", None)
+    runtime_path.write_text(json.dumps(catalog))
+
+    engine = LiveSignalEngine()
+    model = StrategyModel(
+        strategy_id,
+        strategy.get("name", strategy_id),
+        "30m",
+        "LONG",
+        {},
+        symbol="BTCUSDT",
+    )
+    return engine, model, runtime_path
+
+
+def test_live_close_is_persisted_idempotently(tmp_path, monkeypatch):
+    engine, model, runtime_path = _runtime_engine_with_strategy(
+        tmp_path,
+        monkeypatch,
+        "pippo-30m-grd",
+        [],
+    )
+    record = {
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 84100.77,
+        "exit_price": 84140.0,
+        "gross_return_pct": 0.05,
+        "net_return_pct": -0.13,
+        "reason": "Force Close MA (-0.5%)",
+        "status": "CLOSED",
+    }
+
+    engine._persist_closed_trade(model, record)
+    engine._persist_closed_trade(model, record)
+
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    assert len(strategy["trades"]) == 1
+    assert strategy["trades"][0]["trade_no"] == 1
+    exit_markers = [marker for marker in strategy["markers"] if marker.get("eventType") == "exit"]
+    assert len(exit_markers) == 1
+    assert exit_markers[0]["tradeNo"] == 1
+
+
+def test_close_does_not_use_single_open_row_when_lifecycle_identity_disagrees(tmp_path, monkeypatch):
+    open_trade = {
+        "trade_no": 1,
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "RUNNING",
+        "entry_price": 100.0,
+        "exit_price": 100.0,
+        "status": "OPEN",
+        "is_active": True,
+    }
+    engine, model, runtime_path = _runtime_engine_with_strategy(
+        tmp_path,
+        monkeypatch,
+        "pippo-30m-grd",
+        [open_trade],
+    )
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    strategy["markers"] = [
+        {
+            "time": "2026-09-26 08:00:00",
+            "position": "belowBar",
+            "shape": "arrowUp",
+            "entryPrice": 100.0,
+            "tradeNo": 1,
+            "status": "OPEN",
+            "isActive": True,
+            "eventType": "entry",
+        },
+        {
+            "time": "2026-09-26 09:00:00",
+            "position": "aboveBar",
+            "shape": "circle",
+            "exitPrice": 100.0,
+            "tradeNo": 1,
+            "isBreakeven": True,
+            "isActive": False,
+            "eventType": "breakeven",
+        },
+    ]
+    runtime_path.write_text(json.dumps(catalog))
+    record = {
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-27 08:00:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 101.0,
+        "exit_price": 102.0,
+        "gross_return_pct": 0.5,
+        "net_return_pct": 0.32,
+        "reason": "Force Close MA (-0.5%)",
+        "status": "CLOSED",
+    }
+
+    engine._persist_closed_trade(model, record)
+
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    persisted_open = next(trade for trade in strategy["trades"] if trade["trade_no"] == 1)
+    persisted_close = next(trade for trade in strategy["trades"] if trade["trade_no"] == 2)
+    assert persisted_open["status"] == "OPEN"
+    assert persisted_open["entry_time"] == open_trade["entry_time"]
+    assert persisted_close["status"] == "CLOSED"
+    assert persisted_close["entry_time"] == record["entry_time"]
+    active_entry = next(marker for marker in strategy["markers"] if marker.get("tradeNo") == 1 and marker.get("eventType") == "entry")
+    assert active_entry["isActive"] is True
+    assert active_entry["status"] == "OPEN"
+
+
+def test_close_allocation_preserves_high_water_mark_after_deduplication(tmp_path, monkeypatch):
+    duplicate = {
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 100.0,
+        "exit_price": 101.0,
+        "status": "CLOSED",
+        "is_active": False,
+    }
+    engine, model, runtime_path = _runtime_engine_with_strategy(
+        tmp_path,
+        monkeypatch,
+        "pippo-30m-grd",
+        [{**duplicate, "trade_no": 449}, {**duplicate, "trade_no": 451}],
+    )
+    record = {
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-29 08:00:00",
+        "exit_time": "2026-09-30 00:30:00",
+        "entry_price": 200.0,
+        "exit_price": 201.0,
+        "gross_return_pct": 0.5,
+        "net_return_pct": 0.32,
+        "reason": "Structure_Exit",
+        "status": "CLOSED",
+    }
+
+    engine._persist_closed_trade(model, record)
+
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    assert [trade["trade_no"] for trade in strategy["trades"]] == [449, 452]
+    assert strategy["trade_no_high_water_mark"] == 452
+
+
+def test_open_and_replay_allocation_preserve_high_water_mark_after_deduplication(tmp_path, monkeypatch):
+    duplicate = {
+        "side": "LONG",
+        "type": "LONG",
+        "entry_time": "2026-09-26 08:00:00",
+        "exit_time": "2026-09-28 00:30:00",
+        "entry_price": 100.0,
+        "exit_price": 101.0,
+        "status": "CLOSED",
+        "is_active": False,
+    }
+
+    engine, model, runtime_path = _runtime_engine_with_strategy(
+        tmp_path,
+        monkeypatch,
+        "pippo-30m-grd",
+        [{**duplicate, "trade_no": 449}, {**duplicate, "trade_no": 451}],
+    )
+    model.entry_time = "2026-10-01 08:00:00"
+    model.entry_price = 300.0
+    model.current_sl = 290.0
+    model.target_tp = 330.0
+    model.be_active = False
+    model.partial_taken = False
+    engine._persist_opened_trade(model, {"entry_price": 300.0})
+
+    catalog = json.loads(runtime_path.read_text())
+    strategy = next(item for item in catalog if item["id"] == "pippo-30m-grd")
+    assert [trade["trade_no"] for trade in strategy["trades"]] == [449, 452]
+    assert strategy["trade_no_high_water_mark"] == 452
+
+    replay_engine, replay_model, replay_runtime_path = _runtime_engine_with_strategy(
+        tmp_path / "replay",
+        monkeypatch,
+        "pippo-30m-grd",
+        [{**duplicate, "trade_no": 449}, {**duplicate, "trade_no": 451}],
+    )
+    replayed = {
+        **duplicate,
+        "entry_time": "2026-10-01 08:00:00",
+        "exit_time": "2026-10-02 00:30:00",
+        "entry_price": 300.0,
+        "exit_price": 302.0,
+        "net_return_pct": 0.4,
+        "gross_return_pct": 0.58,
+        "exit_reason": "Replay_Close",
+    }
+    persisted = replay_engine._persist_replayed_closed_trades(replay_model, [replayed], "BTCUSDT")
+
+    replay_catalog = json.loads(replay_runtime_path.read_text())
+    replay_strategy = next(item for item in replay_catalog if item["id"] == "pippo-30m-grd")
+    assert [trade["trade_no"] for trade in replay_strategy["trades"]] == [449, 452]
+    assert replay_strategy["trade_no_high_water_mark"] == 452
+    assert persisted[-1]["trade_no"] == 452
 
 
 def test_replayed_valid_close_is_persisted_idempotently(tmp_path, monkeypatch):

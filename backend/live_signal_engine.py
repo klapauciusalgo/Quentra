@@ -170,6 +170,116 @@ def _trade_number(value: Any) -> int:
         return 0
 
 
+def _trade_number_high_water_mark(
+    trades: Optional[List[dict]] = None,
+    markers: Optional[List[dict]] = None,
+    stored_value: Any = None,
+) -> int:
+    """Return the non-reusable high-water mark for a strategy ledger."""
+    numbers = [_trade_number(stored_value)]
+    numbers.extend(
+        _trade_number(trade.get("trade_no"))
+        for trade in trades or []
+        if isinstance(trade, dict)
+    )
+    numbers.extend(
+        _trade_number(marker.get("tradeNo"))
+        for marker in markers or []
+        if isinstance(marker, dict)
+    )
+    return max(numbers, default=0)
+
+
+def _next_trade_number(
+    trades: List[dict],
+    markers: Optional[List[dict]] = None,
+    high_water_mark: Any = None,
+) -> int:
+    """Allocate a trade number above every persisted/non-reusable identifier."""
+    return _trade_number_high_water_mark(trades, markers, high_water_mark) + 1
+
+
+def _trade_lifecycle_timestamp(trade: Optional[dict]) -> int:
+    """Return the latest authoritative event time for a trade record."""
+    if not trade:
+        return 0
+    status = str(trade.get("status", "")).upper()
+    exit_time = trade.get("exit_time")
+    if status in {"CLOSED", "EXITED", "FLAT"} or (
+        exit_time is not None and "RUNNING" not in str(exit_time).upper()
+    ):
+        return _marker_timestamp_seconds(exit_time) or _marker_timestamp_seconds(trade.get("entry_time")) or 0
+    return _marker_timestamp_seconds(trade.get("entry_time")) or 0
+
+
+def _trade_matches_lifecycle(trade: dict, record: dict) -> bool:
+    """Match a close event to its exact open lifecycle, not list position."""
+    if not is_open_trade_record(trade):
+        return False
+    trade_side = str(trade.get("side") or trade.get("type") or "").upper()
+    record_side = str(record.get("side") or record.get("type") or "").upper()
+    if trade_side and record_side and trade_side != record_side:
+        return False
+    trade_time = _marker_timestamp_seconds(trade.get("entry_time"))
+    record_time = _marker_timestamp_seconds(record.get("entry_time"))
+    if trade_time is not None and record_time is not None:
+        if trade_time != record_time:
+            return False
+    elif _normalized_trade_value(trade.get("entry_time")) != _normalized_trade_value(record.get("entry_time")):
+        return False
+    try:
+        if abs(float(trade.get("entry_price", 0.0)) - float(record.get("entry_price", 0.0))) >= 0.01:
+            return False
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _trade_matches_terminal_lifecycle(trade: dict, record: dict) -> bool:
+    """Match a repeated close to the exact already-persisted terminal trade."""
+    if is_open_trade_record(trade):
+        return False
+    trade_side = str(trade.get("side") or trade.get("type") or "").upper()
+    record_side = str(record.get("side") or record.get("type") or "").upper()
+    if trade_side and record_side and trade_side != record_side:
+        return False
+
+    for field in ("entry_time", "exit_time"):
+        trade_value: Any = trade.get(field)
+        record_value: Any = record.get(field)
+        if trade_value in (None, "") or record_value in (None, ""):
+            return False
+        trade_timestamp = _marker_timestamp_seconds(trade_value)
+        record_timestamp = _marker_timestamp_seconds(record_value)
+        if trade_timestamp is not None and record_timestamp is not None:
+            if trade_timestamp != record_timestamp:
+                return False
+        elif _normalized_trade_value(trade_value) != _normalized_trade_value(record_value):
+            return False
+
+    for field in ("entry_price", "exit_price"):
+        trade_value: Any = trade.get(field)
+        record_value: Any = record.get(field)
+        try:
+            if abs(float(trade_value) - float(record_value)) >= 0.01:
+                return False
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
+def _has_lifecycle_identity(record: dict) -> bool:
+    """Return True when entry fields are present enough to forbid positional fallback."""
+    entry_time = record.get("entry_time")
+    if entry_time in (None, "", "RUNNING"):
+        return False
+    try:
+        entry_price = float(record.get("entry_price"))
+    except (TypeError, ValueError):
+        return False
+    return bool(np.isfinite(entry_price))
+
+
 def _normalized_trade_value(value: Any) -> Any:
     if value is None:
         return None
@@ -1926,6 +2036,11 @@ class LiveSignalEngine:
 
                     trades = list(strat.get("trades", []) or [])
                     markers = list(strat.get("markers", []) or [])
+                    high_water_mark = _trade_number_high_water_mark(
+                        trades,
+                        markers,
+                        strat.get("trade_no_high_water_mark"),
+                    )
                     canonical_trades, canonical_markers, _ = canonicalize_trade_ledger(trades, markers)
                     if canonical_trades != trades or canonical_markers != markers:
                         strat["trades"] = canonical_trades
@@ -1933,24 +2048,51 @@ class LiveSignalEngine:
                         trades = canonical_trades
                         markers = canonical_markers
                         updated_any = True
-                    matching_trade = None
-                    for t in reversed(trades):
-                        if is_open_trade_record(t):
-                            matching_trade = t
-                            break
-
-                    if not matching_trade and trades:
-                        last_t = trades[-1]
-                        if last_t.get("status") != "CLOSED":
-                            matching_trade = last_t
+                    if strat.get("trade_no_high_water_mark") != high_water_mark:
+                        strat["trade_no_high_water_mark"] = high_water_mark
+                        updated_any = True
 
                     exit_time_str = trade_record.get("exit_time") or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                     if " UTC" in exit_time_str:
                         exit_time_str = exit_time_str.replace(" UTC", ":00")
 
-                    trade_no = matching_trade.get("trade_no", len(trades)) if matching_trade else (len(trades) + 1)
+                    # First recognize an already-terminal lifecycle. This makes
+                    # duplicate close deliveries a no-op on identity/number.
+                    matching_trade = next(
+                        (
+                            trade for trade in reversed(trades)
+                            if _trade_matches_terminal_lifecycle(trade, trade_record)
+                        ),
+                        None,
+                    )
+                    matched_open_trade = None
+                    if matching_trade is None:
+                        matched_open_trade = next(
+                            (
+                                trade for trade in reversed(trades)
+                                if _trade_matches_lifecycle(trade, trade_record)
+                            ),
+                            None,
+                        )
+                        matching_trade = matched_open_trade
+
+                    # Positional fallback is reserved for genuinely legacy close
+                    # records with no entry identity at all. A populated but
+                    # mismatched identity must never close the sole open row.
+                    if matching_trade is None and not _has_lifecycle_identity(trade_record):
+                        open_trades = [trade for trade in trades if is_open_trade_record(trade)]
+                        if len(open_trades) == 1:
+                            matched_open_trade = open_trades[0]
+                            matching_trade = matched_open_trade
+
+                    trade_no = (
+                        _trade_number(matching_trade.get("trade_no"))
+                        if matching_trade is not None
+                        else 0
+                    ) or _next_trade_number(trades, markers, high_water_mark)
 
                     if matching_trade:
+                        matching_trade["trade_no"] = trade_no
                         matching_trade["status"] = "CLOSED"
                         matching_trade["is_active"] = False
                         matching_trade["exit_price"] = trade_record["exit_price"]
@@ -1981,13 +2123,26 @@ class LiveSignalEngine:
                         }
                         trades.append(new_trade)
 
-                    # Markers handling: deactivate active entry marker and append exit marker
+                    high_water_mark = max(high_water_mark, trade_no)
+                    strat["trade_no_high_water_mark"] = high_water_mark
+                    strat["trades"] = trades
+
+                    # Markers handling: deactivate only markers belonging to
+                    # the matched lifecycle. A terminal duplicate or unmatched
+                    # close must never deactivate another position's live marker.
                     markers = strat.get("markers", [])
-                    for m in markers:
-                        if m.get("tradeNo") == trade_no or m.get("isActive") is True:
-                            m["isActive"] = False
-                            if m.get("status") == "OPEN":
-                                m["status"] = "CLOSED"
+                    for marker in markers:
+                        marker_trade_no = _trade_number(marker.get("tradeNo"))
+                        same_trade = trade_no > 0 and marker_trade_no == trade_no
+                        legacy_active_match = (
+                            matched_open_trade is not None
+                            and marker.get("tradeNo") in (None, "")
+                            and marker.get("isActive") is True
+                        )
+                        if same_trade or legacy_active_match:
+                            marker["isActive"] = False
+                            if marker.get("status") == "OPEN":
+                                marker["status"] = "CLOSED"
 
                     exit_marker = {
                         "time": exit_time_str,
@@ -2161,20 +2316,28 @@ class LiveSignalEngine:
 
             trades = list(strategy.get("trades", []) or [])
             markers = list(strategy.get("markers", []) or [])
+            high_water_mark = _trade_number_high_water_mark(
+                trades,
+                markers,
+                strategy.get("trade_no_high_water_mark"),
+            )
             canonical_trades, canonical_markers, _ = canonicalize_trade_ledger(
                 trades,
                 markers,
             )
-            if len(canonical_trades) != len(trades) or len(canonical_markers) != len(markers):
+            if canonical_trades != trades or canonical_markers != markers:
                 changed = True
             trades = canonical_trades
             markers = canonical_markers
+            if strategy.get("trade_no_high_water_mark") != high_water_mark:
+                strategy["trade_no_high_water_mark"] = high_water_mark
+                changed = True
             by_identity = {
                 self._replayed_trade_identity(trade): trade
                 for trade in trades
                 if str(trade.get("status", "")).upper() in {"CLOSED", "EXITED", "FLAT"}
             }
-            next_trade_no = max((trade_number(trade.get("trade_no")) for trade in trades), default=0)
+            next_trade_no = high_water_mark
             latest_existing_exit = max(
                 (
                     _marker_timestamp_seconds(trade.get("exit_time")) or 0
@@ -2204,6 +2367,8 @@ class LiveSignalEngine:
                     trades.append(trade)
                     by_identity[identity] = trade
                     latest_existing_exit = max(latest_existing_exit, replay_exit)
+                    high_water_mark = max(high_water_mark, next_trade_no)
+                    strategy["trade_no_high_water_mark"] = high_water_mark
                     changed = True
                 else:
                     trade["status"] = "CLOSED"
@@ -2297,12 +2462,20 @@ class LiveSignalEngine:
 
                     trades = list(strat.get("trades", []) or [])
                     markers = list(strat.get("markers", []) or [])
+                    high_water_mark = _trade_number_high_water_mark(
+                        trades,
+                        markers,
+                        strat.get("trade_no_high_water_mark"),
+                    )
                     canonical_trades, canonical_markers, _ = canonicalize_trade_ledger(trades, markers)
                     if canonical_trades != trades or canonical_markers != markers:
                         strat["trades"] = canonical_trades
                         strat["markers"] = canonical_markers
                         trades = canonical_trades
                         markers = canonical_markers
+                        updated_any = True
+                    if strat.get("trade_no_high_water_mark") != high_water_mark:
+                        strat["trade_no_high_water_mark"] = high_water_mark
                         updated_any = True
 
                     # Check if a trade with this exact entry_time already exists
@@ -2319,7 +2492,7 @@ class LiveSignalEngine:
                     if active_trade is None and open_trades:
                         active_trade = open_trades[-1]
                     if active_trade is None:
-                        trade_no = len(trades) + 1
+                        trade_no = _next_trade_number(trades, markers, high_water_mark)
                         open_trade = {
                             "trade_no": trade_no,
                             "side": model.direction,
@@ -2358,6 +2531,8 @@ class LiveSignalEngine:
                         trade for trade in trades
                         if not is_open_trade_record(trade) or trade is active_trade
                     ]
+                    high_water_mark = max(high_water_mark, _trade_number(active_trade.get("trade_no")))
+                    strat["trade_no_high_water_mark"] = high_water_mark
                     strat["trades"] = trades
                     active_trade["status"] = "OPEN"
                     active_trade["exit_time"] = "RUNNING"
@@ -2440,10 +2615,20 @@ class LiveSignalEngine:
             strategy_id = strategy.get("id")
             if not strategy_id:
                 continue
-            for trade in reversed(strategy.get("trades", []) or []):
-                if str(trade.get("status", "")).upper() in {"CLOSED", "EXITED", "FLAT"}:
-                    latest_by_strategy[strategy_id] = dict(trade)
-                    break
+            closed_trades = [
+                trade for trade in strategy.get("trades", []) or []
+                if str(trade.get("status", "")).upper() in {"CLOSED", "EXITED", "FLAT"}
+            ]
+            if closed_trades:
+                latest_by_strategy[strategy_id] = dict(
+                    max(
+                        closed_trades,
+                        key=lambda trade: (
+                            _trade_lifecycle_timestamp(trade),
+                            _trade_number(trade.get("trade_no")),
+                        ),
+                    )
+                )
         return latest_by_strategy
 
     @staticmethod
@@ -2454,20 +2639,14 @@ class LiveSignalEngine:
         if not persisted:
             return dict(current)
 
-        def trade_number(trade):
-            try:
-                return int(trade.get("trade_no"))
-            except (TypeError, ValueError):
-                return None
+        current_time = _trade_lifecycle_timestamp(current)
+        persisted_time = _trade_lifecycle_timestamp(persisted)
+        if current_time != persisted_time:
+            return dict(persisted if persisted_time > current_time else current)
 
-        current_no = trade_number(current)
-        persisted_no = trade_number(persisted)
-        if current_no is not None and persisted_no is not None and current_no != persisted_no:
-            return dict(persisted if persisted_no > current_no else current)
-
-        current_time = _marker_timestamp_seconds(current.get("exit_time")) or 0
-        persisted_time = _marker_timestamp_seconds(persisted.get("exit_time")) or 0
-        return dict(persisted if persisted_time >= current_time else current)
+        current_no = _trade_number(current.get("trade_no"))
+        persisted_no = _trade_number(persisted.get("trade_no"))
+        return dict(persisted if persisted_no > current_no else current)
 
     def get_live_telemetry(self, symbol: str = "BTCUSDT") -> dict:
         """Returns the full autonomous engine status across all strategies for the symbol."""

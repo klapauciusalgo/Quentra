@@ -1,6 +1,7 @@
 import sys
 import os
 import json
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 import pytest
@@ -8,9 +9,55 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import main
+import binance_ws as binance_ws_module
+from binance_ws import BinanceManager
 from live_signal_engine import LiveSignalEngine, StrategyModel, live_signal_engine, _closed_trade_entry_marker
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize(
+    ("stream_method", "expected_delay"),
+    (("start_ticker_stream", 2), ("start_kline_stream", 5)),
+)
+def test_websocket_clean_close_applies_retry_backoff(monkeypatch, stream_method, expected_delay):
+    class EmptyStream:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+    connect_calls = []
+
+    class FakeConnection:
+        def __init__(self, call_number):
+            self.call_number = call_number
+
+        async def __aenter__(self):
+            if self.call_number <= 2:
+                return EmptyStream()
+            raise asyncio.CancelledError
+
+        async def __aexit__(self, _exc_type, _exc_value, _traceback):
+            return False
+
+    def fake_connect(*_args, **_kwargs):
+        connect_calls.append(True)
+        return FakeConnection(len(connect_calls))
+
+    sleep_calls = []
+
+    async def fake_sleep(delay):
+        sleep_calls.append(delay)
+
+    monkeypatch.setattr(binance_ws_module.websockets, "connect", fake_connect)
+    monkeypatch.setattr(binance_ws_module.asyncio, "sleep", fake_sleep)
+
+    asyncio.run(getattr(BinanceManager(), stream_method)())
+
+    assert len(connect_calls) == 3
+    assert sleep_calls == [expected_delay, expected_delay * 1.5]
 
 @pytest.fixture(scope="module")
 def client(tmp_path_factory):
@@ -40,6 +87,58 @@ def client(tmp_path_factory):
             yield c
     finally:
         patcher.undo()
+
+def test_trailing_kline_backfill_paginates_until_latest_closed_bar():
+    import pandas as pd
+
+    interval_ms = 1_800_000
+    base = 1_699_999_200_000
+    latest_closed = base + (6 * interval_ms)
+    calls = []
+
+    def fake_fetch(symbol, timeframe, limit, start_time):
+        calls.append((symbol, timeframe, limit, start_time))
+        bars = []
+        timestamp = start_time
+        while timestamp <= latest_closed and len(bars) < limit:
+            bars.append({
+                "timestamp": timestamp,
+                "time": timestamp // 1000,
+                "datetime": "2023-11-14 00:00:00",
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.5,
+                "volume": 10.0,
+                "close_time": timestamp + interval_ms - 1,
+            })
+            timestamp += interval_ms
+        return bars
+
+    source = pd.DataFrame([{
+        "timestamp": base,
+        "time": base // 1000,
+        "open": 100.0,
+        "high": 101.0,
+        "low": 99.0,
+        "close": 100.0,
+        "volume": 10.0,
+    }])
+
+    result = main._backfill_trailing_klines(
+        source,
+        symbol="BTCUSDT",
+        timeframe="30m",
+        fetch_fn=fake_fetch,
+        now_ms=base + (7 * interval_ms) + 1,
+        page_limit=2,
+    )
+
+    assert result["timestamp"].tolist() == [base + (i * interval_ms) for i in range(7)]
+    assert len(calls) == 3
+    assert calls[0][2] == 2
+    assert calls[-1][3] == base + (5 * interval_ms)
+
 
 def test_reload_local_catalog_uses_effective_runtime_path(tmp_path, monkeypatch):
     runtime = tmp_path / "strategies.json"
@@ -255,6 +354,55 @@ def test_latest_closed_trade_prefers_event_time_over_trade_number():
     assert selected["trade_no"] == 449
 
 
+def test_binance_event_heartbeats_start_empty_and_record_real_events():
+    manager = BinanceManager()
+
+    assert manager.last_ticker_event_ms == {"BTCUSDT": 0, "ETHUSDT": 0}
+    assert manager.last_kline_event_ms["BTCUSDT"]["30m"] == 0
+    assert manager.last_kline_event_ms["ETHUSDT"]["30m"] == 0
+
+    manager.record_ticker_event("BTCUSDT", 1_792_070_400_001)
+    manager.record_kline_event("ETHUSDT", "30m", 1_792_070_400_002)
+
+    assert manager.last_ticker_event_ms["BTCUSDT"] == 1_792_070_400_001
+    assert manager.last_kline_event_ms["ETHUSDT"]["30m"] == 1_792_070_400_002
+
+
+def test_signal_engine_records_actual_ticker_update_time():
+    engine = LiveSignalEngine()
+
+    assert engine.last_ticker_update_ms == {"BTCUSDT": 0, "ETHUSDT": 0}
+
+    engine.on_ticker_tick(80_500.0, 1_792_070_400_003, symbol="BTCUSDT")
+
+    assert engine.last_ticker_update_ms["BTCUSDT"] == 1_792_070_400_003
+    assert engine.get_live_telemetry("BTCUSDT")["engine_last_update_ms"] == 1_792_070_400_003
+
+
+def test_signal_engine_records_successful_closed_candle_update_time():
+    class NoopBroadcaster:
+        async def broadcast(self, _event):
+            return None
+
+    engine = LiveSignalEngine()
+    engine.strategies = {}
+    engine.strategies_eth = {}
+    assert engine.last_closed_candle_update_ms["BTCUSDT"] == 0
+
+    asyncio.run(engine.on_kline_closed("30m", {
+        "time": 1774300000,
+        "timestamp": 1774300000000,
+        "open": 100.0,
+        "high": 101.0,
+        "low": 99.0,
+        "close": 100.5,
+        "volume": 10.0,
+    }, NoopBroadcaster(), symbol="BTCUSDT"))
+
+    assert engine.last_closed_candle_update_ms["BTCUSDT"] > 0
+    assert engine.last_closed_candle_update_ms_by_timeframe["BTCUSDT"]["30m"] > 0
+
+
 def test_system_status(client):
     res = client.get("/api/status")
     assert res.status_code == 200
@@ -264,6 +412,13 @@ def test_system_status(client):
     assert data["macro_regime"] == "PROTECTED"
     assert "BULLISH EXPANSION" not in data["macro_regime"]
     assert data["strategies_count"] >= 8
+    assert set(data["ticker_last_event_ms"]) == {"BTCUSDT", "ETHUSDT"}
+    assert set(data["kline_last_event_ms"]) == {"BTCUSDT", "ETHUSDT"}
+    assert set(data["signal_engine_last_update_ms"]) == {"BTCUSDT", "ETHUSDT"}
+    assert set(data["signal_engine_last_closed_update_ms"]) == {"BTCUSDT", "ETHUSDT"}
+    assert set(data["signal_engine_last_closed_update_ms_by_timeframe"]) == {"BTCUSDT", "ETHUSDT"}
+    assert set(data["signal_engine_last_closed_update_ms_by_timeframe"]["BTCUSDT"]) == {"30m", "1h", "4h", "1d", "1w"}
+    assert isinstance(data["kline_ws_connected"], bool)
 
 def test_live_signals_telemetry(client, monkeypatch):
     async def verified_pro(_request):
@@ -275,6 +430,9 @@ def test_live_signals_telemetry(client, monkeypatch):
     data = res.json()
     assert data["status"] == "AUTONOMOUS_ENGINE_LIVE"
     assert "strategies" in data
+    assert "engine_last_update_ms" in data
+    assert "engine_last_closed_update_ms" in data
+    assert set(data["engine_last_closed_update_ms_by_timeframe"]) == {"30m", "1h", "4h", "1d", "1w"}
     
     # Check active strategies that have open positions
     open_strats = [s for s in data["strategies"] if s["position_status"] == "OPEN"]
@@ -296,12 +454,26 @@ def test_live_telemetry_prefers_newer_runtime_closed_trade(client, monkeypatch):
     model = live_signal_engine.get_model("pippo-30m-grd", symbol="BTCUSDT")
     previous_model_close = model.last_closed_trade
     previous_trades = list(strategy.get("trades", []))
+    from datetime import datetime, timedelta
+
+    closed_exit_times = [
+        str(trade.get("exit_time"))
+        for trade in strategy.get("trades", [])
+        if str(trade.get("status", "")).upper() in {"CLOSED", "EXITED", "FLAT"}
+        and trade.get("exit_time")
+    ]
+    latest_exit = max(
+        (datetime.strptime(value[:19], "%Y-%m-%d %H:%M:%S") for value in closed_exit_times),
+        default=datetime(2026, 1, 1),
+    )
+    new_exit_time = (latest_exit + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+    new_entry_time = (latest_exit + timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
     strategy["trades"].append({
         "trade_no": 734,
         "side": "LONG",
         "type": "LONG",
-        "entry_time": "2026-10-07 02:00:00",
-        "exit_time": "2026-10-07 02:30:00",
+        "entry_time": new_entry_time,
+        "exit_time": new_exit_time,
         "entry_price": 84100.77,
         "exit_price": 84140.0,
         "net_return_pct": -0.13,

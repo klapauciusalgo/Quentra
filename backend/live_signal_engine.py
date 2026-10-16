@@ -27,6 +27,8 @@ from strategy_branding import get_strategy_branding
 logger = logging.getLogger("live_signal_engine")
 logger.setLevel(logging.INFO)
 
+SUPPORTED_TIMEFRAMES = ("30m", "1h", "4h", "1d", "1w")
+
 
 
 def _marker_event_type(marker: dict) -> str:
@@ -812,6 +814,12 @@ class LiveSignalEngine:
         self.last_price = 0.0
         self.last_price_eth = 0.0
         self.last_eval_timestamp = 0
+        self.last_ticker_update_ms = {"BTCUSDT": 0, "ETHUSDT": 0}
+        self.last_closed_candle_update_ms = {"BTCUSDT": 0, "ETHUSDT": 0}
+        self.last_closed_candle_update_ms_by_timeframe = {
+            symbol: {timeframe: 0 for timeframe in SUPPORTED_TIMEFRAMES}
+            for symbol in ("BTCUSDT", "ETHUSDT")
+        }
         
         # Rolling candle history per asset (last 500-1000 bars per timeframe)
         self.candle_buffers: Dict[str, pd.DataFrame] = {}
@@ -931,6 +939,11 @@ class LiveSignalEngine:
             self._evaluate_all_models_initial(sym)
             if sym == "BTCUSDT":
                 self.is_initialized = True
+            initialized_at_ms = int(time.time() * 1000)
+            self.last_closed_candle_update_ms[sym] = initialized_at_ms
+            for timeframe in SUPPORTED_TIMEFRAMES:
+                if timeframe in buffers and not buffers[timeframe].empty:
+                    self.last_closed_candle_update_ms_by_timeframe[sym][timeframe] = initialized_at_ms
             logger.info(f"Autonomous Live Signal Engine initialized for {sym}. Latest price: ${self.get_last_price(sym):,.2f}")
         except Exception as e:
             logger.error(f"Failed to initialize Live Signal Engine for {sym}: {e}", exc_info=True)
@@ -1584,6 +1597,7 @@ class LiveSignalEngine:
                     else:
                         model.distance_to_trigger_pct = round(((price - model.next_entry_trigger) / price) * 100.0, 2)
 
+        self.last_ticker_update_ms[sym] = int(timestamp)
         return events
 
     def _evaluate_closed_position(
@@ -1994,6 +2008,14 @@ class LiveSignalEngine:
                         "candle_close": True,
                         "candle_time": new_bar["datetime"],
                     })
+
+        closed_at_ms = int(time.time() * 1000)
+        self.last_closed_candle_update_ms[sym] = closed_at_ms
+        if tf in SUPPORTED_TIMEFRAMES:
+            self.last_closed_candle_update_ms_by_timeframe.setdefault(
+                sym,
+                {timeframe: 0 for timeframe in SUPPORTED_TIMEFRAMES},
+            )[tf] = closed_at_ms
 
     def _open_position(self, model: StrategyModel, entry_p: float, entry_time: Optional[str] = None) -> dict:
         """Helper to open a position and construct the official live ticket."""
@@ -2878,6 +2900,14 @@ class LiveSignalEngine:
             "current_price": last_p,
             "current_btc_price": self.last_price,
             "current_eth_price": self.last_price_eth,
+            "engine_last_update_ms": self.last_ticker_update_ms.get(sym, 0),
+            "engine_last_closed_update_ms": self.last_closed_candle_update_ms.get(sym, 0),
+            "engine_last_closed_update_ms_by_timeframe": dict(
+                self.last_closed_candle_update_ms_by_timeframe.get(
+                    sym,
+                    {timeframe: 0 for timeframe in SUPPORTED_TIMEFRAMES},
+                )
+            ),
             "macro_state": macro,
             "strategies": results,
             "timestamp": int(time.time() * 1000)

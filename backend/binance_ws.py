@@ -24,8 +24,14 @@ class BinanceManager:
     def __init__(self):
         self.connected_clients: Set[WebSocket] = set()
         self.is_connected = False
+        self.kline_connected = False
         self.last_tick_time = 0
         self.last_error = None
+        self.last_ticker_event_ms = {"BTCUSDT": 0, "ETHUSDT": 0}
+        self.last_kline_event_ms = {
+            symbol: {timeframe: 0 for timeframe in ("30m", "1h", "4h", "1d", "1w")}
+            for symbol in ("BTCUSDT", "ETHUSDT")
+        }
         self.ticker_data_map = {
             "BTCUSDT": {
                 "symbol": "BTCUSDT",
@@ -61,6 +67,16 @@ class BinanceManager:
 
     def get_ticker(self, symbol: str = "BTCUSDT"):
         return self.ticker_data_map.get(symbol.upper(), self.ticker_data)
+
+    def record_ticker_event(self, symbol: str, event_time_ms: int):
+        sym = symbol.upper()
+        if sym in self.last_ticker_event_ms:
+            self.last_ticker_event_ms[sym] = int(event_time_ms)
+
+    def record_kline_event(self, symbol: str, timeframe: str, event_time_ms: int):
+        sym = symbol.upper()
+        if sym in self.last_kline_event_ms and timeframe in self.last_kline_event_ms[sym]:
+            self.last_kline_event_ms[sym][timeframe] = int(event_time_ms)
 
     async def register(self, websocket: WebSocket):
         await websocket.accept()
@@ -103,9 +119,8 @@ class BinanceManager:
                 async with websockets.connect(BINANCE_WS_TICKER_URL, ping_interval=20, ping_timeout=10) as ws:
                     self.is_connected = True
                     for t in self.ticker_data_map.values():
-                        t["status"] = "LIVE"
+                        t["status"] = "CONNECTING"
                     self.last_error = None
-                    retry_delay = 2
                     logger.info("Connected to Binance Multi-Ticker WebSocket successfully!")
 
                     # Broadcast connected status
@@ -116,6 +131,7 @@ class BinanceManager:
                     })
 
                     async for raw_msg in ws:
+                        retry_delay = 2
                         msg = json.loads(raw_msg)
                         data = msg.get("data", msg)
                         sym = str(data.get("s", "BTCUSDT")).upper()
@@ -131,6 +147,7 @@ class BinanceManager:
                         event_time = int(data.get("E", time.time() * 1000))
 
                         self.last_tick_time = event_time
+                        self.record_ticker_event(sym, event_time)
                         self.ticker_data_map[sym].update({
                             "symbol": sym,
                             "price": price,
@@ -162,13 +179,24 @@ class BinanceManager:
                         except Exception as ex:
                             logger.debug(f"Ticker signal eval ({sym}): {ex}")
 
+                    self.is_connected = False
+                    for ticker in self.ticker_data_map.values():
+                        ticker["status"] = "RECONNECTING"
+                    logger.warning(f"Binance ticker WS closed. Retrying in {retry_delay}s...")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 1.5, 30)
+
             except asyncio.CancelledError:
                 logger.info("Binance WS stream cancelled.")
+                self.is_connected = False
+                for ticker in self.ticker_data_map.values():
+                    ticker["status"] = "RECONNECTING"
                 break
             except Exception as e:
                 self.is_connected = False
                 self.last_error = str(e)
-                self.ticker_data["status"] = "RECONNECTING"
+                for ticker in self.ticker_data_map.values():
+                    ticker["status"] = "RECONNECTING"
                 logger.warning(f"Binance WS connection error: {e}. Retrying in {retry_delay}s...")
                 await self.broadcast({
                     "type": "STATUS",
@@ -191,7 +219,9 @@ class BinanceManager:
             try:
                 logger.info(f"Connecting to Binance Combined Klines WS: {combined_kline_url}")
                 async with websockets.connect(combined_kline_url, ping_interval=20, ping_timeout=10) as ws:
+                    self.kline_connected = True
                     async for raw_msg in ws:
+                        retry_delay = 5
                         msg = json.loads(raw_msg)
                         stream = msg.get("stream", "")
                         sym = "ETHUSDT" if "ethusdt" in stream else "BTCUSDT"
@@ -204,6 +234,7 @@ class BinanceManager:
                             continue
 
                         data = msg.get("data", {})
+                        event_time = int(data.get("E", time.time() * 1000))
                         k = data.get("k", {})
                         if k:
                             candle = {
@@ -241,9 +272,18 @@ class BinanceManager:
                                 except Exception as eval_err:
                                     logger.error(f"Error evaluating closed {sym} {tf} candle: {eval_err}", exc_info=True)
 
+                            self.record_kline_event(sym, tf, event_time)
+
+                    self.kline_connected = False
+                    logger.warning(f"Binance kline WS closed. Retrying in {retry_delay}s...")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 1.5, 30)
+
             except asyncio.CancelledError:
+                self.kline_connected = False
                 break
             except Exception as e:
+                self.kline_connected = False
                 logger.warning(f"Kline WS stream error: {e}. Retrying in {retry_delay}s...")
                 await asyncio.sleep(retry_delay)
                 retry_delay = min(retry_delay * 1.5, 30)

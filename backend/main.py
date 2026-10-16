@@ -58,6 +58,100 @@ PARQUET_TIMESTAMPS = {}
 PARQUET_DFS_ETH = {}
 PARQUET_TIMESTAMPS_ETH = {}
 
+KLINE_INTERVAL_MS = {
+    "30m": 1_800_000,
+    "1h": 3_600_000,
+    "4h": 14_400_000,
+    "1d": 86_400_000,
+    "1w": 604_800_000,
+}
+
+
+def _backfill_trailing_klines(
+    df: pd.DataFrame,
+    *,
+    symbol: str,
+    timeframe: str,
+    fetch_fn,
+    now_ms: Optional[int] = None,
+    page_limit: int = 1000,
+) -> pd.DataFrame:
+    """Page through Binance history until the latest closed candle is present."""
+    interval_ms = KLINE_INTERVAL_MS.get(timeframe.lower())
+    if df is None or df.empty or interval_ms is None:
+        return df
+
+    work = df.copy()
+    if "timestamp" not in work.columns:
+        if "time" not in work.columns:
+            return work
+        work["timestamp"] = pd.to_numeric(work["time"], errors="coerce") * 1000
+    work["timestamp"] = pd.to_numeric(work["timestamp"], errors="coerce")
+    work = work.dropna(subset=["timestamp"]).copy()
+    work["timestamp"] = work["timestamp"].astype("int64")
+    work = work.sort_values("timestamp").drop_duplicates("timestamp", keep="last").reset_index(drop=True)
+
+    checked_at_ms = int(time.time() * 1000) if now_ms is None else int(now_ms)
+    latest_closed_start = ((checked_at_ms // interval_ms) - 1) * interval_ms
+    cursor = int(work["timestamp"].iloc[-1]) + interval_ms
+    if cursor > latest_closed_start:
+        return work
+
+    fetched = []
+    pages = 0
+    safe_page_limit = max(1, min(int(page_limit), 1000))
+    while cursor <= latest_closed_start:
+        remaining = ((latest_closed_start - cursor) // interval_ms) + 1
+        request_limit = min(safe_page_limit, remaining)
+        batch = fetch_fn(symbol, timeframe, limit=request_limit, start_time=cursor) or []
+        valid = []
+        for bar in batch:
+            try:
+                bar_timestamp = int(bar["timestamp"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            close_time = int(bar.get("close_time", bar_timestamp + interval_ms - 1))
+            if cursor <= bar_timestamp <= latest_closed_start and close_time < checked_at_ms:
+                valid.append(bar)
+        if not valid:
+            break
+
+        fetched.extend(valid)
+        pages += 1
+        next_cursor = max(int(bar["timestamp"]) for bar in valid) + interval_ms
+        if next_cursor <= cursor:
+            break
+        cursor = next_cursor
+
+    if not fetched:
+        return work
+
+    merged = pd.concat([work, pd.DataFrame(fetched)], ignore_index=True, sort=False)
+    merged["timestamp"] = pd.to_numeric(merged["timestamp"], errors="coerce")
+    merged = merged.dropna(subset=["timestamp"]).copy()
+    merged["timestamp"] = merged["timestamp"].astype("int64")
+    merged = merged.sort_values("timestamp").drop_duplicates("timestamp", keep="last").reset_index(drop=True)
+    merged["time"] = (merged["timestamp"] // 1000).astype("int64")
+    if "datetime" not in merged.columns:
+        merged["datetime"] = pd.to_datetime(merged["timestamp"], unit="ms", utc=True).dt.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        missing_datetime = merged["datetime"].isna() | (merged["datetime"].astype(str).str.strip() == "")
+        if missing_datetime.any():
+            merged.loc[missing_datetime, "datetime"] = pd.to_datetime(
+                merged.loc[missing_datetime, "timestamp"], unit="ms", utc=True
+            ).dt.strftime("%Y-%m-%d %H:%M:%S")
+    for period in (8, 25, 50, 55, 111):
+        merged[f"MA{period}"] = merged["close"].rolling(period).mean()
+    logger.info(
+        "Backfilled %s %s trailing candles for %s across %s pages through %s",
+        len(fetched),
+        symbol,
+        timeframe,
+        pages,
+        pd.to_datetime(int(merged["timestamp"].iloc[-1]), unit="ms", utc=True).isoformat(),
+    )
+    return merged
+
 def load_data_into_memory():
     global KLINES_CACHE, KLINES_CACHE_ETH, STRATEGIES_CATALOG, STRATEGIES_MAP, STRATEGIES_CATALOG_ETH, STRATEGIES_MAP_ETH
     global PARQUET_DFS, PARQUET_TIMESTAMPS, PARQUET_DFS_ETH, PARQUET_TIMESTAMPS_ETH
@@ -75,23 +169,15 @@ def load_data_into_memory():
             try:
                 df = pd.read_parquet(p)
                 
-                # Auto-backfill any missing closed bars from Binance REST API
+                # Auto-backfill all missing trailing closed bars from Binance REST API.
                 try:
-                    import time
                     from binance_ws import fetch_binance_klines_rest
-                    now_ms = int(time.time() * 1000)
-                    last_ts = int(df["timestamp"].iloc[-1]) if "timestamp" in df.columns else (int(df["time"].iloc[-1]) * 1000)
-                    gap_thresholds = {"30m": 1800000, "1h": 3600000, "4h": 14400000, "1d": 86400000, "1w": 604800000}
-                    if now_ms - last_ts > gap_thresholds.get(tf, 1800000):
-                        new_bars = fetch_binance_klines_rest("BTCUSDT", tf, limit=1000, start_time=last_ts + 1)
-                        closed_bars = [b for b in new_bars if b.get("close_time", 0) < now_ms]
-                        if closed_bars:
-                            df_new = pd.DataFrame(closed_bars)
-                            df = pd.concat([df, df_new], ignore_index=True).drop_duplicates(subset=["timestamp"]).reset_index(drop=True)
-                            for w in [8, 25, 50, 55, 111]:
-                                if len(df) >= w:
-                                    df[f"MA{w}"] = df["close"].rolling(w).mean()
-                            logger.info(f"Backfilled {len(closed_bars)} live candles for {tf} up to {df['datetime'].iloc[-1]}")
+                    df = _backfill_trailing_klines(
+                        df,
+                        symbol="BTCUSDT",
+                        timeframe=tf,
+                        fetch_fn=fetch_binance_klines_rest,
+                    )
                 except Exception as ex_bf:
                     logger.debug(f"Backfill gap skipped for {tf}: {ex_bf}")
 
@@ -216,23 +302,15 @@ def load_data_into_memory():
             try:
                 df_eth = pd.read_parquet(p)
                 
-                # Auto-backfill any missing closed bars from Binance REST API for ETH
+                # Auto-backfill all missing trailing closed bars from Binance REST API for ETH.
                 try:
-                    import time
                     from binance_ws import fetch_binance_klines_rest
-                    now_ms = int(time.time() * 1000)
-                    last_ts = int(df_eth["timestamp"].iloc[-1]) if "timestamp" in df_eth.columns else (int(df_eth["time"].iloc[-1]) * 1000)
-                    gap_thresholds = {"30m": 1800000, "1h": 3600000, "4h": 14400000, "1d": 86400000, "1w": 604800000}
-                    if now_ms - last_ts > gap_thresholds.get(tf, 1800000):
-                        new_bars = fetch_binance_klines_rest("ETHUSDT", tf, limit=1000, start_time=last_ts + 1)
-                        closed_bars = [b for b in new_bars if b.get("close_time", 0) < now_ms]
-                        if closed_bars:
-                            df_new = pd.DataFrame(closed_bars)
-                            df_eth = pd.concat([df_eth, df_new], ignore_index=True).drop_duplicates(subset=["timestamp"]).reset_index(drop=True)
-                            for w in [8, 25, 50, 55, 111]:
-                                if len(df_eth) >= w:
-                                    df_eth[f"MA{w}"] = df_eth["close"].rolling(w).mean()
-                            logger.info(f"Backfilled {len(closed_bars)} live ETH candles for {tf} up to {df_eth['datetime'].iloc[-1]}")
+                    df_eth = _backfill_trailing_klines(
+                        df_eth,
+                        symbol="ETHUSDT",
+                        timeframe=tf,
+                        fetch_fn=fetch_binance_klines_rest,
+                    )
                 except Exception as ex_bf:
                     logger.debug(f"ETH backfill gap skipped for {tf}: {ex_bf}")
 
@@ -414,6 +492,18 @@ async def get_status():
         "latest_btc_price": btc_ticker.get("price"),
         "latest_eth_price": eth_ticker.get("price"),
         "tickers": binance_manager.ticker_data_map,
+        "ticker_last_event_ms": dict(binance_manager.last_ticker_event_ms),
+        "kline_ws_connected": binance_manager.kline_connected,
+        "kline_last_event_ms": {
+            symbol: dict(timeframes)
+            for symbol, timeframes in binance_manager.last_kline_event_ms.items()
+        },
+        "signal_engine_last_update_ms": dict(live_signal_engine.last_ticker_update_ms),
+        "signal_engine_last_closed_update_ms": dict(live_signal_engine.last_closed_candle_update_ms),
+        "signal_engine_last_closed_update_ms_by_timeframe": {
+            symbol: dict(timeframes)
+            for symbol, timeframes in live_signal_engine.last_closed_candle_update_ms_by_timeframe.items()
+        },
         "active_clients": len(binance_manager.connected_clients),
         "available_timeframes": list(KLINES_CACHE.keys()) if KLINES_CACHE else list(PARQUET_DFS.keys()),
         "strategies_count": len(STRATEGIES_CATALOG),

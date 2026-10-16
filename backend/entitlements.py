@@ -316,6 +316,9 @@ def redact_live_telemetry(payload: Mapping[str, Any], is_pro: bool) -> dict[str,
         "status",
         "timestamp",
         "updated_at",
+        "engine_last_update_ms",
+        "engine_last_closed_update_ms",
+        "engine_last_closed_update_ms_by_timeframe",
         "entitlements",
     }
     result = {
